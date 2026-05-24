@@ -274,7 +274,9 @@
 
 <!-- ── Auth overlay (shown before login) ── -->
 <div id="auth-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:1rem;">
-  <div style="background:#112a45;border:1px solid rgba(255,255,255,0.1);border-radius:1rem;padding:2rem;max-width:22rem;width:100%;text-align:center;">
+
+  <!-- Step 1: name + PIN -->
+  <div id="auth-step1" style="background:#112a45;border:1px solid rgba(255,255,255,0.1);border-radius:1rem;padding:2rem;max-width:22rem;width:100%;text-align:center;">
     <div style="font-size:2rem;margin-bottom:0.5rem;">⚽</div>
     <div style="font-weight:700;font-size:1.2rem;color:white;margin-bottom:0.25rem;">WC 2026 Predictor</div>
     <div style="font-size:0.8rem;color:#64748b;margin-bottom:1.5rem;">Enter your name and 4-digit PIN to join</div>
@@ -291,6 +293,50 @@
     </button>
     <div style="margin-top:1rem;font-size:0.72rem;color:#475569;">First time? A new account will be created with your PIN.<br/>Your PIN is how you'll log back in — remember it!</div>
   </div>
+
+  <!-- Step 2: photo (new users only) -->
+  <div id="auth-step2" style="display:none;background:#112a45;border:1px solid rgba(255,255,255,0.1);border-radius:1rem;padding:2rem;max-width:22rem;width:100%;text-align:center;">
+    <div style="font-weight:700;font-size:1.2rem;color:white;margin-bottom:0.25rem;">Add your photo</div>
+    <div style="font-size:0.8rem;color:#64748b;margin-bottom:1.5rem;">Required so everyone knows who's who</div>
+    <!-- Avatar preview -->
+    <div id="auth-avatar-preview" onclick="document.getElementById('auth-avatar-file').click()"
+      style="width:96px;height:96px;border-radius:50%;overflow:hidden;border:2px dashed rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:2.5rem;cursor:pointer;margin:0 auto 1rem;box-shadow:0 4px 16px rgba(0,0,0,0.55);">
+      🧑
+    </div>
+    <input type="file" id="auth-avatar-file" accept="image/*" style="display:none;" onchange="authAvatarUpload(this)" />
+    <div style="display:flex;gap:0.5rem;justify-content:center;margin-bottom:1.25rem;">
+      <button onclick="authStartCamera()"
+        style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:0.5rem;color:white;padding:0.5rem 0.9rem;font-size:0.85rem;cursor:pointer;">
+        📷 Take photo
+      </button>
+      <button onclick="document.getElementById('auth-avatar-file').click()"
+        style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:0.5rem;color:white;padding:0.5rem 0.9rem;font-size:0.85rem;cursor:pointer;">
+        🖼 Upload
+      </button>
+    </div>
+    <button id="auth-continue-btn" onclick="authFinishRegistration()" disabled
+      style="width:100%;background:#16a34a;color:white;border:none;border-radius:0.75rem;padding:0.75rem 1rem;font-weight:600;font-size:1rem;cursor:not-allowed;opacity:0.45;">
+      Continue →
+    </button>
+    <div style="margin-top:0.75rem;font-size:0.72rem;color:#475569;">A photo is required to participate</div>
+    <!-- Inline camera for step 2 -->
+    <div id="auth-camera-wrap" style="display:none;margin-top:1rem;">
+      <video id="auth-camera-video" autoplay playsinline style="width:100%;border-radius:0.5rem;margin-bottom:0.5rem;"></video>
+      <canvas id="auth-camera-canvas" style="display:none;"></canvas>
+      <div style="display:flex;gap:0.5rem;justify-content:center;">
+        <button onclick="authCapturePhoto()"
+          style="background:#16a34a;color:white;border:none;border-radius:0.5rem;padding:0.5rem 1rem;font-weight:600;cursor:pointer;">
+          Capture ⚽
+        </button>
+        <button onclick="authCloseCamera()"
+          style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:0.5rem;color:white;padding:0.5rem 1rem;cursor:pointer;">
+          Cancel
+        </button>
+      </div>
+      <p id="auth-camera-error" style="color:#f87171;font-size:0.75rem;margin-top:0.5rem;display:none;"></p>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── Connection status banner ── -->
@@ -1691,12 +1737,20 @@ function _authHeaders(){
 function showAuthOverlay(){
   const el = document.getElementById('auth-overlay');
   if(el){ el.style.display = 'flex'; el.style.setProperty('align-items','center'); el.style.setProperty('justify-content','center'); }
+  // Always reset to step 1
+  const s1 = document.getElementById('auth-step1');
+  const s2 = document.getElementById('auth-step2');
+  if(s1) s1.style.display = 'block';
+  if(s2) s2.style.display = 'none';
+  if(typeof authCloseCamera==='function') authCloseCamera();
   setTimeout(()=>{ const n=document.getElementById('auth-name'); if(n) n.focus(); }, 50);
 }
 function hideAuthOverlay(){
   const el = document.getElementById('auth-overlay');
   if(el) el.style.display = 'none';
 }
+
+let _authPendingPin = ''; // remembered so the welcome message can show it
 
 async function doAuthSubmit(){
   const name = document.getElementById('auth-name')?.value?.trim();
@@ -1721,16 +1775,87 @@ async function doAuthSubmit(){
     localStorage.setItem('wc26_token_admin', _isAdmin ? '1' : '0');
     S.name = data.name;
     S.avatar = data.avatar || '';
-    hideAuthOverlay();
-    connectWS();
-    render();
-    if(data.isNew) alert(`Welcome, ${data.name}! 🎉\nYour PIN is: ${pin}\nRemember it — you'll need it to log back in!`);
+    if(data.isNew){
+      // New user — show photo step before entering the app
+      _authPendingPin = pin;
+      document.getElementById('auth-step1').style.display = 'none';
+      document.getElementById('auth-step2').style.display = 'block';
+    } else {
+      // Returning user — go straight in
+      hideAuthOverlay();
+      connectWS();
+      render();
+    }
   }catch(e){
     errEl.textContent = e.message;
     errEl.style.display = 'block';
   }finally{
     if(btn){ btn.disabled=false; btn.textContent='Enter →'; }
   }
+}
+
+// ── Auth photo step helpers ───────────────────────────────
+let _authCameraStream = null;
+
+function _authSetAvatar(dataUrl){
+  S.avatar = dataUrl;
+  const preview = document.getElementById('auth-avatar-preview');
+  if(preview) preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;">`;
+  const btn = document.getElementById('auth-continue-btn');
+  if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
+}
+
+function authAvatarUpload(input){
+  const file = input.files?.[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => _authSetAvatar(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+async function authStartCamera(){
+  const wrap = document.getElementById('auth-camera-wrap');
+  const errEl = document.getElementById('auth-camera-error');
+  wrap.style.display = 'block';
+  try{
+    _authCameraStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}});
+    document.getElementById('auth-camera-video').srcObject = _authCameraStream;
+  }catch(e){
+    errEl.textContent = e.message + ' — use Upload instead.';
+    errEl.style.display = 'block';
+  }
+}
+
+function authCapturePhoto(){
+  const video = document.getElementById('auth-camera-video');
+  const canvas = document.getElementById('auth-camera-canvas');
+  if(!video||!canvas) return;
+  canvas.width = video.videoWidth||320; canvas.height = video.videoHeight||240;
+  canvas.getContext('2d').drawImage(video,0,0);
+  _authSetAvatar(canvas.toDataURL('image/jpeg',0.82));
+  authCloseCamera();
+}
+
+function authCloseCamera(){
+  if(_authCameraStream){ _authCameraStream.getTracks().forEach(t=>t.stop()); _authCameraStream=null; }
+  const wrap = document.getElementById('auth-camera-wrap');
+  if(wrap) wrap.style.display='none';
+}
+
+async function authFinishRegistration(){
+  if(!S.avatar){ alert('Please add a photo first.'); return; }
+  // Save avatar to server then enter the app
+  try{
+    await fetch('/api/predictions', {
+      method:'PUT', headers:_authHeaders(),
+      body:JSON.stringify({gPreds:{}, kPreds:{}, avatar:S.avatar})
+    });
+  }catch(e){ console.warn('Avatar save failed:', e); }
+  authCloseCamera();
+  hideAuthOverlay();
+  connectWS();
+  render();
+  alert(`Welcome, ${S.name}! 🎉\nYour PIN is: ${_authPendingPin}\nRemember it — you'll need it to log back in!`);
+  _authPendingPin = '';
 }
 
 async function doLogout(){
