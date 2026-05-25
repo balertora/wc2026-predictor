@@ -322,12 +322,25 @@ function buildStatePayload() {
     };
   }
 
-  // Settings
+  // Settings (from DB, then override repicker_open with computed value)
   const settingRows = stmts.getAllSettings.all();
   const settings = {};
   for (const r of settingRows) settings[r.key] = r.value;
 
-  // Re-bracket (admin-set R32 matchups)
+  // Auto-compute whether Repicker is open:
+  //   Opens automatically when all 72 group games have results
+  //   Closes automatically when the first R32 result appears (match has kicked off)
+  //   Admin can force-open early (repicker_admin_open='true') for testing
+  //   Admin can force-close (repicker_force_closed='true') as an override
+  const gResultCount = Object.keys(gResults).length;
+  const hasR32Result = Object.keys(kResults).some(id => id.startsWith('r32-'));
+  const autoOpen     = gResultCount >= 72 && !hasR32Result;
+  const adminOpen    = settings.repicker_admin_open === 'true' && !hasR32Result;
+  const forceClosed  = settings.repicker_force_closed === 'true';
+  settings.repicker_open = (!forceClosed && (autoOpen || adminOpen)) ? 'true' : 'false';
+  settings.repicker_auto = autoOpen ? 'true' : 'false';  // informational
+
+  // Re-bracket (admin-set R32 override — rarely needed since client computes from group results)
   const reBracketRows = stmts.getAllReBracket.all();
   const reBracket = {};
   for (const r of reBracketRows) reBracket[r.match_id] = { home: r.home, away: r.away };
@@ -628,7 +641,8 @@ app.get('/api/admin/espn-status', requireAdmin, (req, res) => {
 
 // ── Settings endpoints ───────────────────────────────────────────────────────
 
-// PUT /api/settings/:key — admin only (e.g. repicker_open)
+// PUT /api/settings/:key — admin only
+// Valid keys: repicker_admin_open, repicker_force_closed
 app.put('/api/settings/:key', requireAdmin, (req, res) => {
   const { key } = req.params;
   if (!/^[a-z_]+$/.test(key)) return res.status(400).json({ error: 'Invalid key' });

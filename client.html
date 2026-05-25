@@ -3314,35 +3314,35 @@ function renderAdmin(){
     </div>`;})()}
 
     ${(()=>{
-      const repickerOpen = S.settings?.repicker_open === 'true';
-      const rbRows = Array.from({length:16},(_,i)=>{
-        const id=`r32-${i+1}`;
-        const b=S.reBracket[id]||{};
-        return `<div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.375rem;">
-          <span style="color:#475569;font-size:0.72rem;width:3.5rem;flex-shrink:0;">R32-${i+1}</span>
-          <input type="text" placeholder="Home team" value="${esc(b.home||'')}" id="rb-h-${i+1}"
-            style="flex:1;background:#0a1628;border:1px solid rgba(255,255,255,0.1);border-radius:0.375rem;color:white;padding:0.3rem 0.5rem;font-size:0.78rem;" />
-          <span style="color:#475569;font-size:0.75rem;">vs</span>
-          <input type="text" placeholder="Away team" value="${esc(b.away||'')}" id="rb-a-${i+1}"
-            style="flex:1;background:#0a1628;border:1px solid rgba(255,255,255,0.1);border-radius:0.375rem;color:white;padding:0.3rem 0.5rem;font-size:0.78rem;" />
-          <button onclick="saveReBracket(${i+1})" style="padding:0.3rem 0.55rem;font-size:0.75rem;background:#15803d;color:white;border:none;border-radius:0.375rem;cursor:pointer;flex-shrink:0;">✓</button>
-        </div>`;
-      }).join('');
+      const repickerOpen   = S.settings?.repicker_open   === 'true';
+      const repickerAuto   = S.settings?.repicker_auto   === 'true';
+      const adminOpen      = S.settings?.repicker_admin_open    === 'true';
+      const forceClosed    = S.settings?.repicker_force_closed  === 'true';
+      const gDone = Object.keys(S.gResults||{}).length;
+      const statusLabel = repickerAuto ? '🟢 Auto-open (all groups done)' :
+                          adminOpen    ? '🟡 Force-open by admin' :
+                          forceClosed  ? '🔴 Force-closed by admin' :
+                                         `⏳ Waiting for groups (${gDone}/72 results in)`;
       return `
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;flex-wrap:wrap;gap:0.5rem;">
-        <div>
-          <h2 style="font-weight:600;color:white;font-size:0.95rem;margin:0;">🔄 Repicker</h2>
-          <p style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Open after group stage — users pick a fresh KO bracket.</p>
-        </div>
-        <button onclick="toggleRepicker()" style="padding:0.45rem 0.875rem;font-size:0.8rem;${repickerOpen?'background:#16a34a;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">
-          ${repickerOpen?'✓ Open — click to close':'Closed — click to open'}
-        </button>
+      <h2 style="font-weight:600;color:white;font-size:0.95rem;margin:0 0 0.5rem;">🔄 Repicker</h2>
+      <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.875rem;">
+        Auto-opens when all 72 group results are in. Auto-closes when the first Round of 32 result appears.
+        The R32 bracket populates from actual group standings — no manual entry needed.
+      </p>
+      <div style="background:#0a1628;border:1px solid rgba(255,255,255,0.07);border-radius:0.5rem;padding:0.5rem 0.75rem;margin-bottom:0.75rem;font-size:0.8rem;color:#94a3b8;">
+        Status: <strong style="color:${repickerOpen?'#4ade80':'#64748b'};">${repickerOpen?'OPEN':'CLOSED'}</strong>
+        &nbsp;·&nbsp; ${statusLabel}
       </div>
-      <details style="margin-top:0.625rem;">
-        <summary style="cursor:pointer;list-style:none;color:#64748b;font-size:0.8rem;padding:0.375rem 0;user-select:none;">▸ Set R32 matchups (actual teams after group stage)</summary>
-        <div style="margin-top:0.625rem;">${rbRows}</div>
-      </details>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button onclick="setRepickerOverride('admin_open')" style="padding:0.4rem 0.875rem;font-size:0.78rem;${adminOpen?'background:#d97706;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">
+          ${adminOpen?'✓ Force-open (testing)':'Force-open for testing'}
+        </button>
+        <button onclick="setRepickerOverride('force_closed')" style="padding:0.4rem 0.875rem;font-size:0.78rem;${forceClosed?'background:#dc2626;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">
+          ${forceClosed?'✓ Force-closed':'Force-close (override)'}
+        </button>
+        ${(adminOpen||forceClosed)?`<button onclick="setRepickerOverride('auto')" style="padding:0.4rem 0.875rem;font-size:0.78rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;cursor:pointer;">Reset to auto</button>`:''}
+      </div>
     </div>`;
     })()}`;
 }
@@ -4111,15 +4111,28 @@ const RE_R32_PAIRS = [[1,2],[3,4],[5,6],[7,8],[9,10],[11,12],[13,14],[15,16]];
 const RE_R16_PAIRS = [[1,2],[3,4],[5,6],[7,8]];
 const RE_QF_PAIRS  = [[1,2],[3,4]];
 
-// Build the user's repicker bracket from their picks.
-// Returns { 'r32-1': {home,away}, 'r16-1': {home,away}, … }
-function repickerBuildUser(userPicks){
-  const rb = S.reBracket;
+// Resolve actual R32 teams from group results (same logic as main KO predict tab).
+// Returns { 'r32-1': {home,away}, … } — slots with partial/no results get placeholder strings.
+function repickerR32Teams(){
+  const q = getQualifiers(); // uses S.gResults
   const teams = {};
-  for(let i=1;i<=16;i++){
-    const id=`r32-${i}`;
-    teams[id]={ home: rb[id]?.home||'', away: rb[id]?.away||'' };
+  for(const m of R32_FIXED){
+    teams[m.id]={ home: resolvePos(m.posA, q), away: resolvePos(m.posB, q) };
   }
+  return teams;
+}
+
+// Returns true if a team name is a real qualified team (not a placeholder like '1st Group A')
+function repickerTeamKnown(name){
+  return !!name && !name.includes('Group') && !name.includes('TBD') && !name.includes('place');
+}
+
+// Build the user's repicker bracket from their picks.
+// R32 teams come from actual group results; later rounds come from the user's own picks.
+// Returns { matchId: {home,away} }
+function repickerBuildUser(userPicks){
+  const r32 = repickerR32Teams();
+  const teams = {...r32};
   RE_R32_PAIRS.forEach(([ai,bi],i)=>{
     const id=`r16-${i+1}`;
     teams[id]={ home: userPicks[`r32-${ai}`]||null, away: userPicks[`r32-${bi}`]||null };
@@ -4136,19 +4149,17 @@ function repickerBuildUser(userPicks){
   return teams;
 }
 
-// Build actual winners from kResults + reBracket (for scoring).
-// Returns { matchId: actualWinnerTeamName }
+// Build actual winners from kResults + group qualifiers (for scoring).
+// Returns { matchId: actualWinnerTeamName|null }
 function repickerActualWinners(){
-  const rb = S.reBracket;
-  const kr = S.kResults||{};
-  const teamFor = {}; // matchId → { home, away }
-  for(let i=1;i<=16;i++){
-    const id=`r32-${i}`;
-    teamFor[id]={ home: rb[id]?.home||'', away: rb[id]?.away||'' };
-  }
+  const r32 = repickerR32Teams();
+  const kr  = S.kResults||{};
+  const teamFor = {...r32};
+
   function getWinner(matchId){
     const t=teamFor[matchId]; const r=kr[matchId];
     if(!t||!r||r.homeScore===undefined) return null;
+    if(!repickerTeamKnown(t.home)||!repickerTeamKnown(t.away)) return null; // teams not resolved yet
     if(r.homeScore>r.awayScore) return t.home;
     if(r.awayScore>r.homeScore) return t.away;
     if(r.penWinner){ return (r.penWinner===t.home||r.penWinner===t.away)?r.penWinner:(r.penWinner==='home'?t.home:t.away); }
@@ -4169,8 +4180,7 @@ function repickerActualWinners(){
   teamFor['final-1']={ home: getWinner('sf-1'), away: getWinner('sf-2') };
 
   const winners = {};
-  const allIds = Object.keys(teamFor);
-  for(const id of allIds) winners[id] = getWinner(id);
+  for(const id of Object.keys(teamFor)) winners[id] = getWinner(id);
   return winners;
 }
 
@@ -4230,15 +4240,20 @@ async function setRePick(matchId, winner){
   }catch(e){ console.warn('Re-pick save failed:',e.message); }
 }
 
-async function toggleRepicker(){
-  const current = S.settings?.repicker_open==='true';
-  const newVal = current ? 'false' : 'true';
+async function setRepickerOverride(mode){
+  // mode: 'admin_open' | 'force_closed' | 'auto'
   try{
-    await fetch('/api/settings/repicker_open',{ method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:newVal}) });
-    if(!S.settings) S.settings={};
-    S.settings.repicker_open = newVal;
-    _updateNavTabs();
-    render();
+    const headers = _authHeaders();
+    // Clear all override flags first
+    await fetch('/api/settings/repicker_admin_open',  { method:'PUT', headers, body:JSON.stringify({value:''}) });
+    await fetch('/api/settings/repicker_force_closed',{ method:'PUT', headers, body:JSON.stringify({value:''}) });
+    // Set the desired flag
+    if(mode==='admin_open'){
+      await fetch('/api/settings/repicker_admin_open',  { method:'PUT', headers, body:JSON.stringify({value:'true'}) });
+    } else if(mode==='force_closed'){
+      await fetch('/api/settings/repicker_force_closed',{ method:'PUT', headers, body:JSON.stringify({value:'true'}) });
+    }
+    // Server will broadcast updated computed state
   }catch(e){ alert('Failed: '+e.message); }
 }
 
@@ -4256,10 +4271,12 @@ async function saveReBracket(i){
 
 function renderRepicker(){
   const repickerOpen = S.settings?.repicker_open==='true';
+  const gDone = Object.keys(S.gResults||{}).length;
   if(!repickerOpen && !_isAdmin) return `
     <div style="text-align:center;padding:4rem 1rem;">
-      <div style="font-size:2.5rem;margin-bottom:0.75rem;">🔒</div>
-      <p style="color:#64748b;">Repicker not open yet. Check back after the group stage!</p>
+      <div style="font-size:2.5rem;margin-bottom:0.75rem;">⏳</div>
+      <p style="color:#e2e8f0;font-weight:600;margin-bottom:0.5rem;">Repicker opens after the group stage</p>
+      <p style="color:#64748b;font-size:0.875rem;">${gDone}/72 group results in. Opens automatically once all groups are done.</p>
     </div>`;
 
   const userTeams = repickerBuildUser(S.rePicks);
@@ -4287,14 +4304,22 @@ function renderRepicker(){
     const picked = S.rePicks[id];
     const actual = actuals[id];
 
+    // Null/empty means "pick winner in previous round first"; placeholder string means "group result not in yet"
+    const homeKnown = repickerTeamKnown(homeTeam);
+    const awayKnown = repickerTeamKnown(awayTeam);
+
     if(!homeTeam && !awayTeam){
       return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.875rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;">
-        <span style="color:#475569;font-size:0.875rem;">— TBD · pick winner in previous round —</span>
+        <span style="color:#475569;font-size:0.875rem;">— TBD · pick winner in previous round first —</span>
       </div>`;
     }
 
-    const makeBtn=(team)=>{
+    const makeBtn=(team, known)=>{
       if(!team) return `<div style="flex:1;padding:0.6rem 0.5rem;text-align:center;color:#334155;font-size:0.8rem;font-style:italic;">TBD</div>`;
+      if(!known){
+        // Group result not yet in — show placeholder, no click
+        return `<div style="flex:1;padding:0.6rem 0.5rem;text-align:center;color:#475569;font-size:0.78rem;font-style:italic;border:1.5px dashed rgba(255,255,255,0.08);border-radius:0.5rem;">${esc(team)}</div>`;
+      }
       const isPicked = picked===team;
       const isActual = actual===team;
       const isWrong  = picked===team && actual && actual!==team;
@@ -4311,9 +4336,9 @@ function renderRepicker(){
 
     return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.75rem;margin-bottom:0.5rem;">
       <div style="display:flex;align-items:center;gap:0.5rem;">
-        ${makeBtn(homeTeam)}
+        ${makeBtn(homeTeam, homeKnown)}
         <span style="color:#334155;font-size:0.75rem;font-weight:700;flex-shrink:0;">vs</span>
-        ${makeBtn(awayTeam)}
+        ${makeBtn(awayTeam, awayKnown)}
       </div>
     </div>`;
   }).join('');
