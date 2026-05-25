@@ -1906,9 +1906,14 @@ function _applyServerState(data){
     S.kResults[id] = r;
   }
 
-  // Also update my own avatar from server
+  // Restore own data from server (critical for page reload — picks live in DB, not localStorage)
   const myData = Object.entries(preds).find(([n]) => n.toLowerCase() === myName);
-  if(myData && myData[1].avatar) S.avatar = myData[1].avatar;
+  if(myData && myData[1]){
+    if(myData[1].avatar) S.avatar = myData[1].avatar;
+    // Only overwrite local picks if they're currently empty (don't clobber in-flight edits)
+    if(!Object.keys(S.gPreds).length) S.gPreds = myData[1].gPreds || {};
+    if(!Object.keys(S.kPreds).length) S.kPreds = myData[1].kPreds || {};
+  }
 
   // Settings
   S.settings = data.settings || {};
@@ -2039,19 +2044,22 @@ function _updateNavTabs(){
   if(reTab) reTab.style.display = (S.settings?.repicker_open==='true' || _isAdmin) ? '' : 'none';
 }
 
+function _updateNavUser(){
+  const navUser = document.getElementById('nav-user');
+  if(!navUser) return;
+  const avatarHTML = S.avatar
+    ? `<img src="${S.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
+    : (S.name ? `<span style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.1);display:inline-flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.4);">🧑</span>` : '');
+  navUser.innerHTML = `<div style="display:flex;align-items:center;gap:0.35rem;">${avatarHTML}<span style="font-size:0.75rem;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:7rem;">${esc(S.name||'')}</span></div>`;
+}
+
 function showView(v){
   S.view=v;
   document.querySelectorAll('[id^="tn-"]').forEach(b=>{
     b.classList.toggle('on', b.id==='tn-'+v);
   });
   _updateNavTabs();
-  const navUser = document.getElementById('nav-user');
-  if(navUser){
-    const avatarHTML = S.avatar
-      ? `<img src="${S.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
-      : (S.name ? `<span style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.1);display:inline-flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.4);">🧑</span>` : '');
-    navUser.innerHTML = `<div style="display:flex;align-items:center;gap:0.35rem;">${avatarHTML}<span style="font-size:0.75rem;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:7rem;">${esc(S.name||'')}</span></div>`;
-  }
+  _updateNavUser();
   render();
 }
 
@@ -2142,6 +2150,7 @@ function render(){
   // Destroy any live Leaflet instance before replacing the DOM
   if(_predMap){ _predMap.remove(); _predMap = null; }
   document.getElementById('app').innerHTML = renderMain();
+  _updateNavUser(); // Keep nav avatar current whenever state changes
   if(_pendingGoalAnim){
     const {mid, side, count=1} = _pendingGoalAnim; _pendingGoalAnim = null;
     for(let i=0; i<count; i++) _fireGoalAnim(mid, side, i*300);

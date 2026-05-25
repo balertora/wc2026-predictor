@@ -127,6 +127,8 @@ const stmts = {
                               FROM ko_predictions kp JOIN users u ON u.id = kp.user_id`),
   getAllGResults:  db.prepare(`SELECT * FROM group_results`),
   getAllKOResults: db.prepare(`SELECT * FROM ko_results`),
+  // All users (for avatar inclusion in state even when user has no picks yet)
+  getAllUsers:     db.prepare(`SELECT id, name, avatar FROM users`),
   // Sessions
   createSession:  db.prepare(`INSERT OR REPLACE INTO sessions (token, user_id, name, is_admin) VALUES (?, ?, ?, ?)`),
   getSession:     db.prepare(`SELECT * FROM sessions WHERE token = ?`),
@@ -298,6 +300,15 @@ function buildStatePayload() {
       homeScore: row.home_score, awayScore: row.away_score,
       penWinner: row.pen_winner || '',
     };
+  }
+
+  // Ensure ALL users appear in predictions (even with no picks) so avatars are always broadcast
+  for (const u of stmts.getAllUsers.all()) {
+    if (!predictions[u.name]) {
+      predictions[u.name] = { avatar: u.avatar, gPreds: {}, kPreds: {} };
+    } else if (!predictions[u.name].avatar && u.avatar) {
+      predictions[u.name].avatar = u.avatar; // koPreds path left avatar blank
+    }
   }
 
   // results: { gResults: {gameId:[h,a]}, kResults: {matchId:{...}} }
