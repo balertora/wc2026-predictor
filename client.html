@@ -2154,13 +2154,14 @@ function showTeamTip(event, name){
   if(!tip) return;
   let html = `<div class="tt-head">${flag(name)} ${esc(name)}</div>`;
   if(d.host){
-    html += `<div class="tt-row">🏟️ <span>Host nation — auto-qualified</span></div>`;
+    html += `<div class="tt-row">👨‍🍳 <span>Host</span></div>`;
   } else {
     const gp = d.w + d.d + d.l;
-    html += `<div class="tt-row">Qualifying record: <span>${d.w}W ${d.d}D ${d.l}L (${gp} games)</span></div>`;
-    html += `<div class="tt-row">Goals: <span>${d.gf} scored, ${d.ga} conceded</span></div>`;
+    html += `<div class="tt-row">Qualifying: <span>${d.w}W ${d.d}D ${d.l}L (${gp} games)</span></div>`;
+    html += `<div class="tt-row">Goals: <span>${d.gf}–${d.ga}</span></div>`;
   }
-  html += `<div class="tt-best">🏆 ${esc(d.best)}</div>`;
+  const bestShort = esc(d.best).replace(/Quarterfinals/g,'Quarters').replace(/Semifinals/g,'Semis');
+  html += `<div class="tt-best">🏆 ${bestShort}</div>`;
   tip.innerHTML = html;
   tip.style.display = 'block';
   _posTeamTip(event);
