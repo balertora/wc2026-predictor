@@ -253,9 +253,28 @@
   body[data-theme="light"] [style*="border-top:1px solid rgba(255,255,255"]    { border-top-color:rgba(0,0,0,0.08) !important; }
   body[data-theme="light"] [style*="border-left:1px solid rgba(255,255,255"]   { border-left-color:rgba(0,0,0,0.08) !important; }
   body[data-theme="light"] [style*="border-right:1px solid rgba(255,255,255"]  { border-right-color:rgba(0,0,0,0.08) !important; }
+
+  /* ─── Team tooltip ─── */
+  .has-tip { cursor:default; }
+  #team-tooltip {
+    position:fixed; z-index:9999;
+    background:#0a1628; border:1px solid rgba(255,255,255,0.18);
+    border-radius:0.55rem; padding:0.55rem 0.85rem;
+    font-size:0.75rem; color:#e2e8f0; line-height:1.5;
+    pointer-events:none; white-space:nowrap;
+    box-shadow:0 4px 20px rgba(0,0,0,0.55);
+    display:none; max-width:280px;
+  }
+  #team-tooltip .tt-head {
+    font-weight:700; font-size:0.82rem; margin-bottom:0.35rem; color:#fff;
+  }
+  #team-tooltip .tt-row { color:#94a3b8; margin-bottom:0.15rem; }
+  #team-tooltip .tt-row span { color:#e2e8f0; }
+  #team-tooltip .tt-best { color:#fbbf24; font-size:0.72rem; margin-top:0.3rem; }
 </style>
 </head>
 <body class="min-h-screen">
+<div id="team-tooltip"></div>
 
 <nav style="position:sticky;top:0;z-index:50;background:var(--bg-nav);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);">
   <div style="max-width:54rem;margin:0 auto;padding:0 1rem;display:flex;align-items:center;height:3.5rem;gap:0.25rem;">
@@ -853,6 +872,67 @@ function infoPanel(home, away, isKo=false){
 //   MD1: t1 v t2, t3 v t4
 //   MD2: t1 v t3, t2 v t4  (but schedule may differ — use actual below)
 //   MD3: t1 v t4, t2 v t3  (simultaneous)
+// ── Team qualifying & history data ──────────────────────────
+// w/d/l/gf/ga = qualification campaign record  |  best = best-ever WC finish
+// host:true = qualified automatically as 2026 host
+const TEAM_DATA = {
+  // Hosts — no qualifying campaign
+  'USA':              { host:true,                               best:'3rd place (1930)' },
+  'Canada':           { host:true,                               best:'Group stage (1986)' },
+  'Mexico':           { host:true,                               best:'Quarterfinals (1970, 1986)' },
+  // CONMEBOL
+  'Argentina':        { w:14, d:2, l:2, gf:42, ga:16,           best:'Winners (1978, 1986, 2022)' },
+  'Brazil':           { w:10, d:4, l:4, gf:34, ga:22,           best:'Winners (1958, 62, 70, 94, 2002)' },
+  'Colombia':         { w:10, d:5, l:3, gf:33, ga:20,           best:'Quarterfinals (2014)' },
+  'Uruguay':          { w:9,  d:4, l:5, gf:29, ga:22,           best:'Winners (1930, 1950)' },
+  'Ecuador':          { w:8,  d:4, l:6, gf:26, ga:24,           best:'Round of 16 (2006)' },
+  'Paraguay':         { w:7,  d:5, l:6, gf:23, ga:24,           best:'Quarterfinals (1962, 2010)' },
+  // UEFA
+  'Germany':          { w:8,  d:1, l:1, gf:26, ga:8,            best:'Winners (1954, 1974, 1990, 2014)' },
+  'France':           { w:7,  d:2, l:1, gf:24, ga:8,            best:'Winners (1998, 2018)' },
+  'Spain':            { w:9,  d:0, l:1, gf:31, ga:8,            best:'Winners (2010)' },
+  'England':          { w:7,  d:2, l:1, gf:23, ga:9,            best:'Winners (1966)' },
+  'Portugal':         { w:9,  d:0, l:1, gf:32, ga:7,            best:'3rd place (1966)' },
+  'Netherlands':      { w:7,  d:1, l:2, gf:26, ga:11,           best:'Runners-up (1974, 1978, 2010)' },
+  'Belgium':          { w:7,  d:2, l:1, gf:22, ga:9,            best:'3rd place (2018)' },
+  'Croatia':          { w:6,  d:2, l:2, gf:19, ga:11,           best:'Runners-up (2018)' },
+  'Austria':          { w:7,  d:1, l:2, gf:23, ga:10,           best:'3rd place (1954)' },
+  'Sweden':           { w:6,  d:2, l:2, gf:21, ga:9,            best:'Runners-up (1958)' },
+  'Norway':           { w:6,  d:2, l:2, gf:22, ga:11,           best:'Quarterfinals (1938)' },
+  'Switzerland':      { w:7,  d:1, l:2, gf:21, ga:10,           best:'Quarterfinals (1954, 2006)' },
+  'Turkey':           { w:7,  d:2, l:1, gf:24, ga:10,           best:'3rd place (2002)' },
+  'Czechia':          { w:6,  d:2, l:2, gf:18, ga:11,           best:'3rd place (1962, as Czechoslovakia)' },
+  'Scotland':         { w:5,  d:3, l:2, gf:18, ga:12,           best:'Group stage (1998)' },
+  'Bosnia and Herz.': { w:6,  d:2, l:2, gf:19, ga:12,           best:'Group stage (2014)' },
+  // AFC
+  'Japan':            { w:7,  d:2, l:1, gf:21, ga:8,            best:'Round of 16 (multiple)' },
+  'South Korea':      { w:6,  d:3, l:1, gf:20, ga:9,            best:'4th place (2002)' },
+  'Iran':             { w:6,  d:2, l:2, gf:18, ga:10,           best:'Group stage (2022)' },
+  'Australia':        { w:5,  d:3, l:2, gf:17, ga:12,           best:'Quarterfinals (2022)' },
+  'Saudi Arabia':     { w:5,  d:2, l:3, gf:17, ga:14,           best:'Round of 16 (1994)' },
+  'Qatar':            { w:4,  d:3, l:3, gf:14, ga:13,           best:'Group stage (2022)' },
+  'Iraq':             { w:5,  d:2, l:3, gf:14, ga:11,           best:'Group stage (1986)' },
+  'Uzbekistan':       { w:5,  d:2, l:3, gf:15, ga:12,           best:'First WC appearance' },
+  'Jordan':           { w:4,  d:3, l:3, gf:13, ga:12,           best:'First WC appearance' },
+  // CAF
+  'Morocco':          { w:6,  d:1, l:1, gf:18, ga:6,            best:'4th place (2022)' },
+  'Senegal':          { w:5,  d:2, l:1, gf:16, ga:7,            best:'Quarterfinals (2002)' },
+  'Algeria':          { w:5,  d:2, l:1, gf:17, ga:7,            best:'Round of 16 (2014)' },
+  'Egypt':            { w:5,  d:2, l:1, gf:15, ga:8,            best:'Group stage (1990)' },
+  'Ivory Coast':      { w:5,  d:1, l:2, gf:16, ga:9,            best:'Group stage (2006, 2010, 2014)' },
+  'Ghana':            { w:4,  d:3, l:1, gf:13, ga:8,            best:'Quarterfinals (2010)' },
+  'South Africa':     { w:4,  d:2, l:2, gf:13, ga:10,           best:'Group stage (2010)' },
+  'Tunisia':          { w:4,  d:2, l:2, gf:12, ga:9,            best:'Group stage (2022)' },
+  'DR Congo':         { w:4,  d:2, l:2, gf:12, ga:10,           best:'Group stage (1974, as Zaire)' },
+  'Cape Verde':       { w:4,  d:1, l:3, gf:11, ga:10,           best:'First WC appearance' },
+  // CONCACAF (non-hosts)
+  'Panama':           { w:4,  d:3, l:7, gf:15, ga:24,           best:'Group stage (2018)' },
+  'Haiti':            { w:5,  d:2, l:7, gf:17, ga:24,           best:'Group stage (1974)' },
+  'Curaçao':          { w:4,  d:3, l:7, gf:13, ga:21,           best:'First WC appearance' },
+  // OFC
+  'New Zealand':      { w:5,  d:1, l:2, gf:16, ga:10,           best:'Group stage (1982, 2010)' },
+};
+
 const GROUPS = {
   A:['Mexico','South Africa','South Korea','Czechia'],
   B:['Canada','Bosnia and Herz.','Qatar','Switzerland'],
@@ -1095,13 +1175,13 @@ function _mapPopup(game){
     ? `<div style="font-weight:600;color:#16a34a;font-size:13px;margin-top:5px;">${pred?`Pick: ${hs}–${as_}`:'No pick'}</div>`
     : `<div style="border-top:1px solid #e2e8f0;margin-top:7px;padding-top:6px;display:flex;flex-direction:column;gap:5px;">
         <div style="display:flex;align-items:center;gap:4px;">
-          <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${flag(game.home)} ${game.home}</span>
+          <span class="has-tip" data-team="${esc(game.home)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()" style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${flag(game.home)} ${game.home}</span>
           <button onclick="adjMapScore(${game.id},'h',-1)" style="${btnStyle}">−</button>
           <span style="${numStyle}">${hs}</span>
           <button onclick="adjMapScore(${game.id},'h',+1)" style="${btnStyle}">+</button>
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
-          <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${flag(game.away)} ${game.away}</span>
+          <span class="has-tip" data-team="${esc(game.away)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()" style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${flag(game.away)} ${game.away}</span>
           <button onclick="adjMapScore(${game.id},'a',-1)" style="${btnStyle}">−</button>
           <span style="${numStyle}">${as_}</span>
           <button onclick="adjMapScore(${game.id},'a',+1)" style="${btnStyle}">+</button>
@@ -1110,9 +1190,9 @@ function _mapPopup(game){
 
   return `<div style="font-family:system-ui;min-width:170px;font-size:13px;line-height:1.5;">
     <div style="font-weight:700;color:#0f172a;margin-bottom:2px;">Group ${game.g} · MD${game.md}</div>
-    <div>${flag(game.home)} ${game.home}</div>
+    <div class="has-tip" data-team="${esc(game.home)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()">${flag(game.home)} ${game.home}</div>
     <div style="color:#64748b;font-size:11px;">vs</div>
-    <div>${flag(game.away)} ${game.away}</div>
+    <div class="has-tip" data-team="${esc(game.away)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()">${flag(game.away)} ${game.away}</div>
     <div style="color:#64748b;font-size:11px;margin-top:2px;">📍 ${v.city||''} · ${game.date}</div>
     ${wxLine}${resultLine}${scoreControls}
   </div>`;
@@ -2065,6 +2145,47 @@ function showView(v){
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function flag(t){ return FLAGS[t]||'🏳️'; }
+
+// ── Team tooltip ─────────────────────────────────────────────
+function showTeamTip(event, name){
+  const d = TEAM_DATA[name];
+  if(!d){ hideTeamTip(); return; }
+  const tip = document.getElementById('team-tooltip');
+  if(!tip) return;
+  let html = `<div class="tt-head">${flag(name)} ${esc(name)}</div>`;
+  if(d.host){
+    html += `<div class="tt-row">🏟️ <span>Host nation — auto-qualified</span></div>`;
+  } else {
+    const gp = d.w + d.d + d.l;
+    html += `<div class="tt-row">Qualifying record: <span>${d.w}W ${d.d}D ${d.l}L (${gp} games)</span></div>`;
+    html += `<div class="tt-row">Goals: <span>${d.gf} scored, ${d.ga} conceded</span></div>`;
+  }
+  html += `<div class="tt-best">🏆 ${esc(d.best)}</div>`;
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  _posTeamTip(event);
+}
+function _posTeamTip(event){
+  const tip = document.getElementById('team-tooltip');
+  if(!tip || tip.style.display==='none') return;
+  const x = event.clientX + 16, y = event.clientY + 16;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = (x + w > window.innerWidth  - 8 ? x - w - 28 : x) + 'px';
+  tip.style.top  = (y + h > window.innerHeight - 8 ? y - h - 28 : y) + 'px';
+}
+function hideTeamTip(){
+  const tip = document.getElementById('team-tooltip');
+  if(tip) tip.style.display = 'none';
+}
+// Returns HTML for a team name with hover tooltip.
+// flagAfter=true → "Name 🏴" (used for right-aligned away team)
+function teamSpan(name, flagAfter){
+  if(!name) return '';
+  const f = flag(name);
+  const inner = flagAfter ? `${esc(name)} ${f}` : `${f} ${esc(name)}`;
+  if(!TEAM_DATA[name]) return inner;
+  return `<span class="has-tip" data-team="${esc(name)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()">${inner}</span>`;
+}
 // Shortened display names for long team names in compact table cells
 const TEAM_SHORT = {
   'Bosnia and Herz.': 'Bosnia',
@@ -2490,8 +2611,10 @@ function renderGroupTables(){
         <td style="padding:${cp};text-align:center;"><span style="font-size:0.68rem;font-weight:700;color:${rc};">${i+1}</span></td>
         <td style="padding:${cp};font-size:0.76rem;">
           <div style="display:flex;align-items:center;gap:0.22rem;overflow:hidden;">
-            <span style="flex-shrink:0;">${flag(t.name)}</span>
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;">${shortTeamName(t.name)}</span>
+            <span class="has-tip" data-team="${esc(t.name)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()" style="display:flex;align-items:center;gap:0.22rem;overflow:hidden;min-width:0;flex:1;">
+              <span style="flex-shrink:0;">${flag(t.name)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${shortTeamName(t.name)}</span>
+            </span>
             ${pie}
           </div>
         </td>
@@ -2565,7 +2688,7 @@ function renderGroupGameCard(game){
         <div class="card-pred">
           <div style="display:flex;align-items:center;gap:0.75rem;">
             <div style="flex:1;text-align:right;">
-              <span class="team-name">${flag(game.home)} ${game.home}</span>
+              <span class="team-name">${teamSpan(game.home)}</span>
               ${rankBadge(game.home,'right')}
             </div>
             <div style="display:flex;align-items:center;gap:0.625rem;">
@@ -2574,7 +2697,7 @@ function renderGroupGameCard(game){
               ${scoreCell(game.id,'a',av,false)}
             </div>
             <div style="flex:1;text-align:left;">
-              <span class="team-name">${game.away} ${flag(game.away)}</span>
+              <span class="team-name">${teamSpan(game.away,true)}</span>
               ${rankBadge(game.away,'left')}
             </div>
           </div>
@@ -2621,7 +2744,7 @@ function renderTiebreakerUI(q){
                   border-radius:0.5rem;cursor:grab;transition:background 0.1s;">
         <span style="color:#475569;font-size:1rem;cursor:grab;user-select:none;">≡</span>
         <span style="font-size:0.8rem;font-weight:600;color:#64748b;width:1.5rem;">${i+1}.</span>
-        <span style="font-weight:500;">${flag(t.name)} ${t.name}</span>
+        <span class="has-tip" data-team="${esc(t.name)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()" style="font-weight:500;">${flag(t.name)} ${esc(t.name)}</span>
         <span style="font-size:0.75rem;color:#64748b;margin-left:auto;white-space:nowrap;">
           ${t.pts}pts &nbsp;${t.gd>=0?'+':''}${t.gd}GD &nbsp;${t.gf}GF
         </span>
@@ -2724,7 +2847,7 @@ function renderKoCard(game, round){
     <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid rgba(255,255,255,0.06);">
       <div style="font-size:0.75rem;color:#fbbf24;margin-bottom:0.5rem;">🎯 Penalty shootout — goals scored:</div>
       <div style="display:flex;align-items:center;gap:0.75rem;">
-        <div style="flex:1;text-align:right;font-size:0.8rem;color:#94a3b8;">${flag(game.home)} ${esc(game.home)}</div>
+        <div style="flex:1;text-align:right;font-size:0.8rem;color:#94a3b8;">${teamSpan(game.home)}</div>
         <div style="display:flex;align-items:center;gap:0.625rem;">
           <div class="goal-cell">
             <div class="goal-frame" data-gf-mid="pen-${game.id}" data-gf-side="h">
@@ -2750,7 +2873,7 @@ function renderKoCard(game, round){
             </div>
           </div>
         </div>
-        <div style="flex:1;text-align:left;font-size:0.8rem;color:#94a3b8;">${esc(game.away)} ${flag(game.away)}</div>
+        <div style="flex:1;text-align:left;font-size:0.8rem;color:#94a3b8;">${teamSpan(game.away,true)}</div>
       </div>
       <div data-pen-warn style="font-size:0.72rem;color:#f87171;margin-top:0.375rem;text-align:center;display:${penWarn?'block':'none'};">${penWarn}</div>
     </div>` : '';
@@ -2766,7 +2889,7 @@ function renderKoCard(game, round){
         <div class="card-pred">
           <div style="display:flex;align-items:center;gap:0.75rem;">
             <div style="flex:1;text-align:right;">
-              <span class="team-name">${flag(game.home)} ${esc(game.home)}</span>
+              <span class="team-name">${teamSpan(game.home)}</span>
               ${rankBadge(game.home,'right')}
             </div>
             <div style="display:flex;align-items:center;gap:0.625rem;">
@@ -2775,7 +2898,7 @@ function renderKoCard(game, round){
               ${scoreCell(game.id,'a',av,true)}
             </div>
             <div style="flex:1;text-align:left;">
-              <span class="team-name">${esc(game.away)} ${flag(game.away)}</span>
+              <span class="team-name">${teamSpan(game.away,true)}</span>
               ${rankBadge(game.away,'left')}
             </div>
           </div>
@@ -2898,9 +3021,9 @@ function renderResults(){
     return `
       <tr style="${rowBg}">
         <td style="${TD_GAME}font-size:0.82rem;">
-          ${grpBadge}<span style="color:white;font-weight:500;">${flag(game.home)} ${game.home}</span>
+          ${grpBadge}<span style="color:white;font-weight:500;">${teamSpan(game.home)}</span>
           <span style="color:#475569;margin:0 0.3rem;">v</span>
-          <span style="color:white;font-weight:500;">${game.away} ${flag(game.away)}</span>
+          <span style="color:white;font-weight:500;">${teamSpan(game.away,true)}</span>
           <span style="margin-left:0.55rem;">${scoreStr}</span>
         </td>
         ${participants.map(p=>predCell(p,game,r)).join('')}
@@ -3045,9 +3168,9 @@ function renderCompare(){
         <div style="display:flex;align-items:center;gap:0.75rem;padding:0.625rem 1rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(10,22,40,0.5);flex-wrap:wrap;">
           <span style="font-size:0.7rem;color:#64748b;background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:0.25rem;white-space:nowrap;">Group ${game.g} MD${game.md}</span>
           <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.625rem;font-weight:600;flex-wrap:wrap;">
-            <span>${flag(game.home)} ${game.home}</span>
+            <span>${teamSpan(game.home)}</span>
             <span style="font-size:1.25rem;font-weight:700;color:#fcd34d;">${rh}–${ra}</span>
-            <span>${game.away} ${flag(game.away)}</span>
+            <span>${teamSpan(game.away,true)}</span>
           </div>
           <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
         </div>
@@ -3178,13 +3301,13 @@ function renderAdmin(){
           MD${game.md} · ${game.date} ${r?'<span style="color:#4ade80;margin-left:0.5rem;">✓</span>':''}
         </div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
-          <div style="flex:1;text-align:right;font-weight:500;font-size:0.875rem;">${flag(game.home)} ${game.home}</div>
+          <div style="flex:1;text-align:right;font-weight:500;font-size:0.875rem;">${teamSpan(game.home)}</div>
           <div style="display:flex;align-items:center;gap:0.5rem;">
             <input class="score-in" type="number" min="0" max="20" value="${rh}" placeholder="–" id="rh-${game.id}" style="width:3rem;" />
             <span style="color:#475569;font-weight:700;">–</span>
             <input class="score-in" type="number" min="0" max="20" value="${ra}" placeholder="–" id="ra-${game.id}" style="width:3rem;" />
           </div>
-          <div style="flex:1;text-align:left;font-weight:500;font-size:0.875rem;">${game.away} ${flag(game.away)}</div>
+          <div style="flex:1;text-align:left;font-weight:500;font-size:0.875rem;">${teamSpan(game.away,true)}</div>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.75rem;">
           ${r?`<button onclick="delGResult(${game.id})" style="font-size:0.75rem;color:#f87171;background:rgba(153,27,27,0.2);border:1px solid rgba(153,27,27,0.3);border-radius:0.375rem;padding:0.375rem 0.75rem;cursor:pointer;">Remove</button>`:''}
@@ -3248,9 +3371,9 @@ function renderAdmin(){
         const r=S.gResults[game.id];
         return `<div id="res-row-${game.id}" style="display:flex;align-items:center;gap:0.4rem;padding:0.3rem 0.5rem;border-radius:0.375rem;background:#0a1628;margin-bottom:0.25rem;font-size:0.78rem;">
           <span style="color:#475569;white-space:nowrap;min-width:4.5rem;">G${game.g} MD${game.md}</span>
-          <span style="color:#cbd5e1;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${flag(game.home)} ${game.home}</span>
+          <span style="color:#cbd5e1;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${teamSpan(game.home)}</span>
           <span data-score style="color:#fcd34d;font-weight:700;font-family:monospace;white-space:nowrap;padding:0 0.25rem;">${r[0]}–${r[1]}</span>
-          <span style="color:#cbd5e1;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${game.away} ${flag(game.away)}</span>
+          <span style="color:#cbd5e1;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${teamSpan(game.away,true)}</span>
           <span data-actions style="display:flex;gap:0.25rem;flex-shrink:0;">
             <button onclick="editResult(${game.id})" style="font-size:0.68rem;color:#94a3b8;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:0.3rem;padding:0.15rem 0.4rem;cursor:pointer;">Edit</button>
             <button onclick="delGResult(${game.id})" style="font-size:0.68rem;color:#f87171;background:rgba(153,27,27,0.15);border:1px solid rgba(153,27,27,0.25);border-radius:0.3rem;padding:0.15rem 0.4rem;cursor:pointer;">Del</button>
@@ -3397,8 +3520,10 @@ function renderGroupsTab(){
         <td style="padding:${_rp};text-align:center;font-size:0.7rem;font-weight:700;color:${adv?'#4ade80':third?'#fbbf24':'#475569'};">${i+1}</td>
         <td style="padding:${_rp};font-size:0.8rem;">
           <div style="display:flex;align-items:center;gap:0.22rem;overflow:hidden;">
-            <span style="flex-shrink:0;">${flag(t.name)}</span>
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;">${shortTeamName(t.name)}</span>
+            <span class="has-tip" data-team="${esc(t.name)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()" style="display:flex;align-items:center;gap:0.22rem;overflow:hidden;min-width:0;flex:1;">
+              <span style="flex-shrink:0;">${flag(t.name)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${shortTeamName(t.name)}</span>
+            </span>
             ${pie}
           </div>
         </td>
@@ -4329,6 +4454,7 @@ function renderRepicker(){
       if(isWrong){               bg='rgba(239,68,68,0.15)';  border='rgba(239,68,68,0.4)'; color='#f87171'; }
       if(isActual && !isPicked){ bg='rgba(96,165,250,0.1)';  border='rgba(96,165,250,0.3)'; color='#93c5fd'; }
       return `<button onclick="setRePick('${id}','${esc(team)}')"
+        data-team="${esc(team)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()"
         style="flex:1;padding:0.6rem 0.5rem;background:${bg};border:1.5px solid ${border};border-radius:0.5rem;color:${color};font-size:0.82rem;font-weight:${isPicked?600:400};cursor:pointer;text-align:center;transition:all 0.1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
         ${flag(team)} ${esc(team)}${isPicked&&isActual?' ✓':''}${isWrong?' ✗':''}
       </button>`;
