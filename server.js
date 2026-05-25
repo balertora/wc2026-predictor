@@ -69,6 +69,22 @@ db.exec(`
     is_admin   INTEGER NOT NULL DEFAULT 0,
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT    PRIMARY KEY,
+    value      TEXT    NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS re_bracket (
+    match_id   TEXT    PRIMARY KEY,
+    home       TEXT    NOT NULL DEFAULT '',
+    away       TEXT    NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS re_picks (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    match_id   TEXT    NOT NULL,
+    winner     TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, match_id)
+  );
 `);
 
 // Prepared statements
@@ -116,6 +132,16 @@ const stmts = {
   getSession:     db.prepare(`SELECT * FROM sessions WHERE token = ?`),
   deleteSession:  db.prepare(`DELETE FROM sessions WHERE token = ?`),
   deleteUserSessions: db.prepare(`DELETE FROM sessions WHERE user_id = ?`),
+  // Settings
+  getAllSettings:  db.prepare(`SELECT key, value FROM settings`),
+  setSetting:      db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`),
+  // Re-bracket (admin sets R32 matchups for Repicker)
+  getAllReBracket:  db.prepare(`SELECT * FROM re_bracket`),
+  upsertReBracket: db.prepare(`INSERT OR REPLACE INTO re_bracket (match_id, home, away) VALUES (?, ?, ?)`),
+  // Re-picks (users' Repicker bracket picks)
+  getAllRePicks:    db.prepare(`SELECT u.name, rp.match_id, rp.winner FROM re_picks rp JOIN users u ON u.id = rp.user_id`),
+  upsertRePick:    db.prepare(`INSERT OR REPLACE INTO re_picks (user_id, match_id, winner, updated_at) VALUES (?, ?, ?, datetime('now'))`),
+  deleteRePick:    db.prepare(`DELETE FROM re_picks WHERE user_id = ? AND match_id = ?`),
 };
 
 // ── Auth (DB-backed token store — survives server restarts) ──────────────────
@@ -285,7 +311,25 @@ function buildStatePayload() {
     };
   }
 
-  return { predictions, results: { gResults, kResults } };
+  // Settings
+  const settingRows = stmts.getAllSettings.all();
+  const settings = {};
+  for (const r of settingRows) settings[r.key] = r.value;
+
+  // Re-bracket (admin-set R32 matchups)
+  const reBracketRows = stmts.getAllReBracket.all();
+  const reBracket = {};
+  for (const r of reBracketRows) reBracket[r.match_id] = { home: r.home, away: r.away };
+
+  // Re-picks (all users)
+  const rePickRows = stmts.getAllRePicks.all();
+  const rePicks = {};
+  for (const r of rePickRows) {
+    if (!rePicks[r.name]) rePicks[r.name] = {};
+    rePicks[r.name][r.match_id] = r.winner;
+  }
+
+  return { predictions, results: { gResults, kResults }, settings, reBracket, rePicks };
 }
 
 // ── WebSocket broadcast ──────────────────────────────────────────────────────
@@ -569,6 +613,47 @@ app.get('/api/admin/espn-status', requireAdmin, (req, res) => {
     resultCount: gResults.length,
     results: gResults,
   });
+});
+
+// ── Settings endpoints ───────────────────────────────────────────────────────
+
+// PUT /api/settings/:key — admin only (e.g. repicker_open)
+app.put('/api/settings/:key', requireAdmin, (req, res) => {
+  const { key } = req.params;
+  if (!/^[a-z_]+$/.test(key)) return res.status(400).json({ error: 'Invalid key' });
+  const { value } = req.body;
+  stmts.setSetting.run(key, String(value ?? ''));
+  scheduleBroadcast();
+  res.json({ ok: true });
+});
+
+// ── Repicker endpoints ───────────────────────────────────────────────────────
+
+// PUT /api/re-bracket — admin only, set a R32 matchup (home/away teams)
+app.put('/api/re-bracket', requireAdmin, (req, res) => {
+  const { matchId, home, away } = req.body;
+  if (typeof matchId !== 'string' || !matchId) return res.status(400).json({ error: 'matchId required' });
+  stmts.upsertReBracket.run(matchId, String(home || ''), String(away || ''));
+  scheduleBroadcast();
+  res.json({ ok: true });
+});
+
+// PUT /api/re-picks — save authenticated user's Repicker picks
+// Body: { picks: { matchId: winner } }  (winner='' to delete)
+app.put('/api/re-picks', requireAuth, (req, res) => {
+  const { userId } = req.session;
+  const { picks } = req.body;
+  if (!picks || typeof picks !== 'object') return res.status(400).json({ error: 'picks required' });
+  for (const [matchId, winner] of Object.entries(picks)) {
+    if (typeof matchId !== 'string' || !matchId) continue;
+    if (!winner) {
+      stmts.deleteRePick.run(userId, matchId);
+    } else {
+      stmts.upsertRePick.run(userId, matchId, String(winner));
+    }
+  }
+  scheduleBroadcast();
+  res.json({ ok: true });
 });
 
 // ── HTTP server + WebSocket upgrade ─────────────────────────────────────────

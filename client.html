@@ -264,7 +264,8 @@
     <button class="tab" id="tn-groups"    onclick="showView('groups')">Picks</button>
     <button class="tab" id="tn-results"   onclick="showView('results')">Results</button>
     <button class="tab" id="tn-compare"   onclick="showView('compare')">Leaderboard</button>
-    <button class="tab" id="tn-admin"     onclick="showView('admin')">Admin</button>
+    <button class="tab" id="tn-repicker"  onclick="showView('repicker')" style="display:none;">Repicker</button>
+    <button class="tab" id="tn-admin"     onclick="showView('admin')" style="display:none;">Admin</button>
     <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode" style="margin-left:auto;">☀️</button>
     <div id="nav-user" style="font-size:0.75rem;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:9rem;"></div>
   </div>
@@ -1297,6 +1298,12 @@ const S = {
   predMapView: false, // transient — map vs list toggle for MD tabs
   lbSort: 'total',   // leaderboard sort column
   lbSortDir: -1,     // -1 = descending (higher first), 1 = ascending (lower first)
+  // Repicker
+  settings: {},      // { repicker_open: 'true'/'false' }
+  reBracket: {},     // { 'r32-1': { home, away }, … } — admin-set R32 matchups
+  rePicks: {},       // my picks: { matchId: winner }
+  allRePicks: {},    // all users' picks: { name: { matchId: winner } }
+  rePickTab: 'r32',  // active round tab in Repicker view
 };
 
 function loadState(){
@@ -1775,6 +1782,8 @@ async function doAuthSubmit(){
     localStorage.setItem('wc26_token_admin', _isAdmin ? '1' : '0');
     S.name = data.name;
     S.avatar = data.avatar || '';
+    // Show admin tab immediately if admin
+    if(_isAdmin){ S.adminUnlocked=true; _updateNavTabs(); }
     if(data.isNew){
       // New user — show photo step before entering the app
       _authPendingPin = pin;
@@ -1900,6 +1909,19 @@ function _applyServerState(data){
   // Also update my own avatar from server
   const myData = Object.entries(preds).find(([n]) => n.toLowerCase() === myName);
   if(myData && myData[1].avatar) S.avatar = myData[1].avatar;
+
+  // Settings
+  S.settings = data.settings || {};
+  _updateNavTabs();
+
+  // Re-bracket
+  S.reBracket = data.reBracket || {};
+
+  // Re-picks
+  S.allRePicks = data.rePicks || {};
+  // Update my own rePicks from server (authoritative)
+  const myRePicks = Object.entries(data.rePicks || {}).find(([n]) => n.toLowerCase() === myName);
+  if(myRePicks) S.rePicks = myRePicks[1] || {};
 }
 
 // ── WebSocket connection ──────────────────────────────────
@@ -2008,11 +2030,21 @@ function profileChips(){
 // ═══════════════════════════════════════════════════════════
 // NAV
 // ═══════════════════════════════════════════════════════════
+function _updateNavTabs(){
+  // Admin tab: only visible to admins
+  const adminTab = document.getElementById('tn-admin');
+  if(adminTab) adminTab.style.display = _isAdmin ? '' : 'none';
+  // Repicker tab: visible when admin has opened it, or to admin always
+  const reTab = document.getElementById('tn-repicker');
+  if(reTab) reTab.style.display = (S.settings?.repicker_open==='true' || _isAdmin) ? '' : 'none';
+}
+
 function showView(v){
   S.view=v;
   document.querySelectorAll('[id^="tn-"]').forEach(b=>{
     b.classList.toggle('on', b.id==='tn-'+v);
   });
+  _updateNavTabs();
   const navUser = document.getElementById('nav-user');
   if(navUser){
     const avatarHTML = S.avatar
@@ -2121,10 +2153,11 @@ function render(){
 }
 
 function renderMain(){
-  if(S.view==='predict') return S.name ? renderPredict() : renderNamePrompt();
+  if(S.view==='predict')  return S.name ? renderPredict() : renderNamePrompt();
   if(S.view==='groups')   return renderPicksTab();
   if(S.view==='results')  return renderResults();
   if(S.view==='compare')  return renderCompare();
+  if(S.view==='repicker') return renderRepicker();
   return renderAdmin();
 }
 
@@ -3269,7 +3302,40 @@ function renderAdmin(){
         </label>
         <button class="btn-g" onclick="saveWeights()" style="padding:0.5rem 1rem;font-size:0.875rem;">Save</button>
       </div>
-    </div>`;})()}`;
+    </div>`;})()}
+
+    ${(()=>{
+      const repickerOpen = S.settings?.repicker_open === 'true';
+      const rbRows = Array.from({length:16},(_,i)=>{
+        const id=`r32-${i+1}`;
+        const b=S.reBracket[id]||{};
+        return `<div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.375rem;">
+          <span style="color:#475569;font-size:0.72rem;width:3.5rem;flex-shrink:0;">R32-${i+1}</span>
+          <input type="text" placeholder="Home team" value="${esc(b.home||'')}" id="rb-h-${i+1}"
+            style="flex:1;background:#0a1628;border:1px solid rgba(255,255,255,0.1);border-radius:0.375rem;color:white;padding:0.3rem 0.5rem;font-size:0.78rem;" />
+          <span style="color:#475569;font-size:0.75rem;">vs</span>
+          <input type="text" placeholder="Away team" value="${esc(b.away||'')}" id="rb-a-${i+1}"
+            style="flex:1;background:#0a1628;border:1px solid rgba(255,255,255,0.1);border-radius:0.375rem;color:white;padding:0.3rem 0.5rem;font-size:0.78rem;" />
+          <button onclick="saveReBracket(${i+1})" style="padding:0.3rem 0.55rem;font-size:0.75rem;background:#15803d;color:white;border:none;border-radius:0.375rem;cursor:pointer;flex-shrink:0;">✓</button>
+        </div>`;
+      }).join('');
+      return `
+    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;flex-wrap:wrap;gap:0.5rem;">
+        <div>
+          <h2 style="font-weight:600;color:white;font-size:0.95rem;margin:0;">🔄 Repicker</h2>
+          <p style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Open after group stage — users pick a fresh KO bracket.</p>
+        </div>
+        <button onclick="toggleRepicker()" style="padding:0.45rem 0.875rem;font-size:0.8rem;${repickerOpen?'background:#16a34a;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">
+          ${repickerOpen?'✓ Open — click to close':'Closed — click to open'}
+        </button>
+      </div>
+      <details style="margin-top:0.625rem;">
+        <summary style="cursor:pointer;list-style:none;color:#64748b;font-size:0.8rem;padding:0.375rem 0;user-select:none;">▸ Set R32 matchups (actual teams after group stage)</summary>
+        <div style="margin-top:0.625rem;">${rbRows}</div>
+      </details>
+    </div>`;
+    })()}`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4027,6 +4093,262 @@ function doImportResults(){
 }
 
 // ═══════════════════════════════════════════════════════════
+// REPICKER TAB
+// ═══════════════════════════════════════════════════════════
+
+// Pair structure: which R32 matches feed into each R16 slot, etc.
+// r32-1 & r32-2 → r16-1, r32-3 & r32-4 → r16-2 …
+const RE_R32_PAIRS = [[1,2],[3,4],[5,6],[7,8],[9,10],[11,12],[13,14],[15,16]];
+const RE_R16_PAIRS = [[1,2],[3,4],[5,6],[7,8]];
+const RE_QF_PAIRS  = [[1,2],[3,4]];
+
+// Build the user's repicker bracket from their picks.
+// Returns { 'r32-1': {home,away}, 'r16-1': {home,away}, … }
+function repickerBuildUser(userPicks){
+  const rb = S.reBracket;
+  const teams = {};
+  for(let i=1;i<=16;i++){
+    const id=`r32-${i}`;
+    teams[id]={ home: rb[id]?.home||'', away: rb[id]?.away||'' };
+  }
+  RE_R32_PAIRS.forEach(([ai,bi],i)=>{
+    const id=`r16-${i+1}`;
+    teams[id]={ home: userPicks[`r32-${ai}`]||null, away: userPicks[`r32-${bi}`]||null };
+  });
+  RE_R16_PAIRS.forEach(([ai,bi],i)=>{
+    const id=`qf-${i+1}`;
+    teams[id]={ home: userPicks[`r16-${ai}`]||null, away: userPicks[`r16-${bi}`]||null };
+  });
+  RE_QF_PAIRS.forEach(([ai,bi],i)=>{
+    const id=`sf-${i+1}`;
+    teams[id]={ home: userPicks[`qf-${ai}`]||null, away: userPicks[`qf-${bi}`]||null };
+  });
+  teams['final-1']={ home: userPicks['sf-1']||null, away: userPicks['sf-2']||null };
+  return teams;
+}
+
+// Build actual winners from kResults + reBracket (for scoring).
+// Returns { matchId: actualWinnerTeamName }
+function repickerActualWinners(){
+  const rb = S.reBracket;
+  const kr = S.kResults||{};
+  const teamFor = {}; // matchId → { home, away }
+  for(let i=1;i<=16;i++){
+    const id=`r32-${i}`;
+    teamFor[id]={ home: rb[id]?.home||'', away: rb[id]?.away||'' };
+  }
+  function getWinner(matchId){
+    const t=teamFor[matchId]; const r=kr[matchId];
+    if(!t||!r||r.homeScore===undefined) return null;
+    if(r.homeScore>r.awayScore) return t.home;
+    if(r.awayScore>r.homeScore) return t.away;
+    if(r.penWinner){ return (r.penWinner===t.home||r.penWinner===t.away)?r.penWinner:(r.penWinner==='home'?t.home:t.away); }
+    return null;
+  }
+  RE_R32_PAIRS.forEach(([ai,bi],i)=>{
+    const id=`r16-${i+1}`;
+    teamFor[id]={ home: getWinner(`r32-${ai}`), away: getWinner(`r32-${bi}`) };
+  });
+  RE_R16_PAIRS.forEach(([ai,bi],i)=>{
+    const id=`qf-${i+1}`;
+    teamFor[id]={ home: getWinner(`r16-${ai}`), away: getWinner(`r16-${bi}`) };
+  });
+  RE_QF_PAIRS.forEach(([ai,bi],i)=>{
+    const id=`sf-${i+1}`;
+    teamFor[id]={ home: getWinner(`qf-${ai}`), away: getWinner(`qf-${bi}`) };
+  });
+  teamFor['final-1']={ home: getWinner('sf-1'), away: getWinner('sf-2') };
+
+  const winners = {};
+  const allIds = Object.keys(teamFor);
+  for(const id of allIds) winners[id] = getWinner(id);
+  return winners;
+}
+
+// Score a user's rePicks against actual results
+function calcReScore(userPicks){
+  const actuals = repickerActualWinners();
+  let correct=0, possible=0;
+  for(const [matchId, winner] of Object.entries(userPicks)){
+    if(!winner) continue;
+    const actual = actuals[matchId];
+    if(actual){ possible++; if(actual===winner) correct++; }
+  }
+  return { correct, possible };
+}
+
+// Get downstream match IDs that depend on a given match
+function _reDownstream(matchId){
+  const ds=[];
+  function follow(id){
+    let nextId=null;
+    if(id.startsWith('r32-')){
+      const n=parseInt(id.split('-')[1]);
+      nextId=`r16-${Math.ceil(n/2)}`;
+    } else if(id.startsWith('r16-')){
+      const n=parseInt(id.split('-')[1]);
+      nextId=`qf-${Math.ceil(n/2)}`;
+    } else if(id.startsWith('qf-')){
+      const n=parseInt(id.split('-')[1]);
+      nextId=`sf-${Math.ceil(n/2)}`;
+    } else if(id.startsWith('sf-')){
+      nextId='final-1';
+    }
+    if(nextId){ ds.push(nextId); follow(nextId); }
+  }
+  follow(matchId);
+  return ds;
+}
+
+async function setRePick(matchId, winner){
+  // Toggle: click same winner again to deselect
+  const current = S.rePicks[matchId];
+  const newWinner = (current===winner) ? '' : winner;
+
+  // Clear downstream picks
+  const downstream = _reDownstream(matchId);
+  const picks = { [matchId]: newWinner };
+  for(const id of downstream){ picks[id]=''; }
+
+  // Apply locally
+  if(newWinner) S.rePicks[matchId]=newWinner; else delete S.rePicks[matchId];
+  for(const id of downstream) delete S.rePicks[id];
+  render();
+
+  // Save to server
+  try{
+    await fetch('/api/re-picks',{ method:'PUT', headers:_authHeaders(), body:JSON.stringify({picks}) });
+  }catch(e){ console.warn('Re-pick save failed:',e.message); }
+}
+
+async function toggleRepicker(){
+  const current = S.settings?.repicker_open==='true';
+  const newVal = current ? 'false' : 'true';
+  try{
+    await fetch('/api/settings/repicker_open',{ method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:newVal}) });
+    if(!S.settings) S.settings={};
+    S.settings.repicker_open = newVal;
+    _updateNavTabs();
+    render();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+
+async function saveReBracket(i){
+  const home=document.getElementById(`rb-h-${i}`)?.value?.trim()||'';
+  const away=document.getElementById(`rb-a-${i}`)?.value?.trim()||'';
+  const matchId=`r32-${i}`;
+  try{
+    await fetch('/api/re-bracket',{ method:'PUT', headers:_authHeaders(), body:JSON.stringify({matchId,home,away}) });
+    if(!S.reBracket) S.reBracket={};
+    S.reBracket[matchId]={home,away};
+    render();
+  }catch(e){ alert('Save failed: '+e.message); }
+}
+
+function renderRepicker(){
+  const repickerOpen = S.settings?.repicker_open==='true';
+  if(!repickerOpen && !_isAdmin) return `
+    <div style="text-align:center;padding:4rem 1rem;">
+      <div style="font-size:2.5rem;margin-bottom:0.75rem;">🔒</div>
+      <p style="color:#64748b;">Repicker not open yet. Check back after the group stage!</p>
+    </div>`;
+
+  const userTeams = repickerBuildUser(S.rePicks);
+  const actuals   = repickerActualWinners();
+
+  const rounds=[
+    {key:'r32',  label:'Round of 32', ids: Array.from({length:16},(_,i)=>`r32-${i+1}`)},
+    {key:'r16',  label:'Round of 16', ids: Array.from({length:8}, (_,i)=>`r16-${i+1}`)},
+    {key:'qf',   label:'Quarters',    ids: Array.from({length:4}, (_,i)=>`qf-${i+1}`)},
+    {key:'sf',   label:'Semis',       ids: ['sf-1','sf-2']},
+    {key:'final',label:'Final',       ids: ['final-1']},
+  ];
+  const tab = S.rePickTab||'r32';
+  const round = rounds.find(r=>r.key===tab)||rounds[0];
+
+  const tabsHtml = rounds.map(r=>{
+    const allPicked = r.ids.every(id=>S.rePicks[id]);
+    const cls = r.key===tab ? 'rnd-tab on' : (allPicked ? 'rnd-tab done' : 'rnd-tab');
+    return `<button class="${cls}" onclick="S.rePickTab='${r.key}';render()">${allPicked&&r.key!==tab?'✓ ':''} ${r.label}</button>`;
+  }).join('');
+
+  const matchesHtml = round.ids.map(id=>{
+    const t = userTeams[id]||{};
+    const homeTeam = t.home; const awayTeam = t.away;
+    const picked = S.rePicks[id];
+    const actual = actuals[id];
+
+    if(!homeTeam && !awayTeam){
+      return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.875rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;">
+        <span style="color:#475569;font-size:0.875rem;">— TBD · pick winner in previous round —</span>
+      </div>`;
+    }
+
+    const makeBtn=(team)=>{
+      if(!team) return `<div style="flex:1;padding:0.6rem 0.5rem;text-align:center;color:#334155;font-size:0.8rem;font-style:italic;">TBD</div>`;
+      const isPicked = picked===team;
+      const isActual = actual===team;
+      const isWrong  = picked===team && actual && actual!==team;
+      let bg='rgba(255,255,255,0.04)'; let border='rgba(255,255,255,0.08)'; let color='#cbd5e1';
+      if(isPicked && !actual){   bg='rgba(22,163,74,0.2)';   border='rgba(22,163,74,0.5)'; color='#4ade80'; }
+      if(isPicked && isActual){  bg='rgba(22,163,74,0.3)';   border='rgba(22,163,74,0.8)'; color='#4ade80'; }
+      if(isWrong){               bg='rgba(239,68,68,0.15)';  border='rgba(239,68,68,0.4)'; color='#f87171'; }
+      if(isActual && !isPicked){ bg='rgba(96,165,250,0.1)';  border='rgba(96,165,250,0.3)'; color='#93c5fd'; }
+      return `<button onclick="setRePick('${id}','${esc(team)}')"
+        style="flex:1;padding:0.6rem 0.5rem;background:${bg};border:1.5px solid ${border};border-radius:0.5rem;color:${color};font-size:0.82rem;font-weight:${isPicked?600:400};cursor:pointer;text-align:center;transition:all 0.1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${flag(team)} ${esc(team)}${isPicked&&isActual?' ✓':''}${isWrong?' ✗':''}
+      </button>`;
+    };
+
+    return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.75rem;margin-bottom:0.5rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        ${makeBtn(homeTeam)}
+        <span style="color:#334155;font-size:0.75rem;font-weight:700;flex-shrink:0;">vs</span>
+        ${makeBtn(awayTeam)}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Leaderboard
+  const allRP = S.allRePicks||{};
+  const scored = Object.entries(allRP)
+    .map(([name,picks])=>({ name, ...calcReScore(picks) }))
+    .filter(x=>x.possible>0||Object.keys(allRP[x.name]||{}).length>0)
+    .sort((a,b)=>b.correct-a.correct||a.name.localeCompare(b.name));
+  const lbRows = scored.map((s,i)=>{
+    const isSelf=s.name===S.name;
+    const myPicks=allRP[s.name]||{};
+    const picked=Object.values(myPicks).filter(Boolean).length;
+    const allIds=rounds.flatMap(r=>r.ids);
+    const total=allIds.length;
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;${isSelf?'background:rgba(22,163,74,0.08);border-radius:0.5rem;':''}">
+      <span style="color:#475569;font-size:0.75rem;width:1.5rem;text-align:center;">#${i+1}</span>
+      <span style="flex:1;font-size:0.875rem;color:${isSelf?'#4ade80':'#cbd5e1'};font-weight:${isSelf?600:400};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.name)}${isSelf?' (you)':''}</span>
+      <span style="font-size:0.72rem;color:#64748b;white-space:nowrap;">${picked}/${total} picked</span>
+      <span style="font-size:0.82rem;color:#fcd34d;font-weight:700;font-family:monospace;white-space:nowrap;min-width:3rem;text-align:right;">${s.correct}/${s.possible}</span>
+    </div>`;
+  }).join('');
+
+  return `
+  <div style="padding-bottom:1.5rem;">
+    <div style="margin-bottom:1rem;">
+      <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
+      <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Pick the winner of each match. Green = your pick. Blue = actual result. Red = wrong.</p>
+    </div>
+
+    <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>
+
+    ${matchesHtml}
+
+    ${scored.length ? `
+    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.5rem;">
+      <h2 style="font-weight:600;color:white;font-size:0.9rem;margin-bottom:0.625rem;">🏆 Repicker Leaderboard <span style="color:#64748b;font-weight:400;font-size:0.75rem;">(correct picks / results in)</span></h2>
+      ${lbRows}
+    </div>` : ''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
 // BOOT (Railway version)
 // ═══════════════════════════════════════════════════════════
 
@@ -4046,6 +4368,8 @@ applyTheme(localStorage.getItem('wc26_theme') || 'light');
 
 // Restore session token from localStorage
 loadState();
+// Show admin tab if we're reloading as admin (token persisted from last session)
+if(_isAdmin){ S.adminUnlocked=true; _updateNavTabs(); }
 
 // If we have a token, reconnect the WebSocket (page reload case).
 // Server will immediately push the full state.
