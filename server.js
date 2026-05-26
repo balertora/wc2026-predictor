@@ -49,8 +49,6 @@ const asyncHandler = fn => (req, res, next) => {
 // ── Schema init ──────────────────────────────────────────────────────────────
 async function initDB() {
   await db.batch([
-    { sql: 'PRAGMA journal_mode = WAL', args: [] },
-    { sql: 'PRAGMA foreign_keys = ON', args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS users (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
