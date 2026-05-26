@@ -11,9 +11,15 @@ const fs         = require('fs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const PORT        = parseInt(process.env.PORT || '3000', 10);
-const TURSO_URL   = process.env.TURSO_URL   || `file:${path.join(__dirname, 'wc26.db')}`;
+const IS_PROD     = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
+const TURSO_URL   = process.env.TURSO_URL   || (IS_PROD ? null : `file:${path.join(__dirname, 'wc26.db')}`);
 const TURSO_TOKEN = process.env.TURSO_TOKEN || undefined;
 const ADMIN_PIN   = process.env.ADMIN_PIN   || 'wc2026';
+
+if (!TURSO_URL) {
+  console.error('FATAL: TURSO_URL env var is not set. Set it in the Railway dashboard (Variables tab).');
+  process.exit(1);
+}
 const SALT_ROUNDS = 10;
 
 // ── Database ────────────────────────────────────────────────────────────────
@@ -464,8 +470,12 @@ app.get('/', (req, res) => {
   res.sendFile(htmlPath);
 });
 
-// Health check
-app.get('/api/health', (req, res) => res.json({ ok: true, clients: wsClients.size }));
+// Health check — reports DB readiness so Railway healthcheck passes even during slow cold starts
+let _dbReady = false;
+app.get('/api/health', (req, res) => {
+  if (!_dbReady) return res.status(503).json({ ok: false, reason: 'db_initializing' });
+  res.json({ ok: true, clients: wsClients.size });
+});
 
 // ── Auth endpoints ───────────────────────────────────────────────────────────
 
@@ -743,13 +753,18 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 // ── Startup ──────────────────────────────────────────────────────────────────
+// Start HTTP server immediately so Railway healthcheck can reach /api/health
+// while DB init is still running (returns 503 until ready, then 200)
+server.listen(PORT, () => {
+  console.log(`WC2026 Predictor server listening on port ${PORT}`);
+  console.log(`DB: ${TURSO_URL}`);
+});
+
 initDB()
   .then(() => {
-    server.listen(PORT, () => {
-      console.log(`WC2026 Predictor server running on port ${PORT}`);
-      console.log(`DB: ${TURSO_URL}`);
-      pollESPN();
-    });
+    _dbReady = true;
+    console.log('DB ready — accepting traffic');
+    pollESPN();
   })
   .catch(err => {
     console.error('Failed to initialise DB:', err);

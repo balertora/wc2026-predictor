@@ -4,9 +4,10 @@ builder = "nixpacks"
 [deploy]
 startCommand = "node server.js"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 10
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
 [env]
 PORT = { default = "3000" }
+# TURSO_URL and TURSO_TOKEN must be set in the Railway dashboard — do not put secret values here
