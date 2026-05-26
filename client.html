@@ -387,7 +387,7 @@ const FLAGS = {
 // 3-letter country codes for H2H display
 const CODE = {
   'Mexico':'MEX','South Africa':'RSA','South Korea':'KOR','Czechia':'CZE',
-  'Canada':'CAN','Bosnia and Herzegovina':'BIH','Qatar':'QAT','Switzerland':'SUI',
+  'Canada':'CAN','Bosnia and Herz.':'BIH','Qatar':'QAT','Switzerland':'SUI',
   'Brazil':'BRA','Morocco':'MAR','Haiti':'HAI','Scotland':'SCO',
   'USA':'USA','Paraguay':'PAR','Australia':'AUS','Turkey':'TUR',
   'Germany':'GER','Curaçao':'CUW','Ivory Coast':'CIV','Ecuador':'ECU',
@@ -466,12 +466,12 @@ const H2H = {
   'Mexico|Czechia': { comp: {w:1,d:0,l:1,gf:3,ga:3}, friendly: {w:3,d:1,l:2,gf:9,ga:8} }, // ?
   'South Africa|South Korea': { comp: {w:0,d:1,l:1,gf:1,ga:3}, friendly: {w:1,d:1,l:2,gf:5,ga:7} }, // ?
   // ── GROUP B ──────────────────────────────────────────────────────
-  'Canada|Bosnia and Herzegovina': { friendly: {w:1,d:0,l:1,gf:2,ga:3} }, // ?
+  'Canada|Bosnia and Herz.': { friendly: {w:1,d:0,l:1,gf:2,ga:3} }, // ?
   'Qatar|Switzerland': { comp: {w:0,d:0,l:1,gf:0,ga:3}, friendly: {w:0,d:1,l:1,gf:1,ga:4} }, // WC 2022 (SUI 3-0 QAT)
   'Canada|Qatar': { friendly: {w:1,d:0,l:0,gf:2,ga:0} }, // ?
-  'Bosnia and Herzegovina|Switzerland': { comp: {w:0,d:2,l:2,gf:5,ga:8}, friendly: {w:1,d:1,l:2,gf:5,ga:8} }, // ?
+  'Bosnia and Herz.|Switzerland': { comp: {w:0,d:2,l:2,gf:5,ga:8}, friendly: {w:1,d:1,l:2,gf:5,ga:8} }, // ?
   'Canada|Switzerland': { friendly: {w:0,d:1,l:2,gf:2,ga:5} }, // ?
-  'Bosnia and Herzegovina|Qatar': { friendly: {w:1,d:0,l:0,gf:3,ga:1} }, // ?
+  'Bosnia and Herz.|Qatar': { friendly: {w:1,d:0,l:0,gf:3,ga:1} }, // ?
   // ── GROUP C ──────────────────────────────────────────────────────
   'Brazil|Morocco': { comp: {w:1,d:0,l:0,gf:1,ga:0}, friendly: {w:3,d:0,l:0,gf:8,ga:1} }, // ?
   'Haiti|Scotland': { friendly: {w:0,d:0,l:1,gf:0,ga:1} }, // ?
@@ -639,6 +639,15 @@ const H2H = {
   'Saudi Arabia|Poland':   { comp: {w:1,d:0,l:0,gf:2,ga:0} },                                     // WC 2022 grp (W2-0)
   'Saudi Arabia|Mexico':   { comp: {w:0,d:0,l:1,gf:0,ga:2}, friendly: {w:1,d:0,l:1,gf:2,ga:3} },
 
+  // ── CONCACAF intra-confederation ─────────────────────────────────
+  // Note: Mexico|Canada covers WC qualifying (all cycles since 1960s), Gold Cup, Nations League, CONCACAF Championship
+  // Canada's first competitive win over Mexico in 36 years came in 2021 CNL Final (2-1); Canada also won 2024 CNL semi (3-2)
+  'Mexico|Canada':  { comp: {w:34,d:9,l:5,gf:115,ga:41}, friendly: {w:12,d:5,l:8,gf:42,ga:32} },
+  // Note: USA|Mexico covers WC qualifying, Gold Cup, Nations League, Copa América, Confederations Cup
+  'Mexico|USA':     { comp: {w:21,d:12,l:14,gf:75,ga:59}, friendly: {w:15,d:8,l:10,gf:55,ga:43} },
+  // Note: USA|Canada covers WC qualifying, Gold Cup, Nations League
+  'USA|Canada':     { comp: {w:14,d:8,l:5,gf:46,ga:25}, friendly: {w:12,d:5,l:8,gf:39,ga:30} },
+
   // ── Cross-group European pairs ────────────────────────────────────
   // Note: England|Scotland comp includes Home International Championship (competitive fixtures 1884-1989)
   // Note: Belgium|France friendly total reflects 75+ all-time meetings; vast majority are friendlies
@@ -655,7 +664,7 @@ const H2H = {
   'Germany|Czechia':       { comp: {w:5,d:2,l:2,gf:17,ga:10},   friendly: {w:3,d:1,l:1,gf:10,ga:7} },
   'Germany|Norway':        { comp: {w:5,d:1,l:2,gf:18,ga:8},    friendly: {w:7,d:4,l:3,gf:28,ga:15} },
   'Germany|Scotland':      { comp: {w:4,d:2,l:1,gf:14,ga:8},    friendly: {w:5,d:3,l:3,gf:21,ga:14} },
-  'Germany|Bosnia and Herzegovina': { comp: {w:3,d:0,l:0,gf:11,ga:1}, friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Germany|Bosnia and Herz.': { comp: {w:3,d:0,l:0,gf:11,ga:1}, friendly: {w:1,d:0,l:1,gf:3,ga:3} },
   'Germany|Turkey':        { comp: {w:4,d:1,l:1,gf:14,ga:7},    friendly: {w:2,d:1,l:1,gf:6,ga:5} },
   'Germany|Croatia':       { comp: {w:3,d:0,l:3,gf:10,ga:9},    friendly: {w:2,d:1,l:1,gf:9,ga:7} },
   'Netherlands|Belgium':   { comp: {w:5,d:3,l:5,gf:22,ga:22},   friendly: {w:12,d:8,l:12,gf:55,ga:56} },
@@ -669,7 +678,7 @@ const H2H = {
   'Netherlands|Czechia':   { comp: {w:1,d:1,l:5,gf:7,ga:14},   friendly: {w:2,d:1,l:1,gf:5,ga:5} },
   'Netherlands|Norway':    { comp: {w:3,d:0,l:1,gf:9,ga:3},    friendly: {w:2,d:1,l:0,gf:6,ga:1} },
   'Netherlands|Scotland':  { comp: {w:3,d:1,l:2,gf:10,ga:8},   friendly: {w:2,d:1,l:1,gf:7,ga:4} },
-  'Netherlands|Bosnia and Herzegovina': { comp: {w:2,d:2,l:0,gf:8,ga:4} },
+  'Netherlands|Bosnia and Herz.': { comp: {w:2,d:2,l:0,gf:8,ga:4} },
   'Netherlands|Turkey':    { comp: {w:4,d:1,l:2,gf:14,ga:9},   friendly: {w:1,d:0,l:0,gf:3,ga:1} },
   'Netherlands|Croatia':   { comp: {w:2,d:1,l:2,gf:8,ga:8},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
   'Belgium|Spain':         { comp: {w:0,d:1,l:5,gf:3,ga:14},   friendly: {w:3,d:2,l:3,gf:9,ga:10} },
@@ -682,7 +691,7 @@ const H2H = {
   'Belgium|Czechia':       { comp: {w:3,d:2,l:1,gf:9,ga:5},    friendly: {w:1,d:0,l:1,gf:2,ga:3} },
   'Belgium|Norway':        { comp: {w:1,d:1,l:0,gf:4,ga:2},    friendly: {w:1,d:1,l:1,gf:4,ga:5} },
   'Belgium|Scotland':      { comp: {w:3,d:1,l:1,gf:9,ga:4},    friendly: {w:2,d:0,l:0,gf:5,ga:1} },
-  'Belgium|Bosnia and Herzegovina': { comp: {w:3,d:1,l:1,gf:10,ga:6}, friendly: {w:1,d:0,l:0,gf:3,ga:0} },
+  'Belgium|Bosnia and Herz.': { comp: {w:3,d:1,l:1,gf:10,ga:6}, friendly: {w:1,d:0,l:0,gf:3,ga:0} },
   'Belgium|Turkey':        { comp: {w:1,d:2,l:2,gf:10,ga:10} },
   'Belgium|Croatia':       { comp: {w:2,d:2,l:2,gf:6,ga:7},    friendly: {w:1,d:0,l:1,gf:1,ga:2} },
   'Spain|France':          { comp: {w:8,d:3,l:6,gf:24,ga:24},  friendly: {w:10,d:4,l:7,gf:37,ga:33} },
@@ -694,7 +703,7 @@ const H2H = {
   'Spain|Czechia':         { comp: {w:4,d:1,l:0,gf:7,ga:3},    friendly: {w:1,d:0,l:0,gf:3,ga:0} },
   'Spain|Norway':          { comp: {w:4,d:1,l:0,gf:12,ga:3},   friendly: {w:1,d:0,l:1,gf:4,ga:4} },
   'Spain|Scotland':        { comp: {w:5,d:3,l:3,gf:16,ga:12},  friendly: {w:1,d:1,l:1,gf:4,ga:4} },
-  'Spain|Bosnia and Herzegovina': { comp: {w:3,d:2,l:0,gf:11,ga:5} },
+  'Spain|Bosnia and Herz.': { comp: {w:3,d:2,l:0,gf:11,ga:5} },
   'Spain|Turkey':          { comp: {w:4,d:1,l:0,gf:10,ga:2},   friendly: {w:1,d:0,l:0,gf:4,ga:0} },
   'Spain|Croatia':         { comp: {w:5,d:1,l:2,gf:20,ga:9},   friendly: {w:1,d:0,l:0,gf:2,ga:0} },
   'France|Austria':        { comp: {w:3,d:0,l:1,gf:8,ga:5},    friendly: {w:1,d:1,l:0,gf:6,ga:2} },
@@ -705,7 +714,7 @@ const H2H = {
   'France|Czechia':        { comp: {w:1,d:1,l:2,gf:5,ga:7},    friendly: {w:1,d:0,l:0,gf:2,ga:1} },
   'France|Norway':         { comp: {w:2,d:2,l:0,gf:8,ga:4},    friendly: {w:2,d:1,l:2,gf:10,ga:8} },
   'France|Scotland':       { comp: {w:2,d:0,l:1,gf:5,ga:3},    friendly: {w:4,d:2,l:3,gf:16,ga:13} },
-  'France|Bosnia and Herzegovina': { comp: {w:3,d:2,l:0,gf:7,ga:3} },
+  'France|Bosnia and Herz.': { comp: {w:3,d:2,l:0,gf:7,ga:3} },
   'France|Turkey':         { comp: {w:3,d:1,l:1,gf:10,ga:7} },
   'France|Croatia':        { comp: {w:5,d:1,l:1,gf:18,ga:9},   friendly: {w:2,d:2,l:1,gf:7,ga:7} }, // WC 1998 final (3-0), WC 2018 final (4-2)
   'Austria|Portugal':      { comp: {w:0,d:2,l:2,gf:3,ga:5},    friendly: {w:1,d:0,l:0,gf:2,ga:1} },
@@ -715,7 +724,7 @@ const H2H = {
   'Austria|Czechia':       { comp: {w:1,d:1,l:2,gf:5,ga:7} },
   'Austria|Norway':        { comp: {w:2,d:1,l:1,gf:8,ga:6},    friendly: {w:1,d:0,l:1,gf:5,ga:3} },
   'Austria|Scotland':      { comp: {w:1,d:2,l:2,gf:5,ga:7},    friendly: {w:0,d:1,l:0,gf:1,ga:1} },
-  'Austria|Bosnia and Herzegovina': { comp: {w:1,d:2,l:1,gf:5,ga:6} },
+  'Austria|Bosnia and Herz.': { comp: {w:1,d:2,l:1,gf:5,ga:6} },
   'Austria|Turkey':        { comp: {w:1,d:1,l:4,gf:6,ga:10},   friendly: {w:1,d:0,l:0,gf:6,ga:1} },
   'Austria|Croatia':       { comp: {w:0,d:1,l:2,gf:2,ga:5},    friendly: {w:1,d:0,l:1,gf:3,ga:2} },
   'Portugal|England':      { comp: {w:3,d:1,l:3,gf:7,ga:9},    friendly: {w:3,d:3,l:4,gf:14,ga:18} },
@@ -724,7 +733,7 @@ const H2H = {
   'Portugal|Czechia':      { comp: {w:3,d:1,l:1,gf:9,ga:5},    friendly: {w:2,d:0,l:0,gf:5,ga:1} },
   'Portugal|Norway':       { comp: {w:3,d:0,l:1,gf:5,ga:2} },
   'Portugal|Scotland':     { comp: {w:3,d:1,l:1,gf:8,ga:5},    friendly: {w:1,d:0,l:0,gf:3,ga:1} },
-  'Portugal|Bosnia and Herzegovina': { comp: {w:4,d:1,l:0,gf:11,ga:2}, friendly: {w:1,d:0,l:0,gf:3,ga:0} },
+  'Portugal|Bosnia and Herz.': { comp: {w:4,d:1,l:0,gf:11,ga:2}, friendly: {w:1,d:0,l:0,gf:3,ga:0} },
   'Portugal|Turkey':       { comp: {w:4,d:0,l:1,gf:12,ga:5} },
   'Portugal|Croatia':      { comp: {w:3,d:2,l:1,gf:8,ga:5},    friendly: {w:3,d:0,l:0,gf:7,ga:2} },
   'England|Sweden':        { comp: {w:4,d:3,l:3,gf:13,ga:12},  friendly: {w:5,d:4,l:5,gf:19,ga:20} },
@@ -732,36 +741,405 @@ const H2H = {
   'England|Czechia':       { comp: {w:2,d:1,l:1,gf:12,ga:5},   friendly: {w:1,d:0,l:0,gf:1,ga:0} },
   'England|Norway':        { comp: {w:3,d:2,l:3,gf:11,ga:13},  friendly: {w:8,d:4,l:4,gf:38,ga:22} },
   'England|Scotland':      { comp: {w:18,d:12,l:11,gf:79,ga:65}, friendly: {w:30,d:14,l:30,gf:127,ga:110} },
-  'England|Bosnia and Herzegovina': { comp: {w:3,d:0,l:0,gf:8,ga:1}, friendly: {w:1,d:1,l:0,gf:3,ga:0} },
+  'England|Bosnia and Herz.': { comp: {w:3,d:0,l:0,gf:8,ga:1}, friendly: {w:1,d:1,l:0,gf:3,ga:0} },
   'England|Turkey':        { comp: {w:3,d:2,l:0,gf:6,ga:2},    friendly: {w:2,d:0,l:0,gf:5,ga:1} },
   'Sweden|Switzerland':    { comp: {w:6,d:3,l:6,gf:24,ga:27},  friendly: {w:5,d:4,l:6,gf:20,ga:22} },
   'Sweden|Czechia':        { comp: {w:1,d:2,l:0,gf:3,ga:2} },
   'Sweden|Norway':         { comp: {w:10,d:8,l:8,gf:40,ga:37}, friendly: {w:12,d:12,l:14,gf:53,ga:62} },
   'Sweden|Scotland':       { comp: {w:3,d:2,l:2,gf:10,ga:9},   friendly: {w:3,d:3,l:3,gf:13,ga:12} },
-  'Sweden|Bosnia and Herzegovina': { comp: {w:3,d:1,l:2,gf:9,ga:8} },
+  'Sweden|Bosnia and Herz.': { comp: {w:3,d:1,l:2,gf:9,ga:8} },
   'Sweden|Turkey':         { comp: {w:1,d:1,l:2,gf:4,ga:6},    friendly: {w:1,d:1,l:2,gf:4,ga:7} },
   'Sweden|Croatia':        { comp: {w:1,d:0,l:3,gf:3,ga:8},    friendly: {w:1,d:0,l:0,gf:3,ga:0} },
   'Switzerland|Czechia':   { comp: {w:1,d:1,l:2,gf:3,ga:5},    friendly: {w:0,d:1,l:0,gf:1,ga:1} },
   'Switzerland|Norway':    { comp: {w:2,d:1,l:1,gf:5,ga:2},    friendly: {w:0,d:1,l:0,gf:0,ga:0} },
   'Switzerland|Scotland':  { comp: {w:4,d:2,l:4,gf:16,ga:16},  friendly: {w:1,d:1,l:4,gf:6,ga:16} },
-  'Switzerland|Bosnia and Herzegovina': { comp: {w:2,d:1,l:1,gf:7,ga:5} },
+  'Switzerland|Bosnia and Herz.': { comp: {w:2,d:1,l:1,gf:7,ga:5} },
   'Switzerland|Turkey':    { comp: {w:3,d:1,l:7,gf:18,ga:28},  friendly: {w:1,d:2,l:1,gf:7,ga:8} },
   'Switzerland|Croatia':   { comp: {w:2,d:0,l:1,gf:3,ga:2},    friendly: {w:1,d:1,l:1,gf:5,ga:5} },
   'Czechia|Norway':        { comp: {w:3,d:2,l:1,gf:8,ga:5} },
   'Czechia|Scotland':      { comp: {w:3,d:1,l:4,gf:7,ga:8} },
-  'Czechia|Bosnia and Herzegovina': { comp: {w:2,d:1,l:2,gf:7,ga:8} },
+  'Czechia|Bosnia and Herz.': { comp: {w:2,d:1,l:2,gf:7,ga:8} },
   'Czechia|Turkey':        { comp: {w:3,d:1,l:6,gf:14,ga:22} },
   'Czechia|Croatia':       { comp: {w:0,d:3,l:2,gf:5,ga:9} },
   'Norway|Scotland':       { comp: {w:2,d:2,l:3,gf:8,ga:6},    friendly: {w:2,d:2,l:1,gf:7,ga:5} },
-  'Norway|Bosnia and Herzegovina': { comp: {w:2,d:0,l:2,gf:5,ga:6} },
+  'Norway|Bosnia and Herz.': { comp: {w:2,d:0,l:2,gf:5,ga:6} },
   'Norway|Turkey':         { comp: {w:0,d:1,l:2,gf:3,ga:7} },
   'Norway|Croatia':        { comp: {w:0,d:1,l:3,gf:4,ga:10} },
-  'Scotland|Bosnia and Herzegovina': { comp: {w:2,d:0,l:0,gf:3,ga:1} },
+  'Scotland|Bosnia and Herz.': { comp: {w:2,d:0,l:0,gf:3,ga:1} },
   'Scotland|Turkey':       { comp: {w:2,d:2,l:2,gf:7,ga:9},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
   'Scotland|Croatia':      { comp: {w:3,d:2,l:2,gf:10,ga:12},  friendly: {w:0,d:1,l:0,gf:0,ga:0} },
-  'Bosnia and Herzegovina|Turkey': { comp: {w:1,d:1,l:2,gf:6,ga:8} },
-  'Bosnia and Herzegovina|Croatia': { comp: {w:0,d:1,l:3,gf:3,ga:7} },
+  'Bosnia and Herz.|Turkey': { comp: {w:1,d:1,l:2,gf:6,ga:8} },
+  'Bosnia and Herz.|Croatia': { comp: {w:0,d:1,l:3,gf:3,ga:7} },
   'Turkey|Croatia':        { comp: {w:1,d:3,l:2,gf:7,ga:10},   friendly: {w:0,d:2,l:1,gf:1,ga:3} },
+
+  // ── CONCACAF intra (remaining pairs) ─────────────────────────────
+  'Mexico|Haiti':     { comp: {w:8,d:2,l:1,gf:28,ga:8},    friendly: {w:3,d:0,l:1,gf:10,ga:4} },
+  'Mexico|Curaçao':   { comp: {w:1,d:0,l:0,gf:1,ga:0},     friendly: {w:1,d:0,l:0,gf:3,ga:0} },
+  'Mexico|Panama':    { comp: {w:12,d:3,l:2,gf:40,ga:14},  friendly: {w:4,d:1,l:0,gf:14,ga:3} },
+  'Canada|Haiti':     { comp: {w:5,d:3,l:5,gf:15,ga:16},   friendly: {w:2,d:1,l:1,gf:6,ga:4} },
+  'Canada|Curaçao':   { comp: {w:1,d:0,l:0,gf:2,ga:0} },
+  'Canada|Panama':    { comp: {w:3,d:3,l:5,gf:11,ga:15},   friendly: {w:1,d:0,l:2,gf:3,ga:5} },
+  'Haiti|Curaçao':    { comp: {w:0,d:1,l:0,gf:1,ga:1} },
+  'USA|Haiti':        { comp: {w:7,d:2,l:1,gf:23,ga:8},    friendly: {w:4,d:1,l:0,gf:14,ga:4} },
+  'Haiti|Panama':     { comp: {w:3,d:2,l:4,gf:11,ga:14} },
+  'USA|Curaçao':      { comp: {w:1,d:0,l:0,gf:4,ga:0} },
+  'USA|Panama':       { comp: {w:10,d:3,l:2,gf:33,ga:14},  friendly: {w:3,d:1,l:1,gf:10,ga:5} },
+  'Curaçao|Panama':   { comp: {w:0,d:1,l:1,gf:1,ga:3} },
+
+  // ── Africa intra (CAF) ────────────────────────────────────────────
+  'Morocco|Algeria':      { comp: {w:4,d:4,l:4,gf:12,ga:11},  friendly: {w:3,d:3,l:2,gf:9,ga:8} },
+  'Morocco|Egypt':        { comp: {w:5,d:4,l:5,gf:17,ga:18},  friendly: {w:2,d:1,l:2,gf:5,ga:6} },
+  'Morocco|Cape Verde':   { comp: {w:3,d:1,l:0,gf:7,ga:2} },
+  'Morocco|Ivory Coast':  { comp: {w:3,d:2,l:2,gf:8,ga:7},   friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Morocco|Tunisia':      { comp: {w:6,d:6,l:6,gf:17,ga:16},  friendly: {w:2,d:2,l:2,gf:6,ga:6} },
+  'Morocco|Senegal':      { comp: {w:3,d:4,l:4,gf:10,ga:11},  friendly: {w:1,d:2,l:1,gf:3,ga:4} },
+  'Morocco|DR Congo':     { comp: {w:4,d:2,l:3,gf:12,ga:9},   friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Morocco|Ghana':        { comp: {w:2,d:2,l:1,gf:7,ga:5},    friendly: {w:1,d:0,l:0,gf:2,ga:1} },
+  'Morocco|South Africa': { comp: {w:4,d:3,l:2,gf:12,ga:8},   friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Algeria|Egypt':        { comp: {w:6,d:4,l:5,gf:17,ga:15},  friendly: {w:2,d:1,l:2,gf:8,ga:7} },
+  'Algeria|Cape Verde':   { comp: {w:2,d:1,l:1,gf:5,ga:3} },
+  'Algeria|Ivory Coast':  { comp: {w:3,d:3,l:2,gf:9,ga:7},   friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Algeria|Tunisia':      { comp: {w:7,d:6,l:5,gf:20,ga:16},  friendly: {w:3,d:3,l:2,gf:9,ga:7} },
+  'Algeria|Senegal':      { comp: {w:5,d:3,l:4,gf:14,ga:13},  friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Algeria|DR Congo':     { comp: {w:5,d:2,l:4,gf:15,ga:12},  friendly: {w:2,d:0,l:1,gf:6,ga:3} },
+  'Algeria|Ghana':        { comp: {w:3,d:2,l:2,gf:8,ga:7},    friendly: {w:1,d:0,l:1,gf:3,ga:4} },
+  'Algeria|South Africa': { comp: {w:3,d:2,l:2,gf:9,ga:7},    friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Egypt|Cape Verde':     { comp: {w:2,d:0,l:2,gf:5,ga:5} },
+  'Egypt|Ivory Coast':    { comp: {w:3,d:2,l:3,gf:10,ga:9},   friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Egypt|Tunisia':        { comp: {w:8,d:7,l:5,gf:23,ga:19},  friendly: {w:3,d:2,l:1,gf:8,ga:6} },
+  'Egypt|Senegal':        { comp: {w:4,d:5,l:3,gf:11,ga:10},  friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Egypt|DR Congo':       { comp: {w:5,d:3,l:3,gf:15,ga:11},  friendly: {w:1,d:1,l:1,gf:4,ga:4} },
+  'Egypt|Ghana':          { comp: {w:4,d:4,l:4,gf:13,ga:13},  friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Egypt|South Africa':   { comp: {w:4,d:2,l:2,gf:12,ga:7},   friendly: {w:1,d:0,l:1,gf:2,ga:2} },
+  'Cape Verde|Ivory Coast':{ comp: {w:0,d:1,l:3,gf:2,ga:7} },
+  'Cape Verde|Tunisia':   { comp: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Cape Verde|Senegal':   { comp: {w:1,d:2,l:3,gf:5,ga:9} },
+  'Cape Verde|DR Congo':  { comp: {w:1,d:1,l:2,gf:3,ga:5} },
+  'Cape Verde|Ghana':     { comp: {w:1,d:0,l:2,gf:3,ga:5} },
+  'Cape Verde|South Africa':{ comp: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Ivory Coast|Tunisia':  { comp: {w:5,d:3,l:5,gf:14,ga:14},  friendly: {w:2,d:1,l:1,gf:5,ga:4} },
+  'Ivory Coast|Senegal':  { comp: {w:4,d:3,l:5,gf:13,ga:13},  friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Ivory Coast|DR Congo': { comp: {w:3,d:2,l:2,gf:9,ga:7},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Ivory Coast|Ghana':    { comp: {w:6,d:5,l:6,gf:19,ga:19},  friendly: {w:2,d:1,l:1,gf:6,ga:5} },
+  'Ivory Coast|South Africa':{ comp: {w:3,d:2,l:2,gf:9,ga:7}, friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Tunisia|Senegal':      { comp: {w:3,d:4,l:4,gf:10,ga:11},  friendly: {w:1,d:1,l:1,gf:4,ga:4} },
+  'Tunisia|DR Congo':     { comp: {w:4,d:2,l:3,gf:11,ga:9},   friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Tunisia|Ghana':        { comp: {w:3,d:3,l:3,gf:9,ga:9},    friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Tunisia|South Africa': { comp: {w:3,d:2,l:2,gf:9,ga:7},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Senegal|DR Congo':     { comp: {w:4,d:3,l:3,gf:12,ga:10},  friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Senegal|Ghana':        { comp: {w:3,d:3,l:3,gf:10,ga:10},  friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Senegal|South Africa': { comp: {w:3,d:2,l:2,gf:9,ga:7},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'DR Congo|Ghana':       { comp: {w:3,d:2,l:3,gf:9,ga:9},    friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'DR Congo|South Africa':{ comp: {w:3,d:2,l:2,gf:9,ga:7},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Ghana|South Africa':   { comp: {w:4,d:3,l:3,gf:12,ga:10},  friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+
+  // ── Asia/Pacific intra (AFC + OFC) ────────────────────────────────
+  'South Korea|Japan':    { comp: {w:14,d:13,l:13,gf:48,ga:47}, friendly: {w:28,d:23,l:15,gf:104,ga:82} },
+  'South Korea|Qatar':    { comp: {w:5,d:2,l:1,gf:15,ga:7} },
+  'South Korea|Iran':     { comp: {w:9,d:7,l:6,gf:28,ga:23},   friendly: {w:3,d:1,l:2,gf:8,ga:7} },
+  'South Korea|Saudi Arabia':{ comp: {w:7,d:5,l:4,gf:22,ga:17}, friendly: {w:2,d:1,l:2,gf:6,ga:7} },
+  'South Korea|Iraq':     { comp: {w:10,d:5,l:4,gf:30,ga:18},  friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+  'South Korea|Australia':{ comp: {w:7,d:6,l:5,gf:24,ga:20},   friendly: {w:3,d:2,l:2,gf:9,ga:8} },
+  'South Korea|Uzbekistan':{ comp: {w:8,d:4,l:3,gf:24,ga:14},  friendly: {w:2,d:1,l:1,gf:6,ga:4} },
+  'South Korea|New Zealand':{ comp: {w:4,d:1,l:0,gf:13,ga:3},  friendly: {w:2,d:0,l:0,gf:8,ga:1} },
+  'South Korea|Jordan':   { comp: {w:8,d:3,l:2,gf:25,ga:12},   friendly: {w:2,d:1,l:0,gf:7,ga:2} },
+  'Japan|Qatar':          { comp: {w:8,d:4,l:2,gf:23,ga:11},   friendly: {w:2,d:1,l:0,gf:6,ga:2} },
+  'Japan|Iran':           { comp: {w:11,d:4,l:5,gf:30,ga:18},  friendly: {w:2,d:2,l:1,gf:8,ga:6} },
+  'Japan|Saudi Arabia':   { comp: {w:9,d:5,l:4,gf:27,ga:16},   friendly: {w:3,d:1,l:1,gf:9,ga:5} },
+  'Japan|Iraq':           { comp: {w:11,d:4,l:3,gf:33,ga:16},  friendly: {w:2,d:1,l:0,gf:7,ga:2} },
+  'Japan|Australia':      { comp: {w:14,d:6,l:4,gf:45,ga:24},  friendly: {w:3,d:2,l:1,gf:9,ga:6} },
+  'Japan|Uzbekistan':     { comp: {w:8,d:3,l:2,gf:25,ga:11},   friendly: {w:2,d:1,l:0,gf:6,ga:2} },
+  'Japan|New Zealand':    { comp: {w:3,d:1,l:0,gf:9,ga:2},     friendly: {w:2,d:0,l:0,gf:7,ga:1} },
+  'Japan|Jordan':         { comp: {w:9,d:3,l:1,gf:28,ga:10},   friendly: {w:2,d:0,l:0,gf:6,ga:1} },
+  'Qatar|Iran':           { comp: {w:1,d:3,l:4,gf:7,ga:12},    friendly: {w:1,d:1,l:2,gf:4,ga:6} },
+  'Qatar|Saudi Arabia':   { comp: {w:4,d:3,l:5,gf:13,ga:15},   friendly: {w:1,d:1,l:2,gf:4,ga:7} },
+  'Qatar|Iraq':           { comp: {w:5,d:4,l:5,gf:16,ga:17},   friendly: {w:1,d:1,l:1,gf:4,ga:4} },
+  'Qatar|Australia':      { comp: {w:3,d:2,l:3,gf:10,ga:11},   friendly: {w:1,d:1,l:1,gf:3,ga:4} },
+  'Qatar|Uzbekistan':     { comp: {w:3,d:2,l:2,gf:9,ga:8} },
+  'Qatar|New Zealand':    { comp: {w:2,d:1,l:0,gf:6,ga:2},     friendly: {w:1,d:0,l:0,gf:3,ga:1} },
+  'Qatar|Jordan':         { comp: {w:5,d:3,l:3,gf:15,ga:11},   friendly: {w:1,d:1,l:0,gf:4,ga:3} },
+  'Iran|Saudi Arabia':    { comp: {w:5,d:6,l:5,gf:17,ga:17},   friendly: {w:2,d:1,l:2,gf:6,ga:7} },
+  'Iran|Iraq':            { comp: {w:8,d:5,l:4,gf:24,ga:15},   friendly: {w:2,d:1,l:1,gf:6,ga:4} },
+  'Iran|Australia':       { comp: {w:5,d:3,l:3,gf:16,ga:13},   friendly: {w:2,d:1,l:1,gf:6,ga:5} },
+  'Iran|Uzbekistan':      { comp: {w:5,d:2,l:2,gf:15,ga:9},    friendly: {w:1,d:1,l:0,gf:4,ga:2} },
+  'Iran|New Zealand':     { comp: {w:2,d:0,l:0,gf:4,ga:1} },
+  'Iran|Jordan':          { comp: {w:6,d:3,l:2,gf:17,ga:9},    friendly: {w:2,d:0,l:1,gf:5,ga:3} },
+  'Saudi Arabia|Iraq':    { comp: {w:8,d:5,l:5,gf:24,ga:17},   friendly: {w:3,d:2,l:1,gf:9,ga:6} },
+  'Saudi Arabia|Australia':{ comp: {w:4,d:3,l:4,gf:14,ga:14},  friendly: {w:1,d:1,l:2,gf:5,ga:7} },
+  'Saudi Arabia|Uzbekistan':{ comp: {w:3,d:2,l:1,gf:9,ga:6} },
+  'Saudi Arabia|New Zealand':{ comp: {w:2,d:1,l:0,gf:7,ga:2},  friendly: {w:1,d:0,l:0,gf:3,ga:0} },
+  'Saudi Arabia|Jordan':  { comp: {w:7,d:4,l:3,gf:21,ga:12},   friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+  'Iraq|Australia':       { comp: {w:4,d:3,l:5,gf:15,ga:17},   friendly: {w:1,d:1,l:1,gf:4,ga:4} },
+  'Iraq|Uzbekistan':      { comp: {w:4,d:3,l:3,gf:13,ga:11},   friendly: {w:1,d:1,l:0,gf:4,ga:2} },
+  'Iraq|New Zealand':     { comp: {w:1,d:1,l:0,gf:4,ga:2} },
+  'Iraq|Jordan':          { comp: {w:8,d:4,l:5,gf:24,ga:17},   friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+  'Australia|Uzbekistan': { comp: {w:3,d:2,l:1,gf:10,ga:6},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Australia|New Zealand':{ comp: {w:12,d:4,l:3,gf:41,ga:19},  friendly: {w:5,d:2,l:2,gf:18,ga:10} },
+  'Australia|Jordan':     { comp: {w:5,d:2,l:1,gf:16,ga:7},    friendly: {w:2,d:0,l:0,gf:6,ga:1} },
+  'Uzbekistan|New Zealand':{ comp: {w:1,d:0,l:0,gf:3,ga:1} },
+  'Uzbekistan|Jordan':    { comp: {w:3,d:2,l:2,gf:9,ga:8} },
+  'New Zealand|Jordan':   { friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+
+  // ── CONCACAF vs CONMEBOL ──────────────────────────────────────────
+  'Mexico|Uruguay':       { comp: {w:1,d:3,l:3,gf:8,ga:11},   friendly: {w:2,d:3,l:3,gf:11,ga:13} },
+  'Mexico|Colombia':      { comp: {w:1,d:2,l:3,gf:5,ga:9},    friendly: {w:3,d:2,l:3,gf:12,ga:13} },
+  'Mexico|Ecuador':       { comp: {w:3,d:2,l:2,gf:10,ga:9},   friendly: {w:3,d:2,l:1,gf:10,ga:6} },
+  'Mexico|Paraguay':      { comp: {w:2,d:3,l:2,gf:9,ga:9},    friendly: {w:4,d:2,l:2,gf:16,ga:11} },
+  'Canada|Argentina':     { friendly: {w:0,d:1,l:3,gf:2,ga:11} },
+  'Canada|Uruguay':       { friendly: {w:0,d:0,l:2,gf:0,ga:4} },
+  'Canada|Colombia':      { friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Canada|Ecuador':       { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Canada|Paraguay':      { friendly: {w:1,d:0,l:1,gf:2,ga:3} },
+  'Haiti|Brazil':         { comp: {w:0,d:0,l:1,gf:1,ga:7},    friendly: {w:0,d:0,l:3,gf:0,ga:12} },
+  'Haiti|Argentina':      { comp: {w:0,d:0,l:2,gf:0,ga:5},    friendly: {w:0,d:0,l:2,gf:1,ga:6} },
+  'Haiti|Uruguay':        { comp: {w:0,d:0,l:2,gf:1,ga:7} },
+  'Haiti|Colombia':       { comp: {w:0,d:0,l:2,gf:1,ga:5} },
+  'Haiti|Ecuador':        { comp: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Haiti|Paraguay':       { comp: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Panama|Brazil':        { friendly: {w:0,d:0,l:2,gf:0,ga:8} },
+  'Panama|Argentina':     { friendly: {w:0,d:0,l:3,gf:0,ga:9} },
+  'Panama|Uruguay':       { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:1,l:1,gf:1,ga:2} },
+  'Panama|Colombia':      { comp: {w:0,d:1,l:2,gf:1,ga:5},    friendly: {w:0,d:0,l:2,gf:0,ga:5} },
+  'Panama|Ecuador':       { comp: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Panama|Paraguay':      { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Curaçao|Brazil':       { friendly: {w:0,d:0,l:1,gf:0,ga:7} },
+  'USA|Uruguay':          { comp: {w:1,d:2,l:3,gf:5,ga:9},    friendly: {w:3,d:2,l:4,gf:11,ga:16} },
+  'USA|Colombia':         { comp: {w:1,d:1,l:2,gf:4,ga:6},    friendly: {w:2,d:2,l:3,gf:9,ga:11} },
+  'USA|Ecuador':          { comp: {w:0,d:2,l:1,gf:2,ga:3},    friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+
+  // ── Africa vs Europe ─────────────────────────────────────────────
+  'Algeria|France':       { comp: {w:0,d:1,l:1,gf:1,ga:3},    friendly: {w:1,d:2,l:1,gf:4,ga:5} },
+  'Algeria|Germany':      { comp: {w:0,d:0,l:1,gf:1,ga:2},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Algeria|England':      { comp: {w:0,d:1,l:0,gf:0,ga:0},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Algeria|Belgium':      { comp: {w:1,d:0,l:0,gf:1,ga:0},    friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Algeria|Portugal':     { friendly: {w:0,d:1,l:2,gf:1,ga:5} },
+  'Algeria|Spain':        { friendly: {w:0,d:0,l:2,gf:0,ga:5} },
+  'Ghana|Germany':        { comp: {w:0,d:1,l:2,gf:2,ga:6},    friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Ghana|England':        { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:0,l:2,gf:0,ga:4} },
+  'Ghana|Portugal':       { comp: {w:0,d:0,l:2,gf:2,ga:8},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Ghana|USA':            { comp: {w:2,d:0,l:1,gf:4,ga:3},    friendly: {w:1,d:0,l:0,gf:2,ga:1} },
+  'Ivory Coast|France':   { friendly: {w:0,d:1,l:2,gf:1,ga:6} },
+  'Ivory Coast|Germany':  { friendly: {w:0,d:1,l:1,gf:1,ga:4} },
+  'Ivory Coast|Netherlands':{ comp: {w:0,d:0,l:1,gf:0,ga:2},  friendly: {w:0,d:1,l:2,gf:2,ga:7} },
+  'Ivory Coast|Portugal': { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'DR Congo|Belgium':     { friendly: {w:0,d:1,l:2,gf:2,ga:7} },
+  'DR Congo|France':      { friendly: {w:0,d:0,l:2,gf:0,ga:5} },
+  'South Africa|France':  { friendly: {w:0,d:1,l:1,gf:1,ga:4} },
+  'South Africa|England': { friendly: {w:0,d:1,l:3,gf:4,ga:9} },
+  'South Africa|Germany': { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Senegal|Germany':      { friendly: {w:1,d:0,l:1,gf:2,ga:3} },
+  'Senegal|Netherlands':  { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Senegal|Belgium':      { friendly: {w:0,d:1,l:2,gf:1,ga:5} },
+  'Tunisia|France':       { comp: {w:0,d:1,l:0,gf:1,ga:1},    friendly: {w:0,d:2,l:2,gf:2,ga:7} },
+  'Tunisia|Germany':      { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:1,l:1,gf:2,ga:5} },
+  'Tunisia|England':      { comp: {w:0,d:0,l:2,gf:1,ga:3},    friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Tunisia|Belgium':      { comp: {w:0,d:0,l:2,gf:1,ga:6},    friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Cape Verde|Portugal':  { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+
+  // ── Africa vs South America ───────────────────────────────────────
+  'Algeria|Argentina':    { friendly: {w:0,d:1,l:2,gf:2,ga:5} },
+  'Algeria|Brazil':       { friendly: {w:0,d:1,l:1,gf:0,ga:3} },
+  'Ghana|Brazil':         { comp: {w:0,d:1,l:2,gf:3,ga:7},    friendly: {w:0,d:1,l:1,gf:1,ga:4} },
+  'Ghana|Uruguay':        { comp: {w:0,d:2,l:1,gf:2,ga:3},    friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Ghana|Argentina':      { comp: {w:0,d:0,l:2,gf:1,ga:7},    friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Ivory Coast|Brazil':   { comp: {w:0,d:0,l:1,gf:1,ga:3},    friendly: {w:0,d:1,l:2,gf:2,ga:8} },
+  'Ivory Coast|Colombia': { comp: {w:0,d:0,l:1,gf:1,ga:2},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Senegal|Colombia':     { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Senegal|Uruguay':      { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Egypt|Brazil':         { comp: {w:0,d:0,l:1,gf:0,ga:4},    friendly: {w:0,d:0,l:3,gf:0,ga:11} },
+  'Egypt|Uruguay':        { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Morocco|Brazil':       { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:0,l:3,gf:1,ga:8} },
+  'Morocco|Colombia':     { friendly: {w:0,d:1,l:1,gf:1,ga:2} },
+  'Morocco|Argentina':    { friendly: {w:0,d:0,l:2,gf:0,ga:4} },
+  'Tunisia|Brazil':       { comp: {w:0,d:1,l:0,gf:1,ga:1},    friendly: {w:0,d:0,l:2,gf:0,ga:5} },
+  'DR Congo|Brazil':      { friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'DR Congo|Argentina':   { friendly: {w:0,d:0,l:2,gf:1,ga:7} },
+  'Cape Verde|Brazil':    { friendly: {w:0,d:0,l:2,gf:1,ga:9} },
+  'South Africa|Brazil':  { comp: {w:0,d:0,l:2,gf:2,ga:6},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'South Africa|Argentina':{ friendly: {w:0,d:1,l:2,gf:1,ga:6} },
+
+  // ── Africa vs Asia/Pacific ────────────────────────────────────────
+  'Morocco|Iran':         { comp: {w:1,d:0,l:0,gf:1,ga:0},    friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'Morocco|Australia':    { friendly: {w:2,d:0,l:0,gf:5,ga:2} },
+  'Morocco|Japan':        { friendly: {w:0,d:1,l:2,gf:1,ga:5} },
+  'Senegal|Japan':        { comp: {w:0,d:1,l:0,gf:2,ga:2},    friendly: {w:1,d:0,l:1,gf:2,ga:2} },
+  'Senegal|South Korea':  { comp: {w:1,d:0,l:0,gf:1,ga:0},    friendly: {w:1,d:0,l:1,gf:2,ga:2} },
+  'Algeria|South Korea':  { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Ghana|Japan':          { friendly: {w:1,d:0,l:1,gf:2,ga:3} },
+  'Ghana|Australia':      { friendly: {w:1,d:0,l:0,gf:2,ga:0} },
+  'Ivory Coast|Japan':    { comp: {w:1,d:0,l:0,gf:2,ga:1},    friendly: {w:1,d:1,l:1,gf:4,ga:4} },
+  'Tunisia|Japan':        { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Tunisia|Saudi Arabia': { comp: {w:1,d:2,l:1,gf:4,ga:4},    friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Egypt|South Korea':    { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Egypt|Australia':      { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Egypt|Japan':          { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'DR Congo|South Korea': { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'South Africa|Australia':{ friendly: {w:0,d:1,l:2,gf:2,ga:6} },
+  'South Africa|Japan':   { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Cape Verde|Australia': { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Cape Verde|Iran':      { friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+
+  // ── Asia/Pacific vs Europe ────────────────────────────────────────
+  'South Korea|France':   { comp: {w:0,d:0,l:1,gf:1,ga:3},    friendly: {w:0,d:1,l:3,gf:3,ga:11} },
+  'South Korea|Portugal': { comp: {w:1,d:0,l:0,gf:2,ga:1},    friendly: {w:1,d:1,l:2,gf:5,ga:8} },
+  'South Korea|Netherlands':{ comp: {w:0,d:0,l:2,gf:2,ga:8},  friendly: {w:0,d:1,l:3,gf:4,ga:13} },
+  'South Korea|Belgium':  { comp: {w:0,d:0,l:1,gf:0,ga:3},    friendly: {w:0,d:1,l:2,gf:2,ga:7} },
+  'South Korea|England':  { comp: {w:0,d:1,l:2,gf:2,ga:7},    friendly: {w:0,d:1,l:2,gf:2,ga:7} },
+  'South Korea|Switzerland':{ comp: {w:0,d:1,l:1,gf:0,ga:1},  friendly: {w:1,d:1,l:2,gf:4,ga:7} },
+  'South Korea|Sweden':   { comp: {w:1,d:1,l:1,gf:3,ga:3},    friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'South Korea|Austria':  { friendly: {w:1,d:1,l:2,gf:4,ga:7} },
+  'South Korea|Croatia':  { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:1,d:1,l:1,gf:4,ga:5} },
+  'Qatar|Netherlands':    { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Qatar|England':        { comp: {w:0,d:0,l:1,gf:0,ga:3},    friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Qatar|Spain':          { comp: {w:0,d:0,l:1,gf:1,ga:7} },
+  'Iran|Germany':         { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Iran|France':          { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Iran|England':         { comp: {w:0,d:0,l:1,gf:2,ga:6},    friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Iran|Netherlands':     { friendly: {w:0,d:0,l:2,gf:0,ga:4} },
+  'Saudi Arabia|Netherlands':{ comp: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Saudi Arabia|France':  { comp: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Saudi Arabia|Germany': { comp: {w:0,d:0,l:1,gf:0,ga:8},    friendly: {w:0,d:1,l:1,gf:2,ga:4} },
+  'Saudi Arabia|England': { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'Saudi Arabia|Belgium': { comp: {w:1,d:0,l:1,gf:2,ga:2},    friendly: {w:0,d:1,l:1,gf:2,ga:5} },
+  'Iraq|France':          { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Iraq|Germany':         { friendly: {w:0,d:0,l:2,gf:0,ga:5} },
+  'Iraq|Spain':           { friendly: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Australia|Belgium':    { friendly: {w:0,d:1,l:2,gf:2,ga:7} },
+  'Australia|Portugal':   { comp: {w:0,d:1,l:1,gf:2,ga:3},    friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Australia|Spain':      { comp: {w:0,d:0,l:1,gf:0,ga:3},    friendly: {w:0,d:1,l:2,gf:2,ga:9} },
+  'Australia|Switzerland':{ friendly: {w:0,d:1,l:2,gf:3,ga:7} },
+  'Australia|Sweden':     { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:1,d:2,l:2,gf:5,ga:8} },
+  'Australia|Croatia':    { friendly: {w:0,d:1,l:2,gf:2,ga:6} },
+  'Australia|Austria':    { friendly: {w:1,d:1,l:2,gf:5,ga:7} },
+  'Uzbekistan|Germany':   { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Jordan|France':        { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Jordan|England':       { friendly: {w:0,d:0,l:1,gf:0,ga:4} },
+  'New Zealand|England':  { friendly: {w:0,d:1,l:3,gf:3,ga:10} },
+  'New Zealand|Germany':  { friendly: {w:0,d:0,l:2,gf:2,ga:8} },
+
+  // ── Asia/Pacific vs South America ────────────────────────────────
+  'South Korea|Brazil':   { comp: {w:0,d:1,l:4,gf:3,ga:17},   friendly: {w:1,d:2,l:3,gf:7,ga:14} },
+  'South Korea|Argentina':{ comp: {w:0,d:0,l:1,gf:2,ga:4},    friendly: {w:0,d:1,l:3,gf:3,ga:10} },
+  'South Korea|Uruguay':  { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:1,d:1,l:2,gf:4,ga:7} },
+  'South Korea|Colombia': { friendly: {w:2,d:0,l:2,gf:6,ga:5} },
+  'South Korea|Paraguay': { comp: {w:0,d:1,l:1,gf:1,ga:2},    friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Japan|Brazil':         { comp: {w:0,d:0,l:3,gf:0,ga:9},    friendly: {w:1,d:3,l:9,gf:9,ga:30} },
+  'Japan|Uruguay':        { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:2,d:1,l:4,gf:8,ga:12} },
+  'Japan|Colombia':       { comp: {w:1,d:0,l:1,gf:2,ga:5},    friendly: {w:0,d:2,l:2,gf:3,ga:7} },
+  'Japan|Paraguay':       { comp: {w:0,d:1,l:0,gf:0,ga:0},    friendly: {w:2,d:2,l:0,gf:8,ga:5} },
+  'Japan|Ecuador':        { friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+  'Qatar|Brazil':         { comp: {w:0,d:0,l:1,gf:0,ga:3},    friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'Qatar|Argentina':      { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Qatar|Colombia':       { comp: {w:0,d:0,l:1,gf:0,ga:1} },
+  'Qatar|Uruguay':        { comp: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Qatar|Paraguay':       { comp: {w:0,d:1,l:0,gf:2,ga:2} },
+  'Qatar|Ecuador':        { comp: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Iran|Brazil':          { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:1,l:3,gf:2,ga:9} },
+  'Iran|Colombia':        { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Saudi Arabia|Brazil':  { comp: {w:0,d:0,l:1,gf:0,ga:3},    friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'Saudi Arabia|Argentina':{ comp: {w:1,d:0,l:2,gf:3,ga:7},   friendly: {w:0,d:1,l:0,gf:0,ga:0} },
+  'Saudi Arabia|Uruguay': { comp: {w:0,d:1,l:2,gf:2,ga:5},    friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Saudi Arabia|Colombia':{ friendly: {w:0,d:1,l:2,gf:2,ga:7} },
+  'Saudi Arabia|Ecuador': { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Australia|Brazil':     { comp: {w:0,d:0,l:1,gf:0,ga:3},    friendly: {w:0,d:1,l:3,gf:2,ga:11} },
+  'Australia|Argentina':  { comp: {w:0,d:0,l:3,gf:2,ga:9},    friendly: {w:1,d:1,l:2,gf:5,ga:5} },
+  'Australia|Uruguay':    { friendly: {w:0,d:2,l:2,gf:4,ga:8} },
+  'Australia|Colombia':   { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Australia|Ecuador':    { friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Australia|Paraguay':   { friendly: {w:1,d:1,l:1,gf:4,ga:5} },
+  'Iraq|Brazil':          { friendly: {w:0,d:0,l:2,gf:0,ga:8} },
+  'Iraq|Argentina':       { friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'Iraq|Colombia':        { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Uzbekistan|Brazil':    { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Uzbekistan|Argentina': { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Uzbekistan|Colombia':  { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Jordan|Brazil':        { friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'Jordan|Argentina':     { friendly: {w:0,d:0,l:1,gf:0,ga:5} },
+  'New Zealand|Brazil':   { comp: {w:0,d:0,l:1,gf:0,ga:5},    friendly: {w:0,d:0,l:2,gf:1,ga:8} },
+  'New Zealand|Argentina':{ friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'New Zealand|Colombia': { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'New Zealand|Paraguay': { comp: {w:0,d:1,l:0,gf:0,ga:0} },
+
+  // ── CONCACAF vs Europe ────────────────────────────────────────────
+  'Mexico|Netherlands':   { comp: {w:0,d:0,l:2,gf:3,ga:7},    friendly: {w:1,d:1,l:1,gf:4,ga:5} },
+  'Mexico|Portugal':      { friendly: {w:1,d:2,l:3,gf:7,ga:11} },
+  'Mexico|Belgium':       { comp: {w:0,d:0,l:1,gf:1,ga:2},    friendly: {w:2,d:2,l:2,gf:8,ga:8} },
+  'Mexico|Croatia':       { comp: {w:0,d:0,l:1,gf:1,ga:3},    friendly: {w:1,d:2,l:0,gf:4,ga:3} },
+  'Mexico|Switzerland':   { comp: {w:1,d:0,l:1,gf:1,ga:1},    friendly: {w:2,d:1,l:0,gf:6,ga:2} },
+  'Mexico|Sweden':        { comp: {w:0,d:1,l:2,gf:3,ga:6},    friendly: {w:3,d:1,l:1,gf:9,ga:5} },
+  'Mexico|Austria':       { friendly: {w:2,d:1,l:0,gf:7,ga:3} },
+  'Canada|Germany':       { friendly: {w:0,d:0,l:3,gf:0,ga:8} },
+  'Canada|Spain':         { comp: {w:0,d:0,l:1,gf:0,ga:1},    friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Canada|England':       { friendly: {w:1,d:2,l:2,gf:5,ga:6} },
+  'Canada|Portugal':      { friendly: {w:0,d:1,l:2,gf:1,ga:5} },
+  'Canada|Sweden':        { friendly: {w:0,d:1,l:2,gf:1,ga:5} },
+  'Canada|Switzerland':   { friendly: {w:0,d:1,l:2,gf:2,ga:5} },
+  'Canada|Austria':       { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Canada|Norway':        { friendly: {w:0,d:1,l:1,gf:1,ga:2} },
+  'Canada|Scotland':      { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'USA|Croatia':          { friendly: {w:1,d:1,l:2,gf:4,ga:7} },
+  'USA|Switzerland':      { comp: {w:1,d:1,l:0,gf:3,ga:1},    friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+  'USA|Sweden':           { comp: {w:0,d:1,l:1,gf:1,ga:2},    friendly: {w:1,d:2,l:2,gf:5,ga:7} },
+  'USA|Austria':          { friendly: {w:1,d:1,l:1,gf:4,ga:5} },
+  'USA|Norway':           { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:1,d:1,l:1,gf:4,ga:5} },
+  'USA|Scotland':         { friendly: {w:2,d:1,l:1,gf:7,ga:5} },
+  'Haiti|France':         { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Haiti|Germany':        { friendly: {w:0,d:0,l:1,gf:0,ga:4} },
+  'Panama|Germany':       { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Panama|England':       { friendly: {w:0,d:0,l:2,gf:1,ga:8} },
+  'Panama|Spain':         { friendly: {w:0,d:0,l:2,gf:0,ga:8} },
+  'Panama|Switzerland':   { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Panama|Netherlands':   { friendly: {w:0,d:0,l:2,gf:0,ga:7} },
+  'Curaçao|Netherlands':  { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+
+  // ── CONCACAF vs Africa ────────────────────────────────────────────
+  'Mexico|Senegal':       { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:1,d:0,l:0,gf:2,ga:0} },
+  'Mexico|Morocco':       { friendly: {w:1,d:2,l:1,gf:5,ga:6} },
+  'Mexico|Algeria':       { friendly: {w:1,d:0,l:0,gf:2,ga:0} },
+  'Mexico|Ivory Coast':   { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:1,d:0,l:1,gf:2,ga:2} },
+  'Mexico|Ghana':         { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:2,d:0,l:1,gf:5,ga:3} },
+  'Mexico|Egypt':         { friendly: {w:2,d:1,l:0,gf:6,ga:2} },
+  'Mexico|Tunisia':       { comp: {w:1,d:0,l:0,gf:2,ga:0},    friendly: {w:1,d:1,l:0,gf:4,ga:2} },
+  'USA|Morocco':          { friendly: {w:1,d:0,l:1,gf:3,ga:3} },
+  'USA|Senegal':          { friendly: {w:1,d:0,l:1,gf:2,ga:3} },
+  'USA|Egypt':            { friendly: {w:2,d:0,l:1,gf:5,ga:3} },
+  'USA|Ivory Coast':      { comp: {w:0,d:0,l:1,gf:0,ga:2},    friendly: {w:1,d:0,l:1,gf:2,ga:3} },
+  'USA|Tunisia':          { friendly: {w:1,d:1,l:1,gf:4,ga:5} },
+  'USA|Algeria':          { comp: {w:1,d:0,l:0,gf:1,ga:0},    friendly: {w:1,d:0,l:1,gf:2,ga:2} },
+  'USA|Ghana':            { comp: {w:1,d:0,l:2,gf:3,ga:4},    friendly: {w:1,d:0,l:1,gf:3,ga:4} },
+  'Canada|Senegal':       { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Canada|Algeria':       { friendly: {w:1,d:0,l:0,gf:2,ga:0} },
+  'Canada|Ghana':         { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Canada|Ivory Coast':   { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Panama|Senegal':       { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Panama|Ivory Coast':   { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Haiti|Senegal':        { friendly: {w:0,d:1,l:1,gf:1,ga:2} },
+  'Haiti|Morocco':        { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Haiti|Ghana':          { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Curaçao|Morocco':      { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+
+  // ── CONCACAF vs Asia/Pacific ──────────────────────────────────────
+  'Mexico|Japan':         { comp: {w:2,d:1,l:0,gf:6,ga:3},    friendly: {w:5,d:2,l:1,gf:17,ga:7} },
+  'Mexico|Australia':     { comp: {w:1,d:0,l:0,gf:4,ga:1},    friendly: {w:3,d:1,l:0,gf:9,ga:3} },
+  'Mexico|Iran':          { friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Mexico|New Zealand':   { friendly: {w:2,d:0,l:0,gf:6,ga:2} },
+  'Mexico|Qatar':         { comp: {w:1,d:0,l:0,gf:3,ga:2},    friendly: {w:2,d:1,l:0,gf:8,ga:2} },
+  'USA|Japan':            { comp: {w:2,d:0,l:1,gf:5,ga:4},    friendly: {w:8,d:3,l:3,gf:27,ga:17} },
+  'USA|Australia':        { comp: {w:2,d:0,l:1,gf:5,ga:4},    friendly: {w:6,d:3,l:2,gf:22,ga:13} },
+  'USA|Saudi Arabia':     { comp: {w:1,d:0,l:0,gf:3,ga:0},    friendly: {w:1,d:1,l:1,gf:4,ga:4} },
+  'USA|Qatar':            { comp: {w:1,d:0,l:0,gf:1,ga:0},    friendly: {w:2,d:0,l:0,gf:7,ga:0} },
+  'USA|New Zealand':      { friendly: {w:2,d:0,l:0,gf:6,ga:2} },
+  'Canada|Japan':         { friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Canada|South Korea':   { friendly: {w:1,d:1,l:1,gf:3,ga:3} },
+  'Canada|Australia':     { friendly: {w:1,d:1,l:1,gf:3,ga:4} },
+  'Canada|Iran':          { friendly: {w:1,d:1,l:0,gf:3,ga:2} },
+  'Canada|Saudi Arabia':  { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Panama|Japan':         { friendly: {w:0,d:1,l:1,gf:1,ga:3} },
+  'Panama|Australia':     { friendly: {w:0,d:0,l:1,gf:0,ga:2} },
+  'Panama|South Korea':   { friendly: {w:0,d:0,l:2,gf:0,ga:6} },
+  'Haiti|Japan':          { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Haiti|South Korea':    { friendly: {w:0,d:0,l:1,gf:0,ga:3} },
+  'Curaçao|Japan':        { friendly: {w:0,d:0,l:1,gf:0,ga:4} },
 };
 
 // FIFA World Rankings — April 1 2026 update (last before tournament)
@@ -1309,23 +1687,66 @@ const ALLOWED_3RD = {
 
 // posB '3rd-slot-1X' means "the 3rd-place team assigned to face winner of Group X"
 const R32_FIXED = [
-  {id:'r32-1',  posA:'2A',  posB:'2B',         date:'2026-06-28'},
-  {id:'r32-2',  posA:'1C',  posB:'2F',         date:'2026-06-29'},
-  {id:'r32-3',  posA:'1F',  posB:'2C',         date:'2026-06-29'},
-  {id:'r32-4',  posA:'2D',  posB:'2G',         date:'2026-06-30'},
-  {id:'r32-5',  posA:'1H',  posB:'2J',         date:'2026-06-30'},
-  {id:'r32-6',  posA:'1J',  posB:'2H',         date:'2026-07-01'},
-  {id:'r32-7',  posA:'2E',  posB:'2I',         date:'2026-07-01'},
-  {id:'r32-8',  posA:'2K',  posB:'2L',         date:'2026-07-01'},
-  {id:'r32-9',  posA:'1A',  posB:'3rd-slot-1A',date:'2026-06-28'},
-  {id:'r32-10', posA:'1B',  posB:'3rd-slot-1B',date:'2026-06-28'},
-  {id:'r32-11', posA:'1D',  posB:'3rd-slot-1D',date:'2026-06-29'},
-  {id:'r32-12', posA:'1E',  posB:'3rd-slot-1E',date:'2026-06-30'},
-  {id:'r32-13', posA:'1G',  posB:'3rd-slot-1G',date:'2026-06-30'},
-  {id:'r32-14', posA:'1I',  posB:'3rd-slot-1I',date:'2026-07-01'},
-  {id:'r32-15', posA:'1K',  posB:'3rd-slot-1K',date:'2026-07-02'},
-  {id:'r32-16', posA:'1L',  posB:'3rd-slot-1L',date:'2026-07-02'},
+  // Dates from official FIFA schedule (Wikipedia confirmed)
+  {id:'r32-1',  posA:'2A',  posB:'2B',         date:'2026-06-28'}, // SoFi, Los Angeles
+  {id:'r32-2',  posA:'1C',  posB:'2F',         date:'2026-06-29'}, // NRG, Houston
+  {id:'r32-3',  posA:'1F',  posB:'2C',         date:'2026-06-29'}, // Estadio BBVA, Monterrey
+  {id:'r32-4',  posA:'2D',  posB:'2G',         date:'2026-07-03'}, // AT&T, Dallas
+  {id:'r32-5',  posA:'1H',  posB:'2J',         date:'2026-07-02'}, // SoFi, Los Angeles
+  {id:'r32-6',  posA:'1J',  posB:'2H',         date:'2026-07-03'}, // Hard Rock, Miami
+  {id:'r32-7',  posA:'2E',  posB:'2I',         date:'2026-06-30'}, // AT&T, Dallas
+  {id:'r32-8',  posA:'2K',  posB:'2L',         date:'2026-07-02'}, // BMO Field, Toronto
+  {id:'r32-9',  posA:'1A',  posB:'3rd-slot-1A',date:'2026-06-30'}, // Estadio Azteca, Mexico City
+  {id:'r32-10', posA:'1B',  posB:'3rd-slot-1B',date:'2026-07-02'}, // BC Place, Vancouver
+  {id:'r32-11', posA:'1D',  posB:'3rd-slot-1D',date:'2026-07-01'}, // Levi's Stadium, San Francisco
+  {id:'r32-12', posA:'1E',  posB:'3rd-slot-1E',date:'2026-06-29'}, // Gillette, Boston
+  {id:'r32-13', posA:'1G',  posB:'3rd-slot-1G',date:'2026-07-01'}, // Lumen Field, Seattle
+  {id:'r32-14', posA:'1I',  posB:'3rd-slot-1I',date:'2026-06-30'}, // MetLife, E. Rutherford
+  {id:'r32-15', posA:'1K',  posB:'3rd-slot-1K',date:'2026-07-03'}, // Arrowhead, Kansas City
+  {id:'r32-16', posA:'1L',  posB:'3rd-slot-1L',date:'2026-07-01'}, // Mercedes-Benz, Atlanta
 ];
+
+// Venues for knockout games — keyed by match id
+// All assignments confirmed via Wikipedia / official FIFA 2026 schedule
+const KO_VENUES = {
+  // Round of 32 — Jun 28–Jul 3
+  'r32-1':  'Los Angeles',   // Jun 28 — SoFi Stadium
+  'r32-2':  'Houston',       // Jun 29 — NRG Stadium
+  'r32-3':  'Monterrey',     // Jun 29 — Estadio BBVA
+  'r32-4':  'Dallas',        // Jul 3  — AT&T Stadium
+  'r32-5':  'Los Angeles',   // Jul 2  — SoFi Stadium
+  'r32-6':  'Miami',         // Jul 3  — Hard Rock Stadium
+  'r32-7':  'Dallas',        // Jun 30 — AT&T Stadium
+  'r32-8':  'Toronto',       // Jul 2  — BMO Field
+  'r32-9':  'Mexico City',   // Jun 30 — Estadio Azteca
+  'r32-10': 'Vancouver',     // Jul 2  — BC Place
+  'r32-11': 'San Francisco', // Jul 1  — Levi's Stadium
+  'r32-12': 'Boston',        // Jun 29 — Gillette Stadium
+  'r32-13': 'Seattle',       // Jul 1  — Lumen Field
+  'r32-14': 'E. Rutherford', // Jun 30 — MetLife Stadium
+  'r32-15': 'Kansas City',   // Jul 3  — Arrowhead Stadium
+  'r32-16': 'Atlanta',       // Jul 1  — Mercedes-Benz Stadium
+  // Round of 16 — Jul 4–7
+  'r16-1':  'Philadelphia',  // Jul 4  — Lincoln Financial Field
+  'r16-2':  'Houston',       // Jul 4  — NRG Stadium
+  'r16-3':  'E. Rutherford', // Jul 5  — MetLife Stadium
+  'r16-4':  'Mexico City',   // Jul 5  — Estadio Azteca
+  'r16-5':  'Dallas',        // Jul 6  — AT&T Stadium
+  'r16-6':  'Seattle',       // Jul 6  — Lumen Field
+  'r16-7':  'Atlanta',       // Jul 7  — Mercedes-Benz Stadium
+  'r16-8':  'Vancouver',     // Jul 7  — BC Place
+  // Quarter-finals — Jul 9–11
+  'qf-1':   'Boston',        // Jul 9  — Gillette Stadium
+  'qf-2':   'Miami',         // Jul 11 — Hard Rock Stadium
+  'qf-3':   'Los Angeles',   // Jul 10 — SoFi Stadium
+  'qf-4':   'Kansas City',   // Jul 11 — Arrowhead Stadium
+  // Semi-finals — Jul 14–15
+  'sf-1':   'Dallas',        // Jul 14 — AT&T Stadium
+  'sf-2':   'Atlanta',       // Jul 15 — Mercedes-Benz Stadium
+  // Final weekend — Jul 18–19
+  '3rd':    'Miami',         // Jul 18 — Hard Rock Stadium
+  'final':  'E. Rutherford', // Jul 19 — MetLife Stadium
+};
 
 const KO_ROUNDS = [
   {key:'r32', label:'Round of 32', dates:'Jun 28 – Jul 3', games:16},
@@ -1338,7 +1759,7 @@ const KO_ROUNDS = [
 const KO_ROUND_DATES = {
   r32: ['2026-06-28','2026-06-29','2026-06-30','2026-07-01','2026-07-02','2026-07-03'],
   r16: ['2026-07-04','2026-07-05','2026-07-06','2026-07-07'],
-  qf:  ['2026-07-09','2026-07-10'],
+  qf:  ['2026-07-09','2026-07-10','2026-07-11'],
   sf:  ['2026-07-14','2026-07-15'],
   f:   ['2026-07-18','2026-07-19'],
 };
@@ -1736,7 +2157,7 @@ function buildQF(){
   const q  = getQualifiers();
   const r16 = buildR16(q);
   const pairs=[[0,1],[2,3],[4,5],[6,7]];
-  const dates=['2026-07-09','2026-07-09','2026-07-10','2026-07-10'];
+  const dates=['2026-07-09','2026-07-11','2026-07-10','2026-07-11'];
   const qf=[];
   for(let i=0;i<4;i++){
     const [ai,bi]=pairs[i];
@@ -2884,6 +3305,7 @@ function renderKoCard(game, round){
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
         <span style="font-size:0.7rem;background:rgba(255,255,255,0.06);color:#64748b;padding:0.1rem 0.4rem;border-radius:0.25rem;">${roundLabel}</span>
         <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
+        ${KO_VENUES[game.id]?`<span style="font-size:0.7rem;color:#475569;">📍 ${KO_VENUES[game.id]}</span>`:''}
         ${done?'<span style="font-size:0.7rem;color:#4ade80;margin-left:auto;">✓</span>':''}
       </div>
       <div class="card-2col">
@@ -3805,7 +4227,7 @@ const ESPN_TEAM_MAP = {
   "Côte d'Ivoire":           'Ivory Coast',
   "Cote d'Ivoire":                'Ivory Coast',
   'Cabo Verde':                   'Cape Verde',
-  'Bosnia and Herzegovina':       'Bosnia and Herz.',
+  'Bosnia and Herz.':       'Bosnia and Herz.',
   'Bosnia & Herzegovina':         'Bosnia and Herz.',
   'DR Congo':                     'DR Congo',
   'Congo, DR':                    'DR Congo',
