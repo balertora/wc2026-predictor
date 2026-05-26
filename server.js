@@ -49,8 +49,8 @@ const asyncHandler = fn => (req, res, next) => {
 // ── Schema init ──────────────────────────────────────────────────────────────
 async function initDB() {
   await db.batch([
-    { sql: 'PRAGMA journal_mode = WAL' },
-    { sql: 'PRAGMA foreign_keys = ON' },
+    { sql: 'PRAGMA journal_mode = WAL', args: [] },
+    { sql: 'PRAGMA foreign_keys = ON', args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS users (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
@@ -58,7 +58,7 @@ async function initDB() {
       avatar     TEXT    NOT NULL DEFAULT '',
       is_admin   INTEGER NOT NULL DEFAULT 0,
       created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS group_predictions (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       game_id    INTEGER NOT NULL,
@@ -66,7 +66,7 @@ async function initDB() {
       away_score INTEGER NOT NULL,
       updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, game_id)
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS ko_predictions (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       match_id   TEXT    NOT NULL,
@@ -77,14 +77,14 @@ async function initDB() {
       pen_winner TEXT,
       updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, match_id)
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS group_results (
       game_id    INTEGER PRIMARY KEY,
       home_score INTEGER NOT NULL,
       away_score INTEGER NOT NULL,
       source     TEXT    NOT NULL DEFAULT 'manual',
       updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS ko_results (
       match_id   TEXT    PRIMARY KEY,
       home_score INTEGER,
@@ -92,30 +92,30 @@ async function initDB() {
       pen_winner TEXT,
       source     TEXT    NOT NULL DEFAULT 'manual',
       updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS sessions (
       token      TEXT    PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name       TEXT    NOT NULL,
       is_admin   INTEGER NOT NULL DEFAULT 0,
       created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS settings (
       key        TEXT    PRIMARY KEY,
       value      TEXT    NOT NULL DEFAULT ''
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS re_bracket (
       match_id   TEXT    PRIMARY KEY,
       home       TEXT    NOT NULL DEFAULT '',
       away       TEXT    NOT NULL DEFAULT ''
-    )` },
+    )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS re_picks (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       match_id   TEXT    NOT NULL,
       winner     TEXT    NOT NULL,
       updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, match_id)
-    )` },
+    )`, args: [] },
   ], 'write');
   console.log('DB schema initialised');
 }
