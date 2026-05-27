@@ -2578,7 +2578,7 @@ function showTeamTip(event, name){
     html += `<div class="tt-row">👨‍🍳 <span>Host</span></div>`;
   } else {
     const gp = d.w + d.d + d.l;
-    html += `<div class="tt-row">Qualifying: <span>${d.w}W ${d.d}D ${d.l}L (${gp} games)</span></div>`;
+    html += `<div class="tt-row">Qual. group: <span>${d.w}W ${d.d}D ${d.l}L (${gp} gms)</span></div>`;
     html += `<div class="tt-row">Goals: <span>${d.gf}–${d.ga}</span></div>`;
   }
   const bestShort = esc(d.best).replace(/Quarterfinals/g,'Quarters').replace(/Semifinals/g,'Semis');
