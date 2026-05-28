@@ -1824,23 +1824,6 @@ function loadState(){
 // ═══════════════════════════════════════════════════════════
 // GROUP STANDINGS (from user predictions)
 // ═══════════════════════════════════════════════════════════
-function groupStandings(g){
-  const teams = GROUPS[g].map(name=>({name,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
-  const idx = t => teams.findIndex(x=>x.name===t);
-  for(const game of GROUP_GAMES.filter(x=>x.g===g)){
-    const p = S.gPreds[game.id];
-    if(!p) continue;
-    const [h,a] = p;
-    const hi=idx(game.home), ai=idx(game.away);
-    if(hi<0||ai<0) continue;
-    teams[hi].gf+=h; teams[hi].ga+=a; teams[hi].gd+=h-a;
-    teams[ai].gf+=a; teams[ai].ga+=h; teams[ai].gd+=a-h;
-    if(h>a){ teams[hi].pts+=3; teams[hi].w++; teams[ai].l++; }
-    else if(h===a){ teams[hi].pts+=1; teams[hi].d++; teams[ai].pts+=1; teams[ai].d++; }
-    else { teams[ai].pts+=3; teams[ai].w++; teams[hi].l++; }
-  }
-  return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
-}
 
 function allGroupStandings(){
   const all={};
