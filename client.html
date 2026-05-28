@@ -2095,9 +2095,9 @@ function buildR16(q){
   return r16;
 }
 
-function buildQF(){
-  const q  = getQualifiers();
-  const r16 = buildR16(q);
+// Each build function now accepts its prior round as a parameter rather than
+// re-invoking the chain itself. Use buildAllRounds() to run the full pipeline once.
+function buildQF(r16){
   const pairs=[[0,1],[2,3],[4,5],[6,7]];
   const dates=['2026-07-09','2026-07-11','2026-07-10','2026-07-11'];
   const qf=[];
@@ -2113,8 +2113,7 @@ function buildQF(){
   }
   return qf;
 }
-function buildSF(){
-  const qf = buildQF();
+function buildSF(qf){
   return [
     {id:'sf-1',
      home: winnerOf('qf-1', qf[0].home, qf[0].away) || `Winner of ${qf[0].home} v ${qf[0].away}`,
@@ -2126,8 +2125,7 @@ function buildSF(){
      date:'2026-07-15'},
   ];
 }
-function buildFinal(){
-  const sf = buildSF();
+function buildFinal(sf){
   const sf1Home = sf[0].home, sf1Away = sf[0].away;
   const sf2Home = sf[1].home, sf2Away = sf[1].away;
   return [
@@ -2138,6 +2136,17 @@ function buildFinal(){
                  away: winnerOf('sf-2', sf2Home, sf2Away) || `Winner of ${sf2Home} v ${sf2Away}`,
                  date:'2026-07-19'},
   ];
+}
+
+// Run the full bracket pipeline once in dependency order.
+// Returns every round so callers can pick what they need without re-running the chain.
+function buildAllRounds(){
+  const q    = getQualifiers();
+  const r16  = buildR16(q);
+  const qf   = buildQF(r16);
+  const sf   = buildSF(qf);
+  const fin  = buildFinal(sf);
+  return { q, r16, qf, sf, fin };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3145,7 +3154,8 @@ function renderTiebreakerUI(q){
 
 // ── Knockout section ─────────────────────────────────────
 function renderKoSection(round){
-  const q=getQualifiers();
+  // Build the full bracket pipeline once; each round depends on all prior rounds.
+  const { q, r16, qf, sf, fin } = buildAllRounds();
   let games=[];
   if(round==='r32'){
     games = R32_FIXED.map(m=>({
@@ -3154,10 +3164,10 @@ function renderKoSection(round){
       away: resolvePos(m.posB,q),
       date: m.date,
     }));
-  } else if(round==='r16') games=buildR16(q);
-  else if(round==='qf')   games=buildQF();
-  else if(round==='sf')   games=buildSF();
-  else if(round==='f')    games=buildFinal();
+  } else if(round==='r16') games=r16;
+  else if(round==='qf')   games=qf;
+  else if(round==='sf')   games=sf;
+  else if(round==='f')    games=fin;
 
   // Group by date
   const byDate={};
