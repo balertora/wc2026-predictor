@@ -2411,9 +2411,17 @@ function _applyServerState(data){
   const myData = Object.entries(preds).find(([n]) => n.toLowerCase() === myName);
   if(myData && myData[1]){
     if(myData[1].avatar) S.avatar = myData[1].avatar;
-    // Only overwrite local picks if they're currently empty (don't clobber in-flight edits)
-    if(!Object.keys(S.gPreds).length) S.gPreds = myData[1].gPreds || {};
-    if(!Object.keys(S.kPreds).length) S.kPreds = myData[1].kPreds || {};
+    // Merge server picks into local state — server is authoritative for keys not currently
+    // being edited locally. This fills in picks from previous sessions without clobbering
+    // any in-flight edits the user is making right now (those keys already exist in S.gPreds).
+    const serverG = myData[1].gPreds || {};
+    for(const [id, scores] of Object.entries(serverG)){
+      if(S.gPreds[id] == null) S.gPreds[id] = scores;
+    }
+    const serverK = myData[1].kPreds || {};
+    for(const [id, pred] of Object.entries(serverK)){
+      if(S.kPreds[id] == null) S.kPreds[id] = pred;
+    }
   }
 
   // Settings
@@ -2431,7 +2439,7 @@ function _applyServerState(data){
 }
 
 // ── WebSocket connection ──────────────────────────────────
-function showConnBanner(msg){ const el=document.getElementById('conn-banner'); if(el){el.textContent=msg;el.style.display=msg?'block':'none';} }
+function showConnBanner(msg){ const el=document.getElementById('conn-banner'); if(el){el.style.background='#7c3aed'; el.textContent=msg; el.style.display=msg?'block':'none';} }
 
 function connectWS(){
   if(_ws && (_ws.readyState===0||_ws.readyState===1)) return; // already open/connecting
@@ -2471,6 +2479,7 @@ function persist(){
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_doPersist, 600);
 }
+let _saveFailTimer = null;
 async function _doPersist(){
   if(!_token) return;
   try{
@@ -2479,10 +2488,27 @@ async function _doPersist(){
       headers:_authHeaders(),
       body:JSON.stringify({gPreds:S.gPreds, kPreds:S.kPreds, avatar:S.avatar||''})
     });
-    if(res.status === 401){ _handleSessionExpired(); }
+    if(res.status === 401){ _handleSessionExpired(); return; }
+    if(!res.ok){
+      console.warn('Auto-save failed:', res.status);
+      _showSaveError('⚠ Picks not saved — tap any score to retry');
+    }
   }catch(e){
     console.warn('Auto-save failed:', e.message);
+    _showSaveError('⚠ Picks not saved (network error) — tap any score to retry');
   }
+}
+function _showSaveError(msg){
+  const el = document.getElementById('conn-banner');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = '#dc2626';  // red for errors vs purple for WS disconnect
+  clearTimeout(_saveFailTimer);
+  _saveFailTimer = setTimeout(() => {
+    // Only auto-clear if it's still showing this error (not a WS disconnect message)
+    if(el.style.background.includes('220')) { el.style.display='none'; el.style.background='#7c3aed'; }
+  }, 8000);
 }
 
 function _handleSessionExpired(){
