@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto     = require('crypto');
 const express    = require('express');
 const compression = require('compression');
 const http       = require('http');
@@ -7,14 +8,17 @@ const { WebSocketServer } = require('ws');
 const { createClient } = require('@libsql/client');
 const bcrypt     = require('bcrypt');
 const path       = require('path');
-const fs         = require('fs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const PORT        = parseInt(process.env.PORT || '3000', 10);
 const IS_PROD     = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 const TURSO_URL   = process.env.TURSO_URL   || (IS_PROD ? null : `file:${path.join(__dirname, 'wc26.db')}`);
 const TURSO_TOKEN = process.env.TURSO_TOKEN || undefined;
-const ADMIN_PIN   = process.env.ADMIN_PIN   || 'wc2026';
+// ADMIN_PIN: if set, any user who registers with this PIN gets admin.
+// Default intentionally removed from source — set via Railway environment variable.
+// The first user to register always gets admin regardless of PIN.
+// See DEVELOPMENT.md → Environment Variables.
+const ADMIN_PIN = process.env.ADMIN_PIN;
 
 if (!TURSO_URL) {
   console.error('FATAL: TURSO_URL env var is not set. Set it in the Railway dashboard (Variables tab).');
@@ -119,10 +123,28 @@ async function initDB() {
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
+
+// Cryptographically secure token (replaces Math.random() which is not secure)
 function genToken() {
-  const arr = new Uint32Array(4);
-  for (let i = 0; i < 4; i++) arr[i] = Math.floor(Math.random() * 0xFFFFFFFF);
-  return Array.from(arr).map(n => n.toString(36)).join('');
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// ── Rate limiting (in-memory; resets on server restart) ───────────────────────
+// Limits failed auth attempts to 10 per IP per 15-minute window.
+const _authAttempts = new Map(); // ip → { count, resetAt }
+function _checkAuthRateLimit(ip) {
+  const now = Date.now();
+  const rec = _authAttempts.get(ip);
+  if (!rec || now > rec.resetAt) {
+    _authAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    return true;
+  }
+  if (rec.count >= 10) return false;
+  rec.count++;
+  return true;
+}
+function _clearAuthRateLimit(ip) {
+  _authAttempts.delete(ip);
 }
 
 async function requireAuth(req, res, next) {
@@ -134,12 +156,16 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// Standalone admin check — does not chain through requireAuth to avoid the
+// "dead error branch" problem where requireAuth never calls next(err).
 async function requireAdmin(req, res, next) {
-  await requireAuth(req, res, async (err) => {
-    if (err) return next(err);
-    if (!req.session.isAdmin) return res.status(403).json({ error: 'Admin access required' });
-    next();
-  });
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Not authenticated' });
+  const session = await dbGet('SELECT * FROM sessions WHERE token = ?', [auth.slice(7)]);
+  if (!session) return res.status(401).json({ error: 'Session expired — please log in again' });
+  req.session = { userId: Number(session.user_id), name: session.name, isAdmin: !!session.is_admin };
+  if (!req.session.isAdmin) return res.status(403).json({ error: 'Admin access required' });
+  next();
 }
 
 // ── ESPN team name → app team name ──────────────────────────────────────────
@@ -253,7 +279,19 @@ for (const g of GROUP_GAMES) {
 }
 
 // ── Shared state builder ─────────────────────────────────────────────────────
+// Simple in-memory cache — avoids redundant DB queries when multiple WS clients
+// connect simultaneously or a broadcast fires within the debounce window.
+let _stateCache     = null;
+let _stateCacheTime = 0;
+const STATE_CACHE_TTL_MS = 150; // just under the 200ms broadcast debounce
+
+function invalidateStateCache() { _stateCache = null; }
+
 async function buildStatePayload() {
+  const now = Date.now();
+  if (_stateCache && (now - _stateCacheTime) < STATE_CACHE_TTL_MS) {
+    return _stateCache;
+  }
   // Fetch all data in parallel
   const [gPredRows, koPredRows, gResRows, koResRows, allUsers, settingRows, reBracketRows, rePickRows] =
     await Promise.all([
@@ -328,7 +366,10 @@ async function buildStatePayload() {
     rePicks[r.name][r.match_id] = r.winner;
   }
 
-  return { predictions, results: { gResults, kResults }, settings, reBracket, rePicks };
+  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks };
+  _stateCache     = payload;
+  _stateCacheTime = Date.now();
+  return payload;
 }
 
 // ── WebSocket broadcast ──────────────────────────────────────────────────────
@@ -361,9 +402,11 @@ async function broadcastState() {
   }
 }
 
-// Debounce broadcasts
+// Debounce broadcasts — also invalidates state cache so the next buildStatePayload
+// fetches fresh data rather than returning a stale cached result.
 let _broadcastTimer = null;
 function scheduleBroadcast() {
+  invalidateStateCache();
   clearTimeout(_broadcastTimer);
   _broadcastTimer = setTimeout(broadcastState, 200);
 }
@@ -461,11 +504,7 @@ app.use(express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
 // Serve client.html at root
 app.get('/', (req, res) => {
-  const htmlPath = path.join(__dirname, 'client.html');
-  if (!fs.existsSync(htmlPath)) {
-    return res.status(404).send('client.html not found');
-  }
-  res.sendFile(htmlPath);
+  res.sendFile(path.join(__dirname, 'client.html'));
 });
 
 // Health check — reports DB readiness so Railway healthcheck passes even during slow cold starts
@@ -479,6 +518,8 @@ app.get('/api/health', (req, res) => {
 
 // POST /api/auth — login or register
 app.post('/api/auth', asyncHandler(async (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+
   const { name, pin } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 1) {
     return res.status(400).json({ error: 'Name is required' });
@@ -486,6 +527,12 @@ app.post('/api/auth', asyncHandler(async (req, res) => {
   if (!pin || typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) {
     return res.status(400).json({ error: 'PIN must be 4–8 digits' });
   }
+
+  // Rate limit: 10 failed attempts per IP per 15 minutes
+  if (!_checkAuthRateLimit(ip)) {
+    return res.status(429).json({ error: 'Too many attempts — please wait 15 minutes' });
+  }
+
   const trimmedName = name.trim().slice(0, 40);
 
   const existing = await dbGet('SELECT * FROM users WHERE name = ? COLLATE NOCASE', [trimmedName]);
@@ -493,9 +540,13 @@ app.post('/api/auth', asyncHandler(async (req, res) => {
     // Login — verify PIN
     const ok = await bcrypt.compare(pin, existing.pin_hash);
     if (!ok) return res.status(401).json({ error: 'Wrong PIN' });
+    // Clear rate limit on successful login
+    _clearAuthRateLimit(ip);
+    // Delete any previous sessions for this user (one active session per user)
+    await dbRun('DELETE FROM sessions WHERE user_id = ?', [existing.id]);
     const token = genToken();
     await dbRun(
-      'INSERT OR REPLACE INTO sessions (token, user_id, name, is_admin) VALUES (?, ?, ?, ?)',
+      'INSERT INTO sessions (token, user_id, name, is_admin) VALUES (?, ?, ?, ?)',
       [token, existing.id, existing.name, existing.is_admin]
     );
     return res.json({ token, name: existing.name, avatar: existing.avatar, isAdmin: !!existing.is_admin, isNew: false });
@@ -517,13 +568,14 @@ app.post('/api/auth', asyncHandler(async (req, res) => {
     }
     // First ever user auto-gets admin, or if they know the ADMIN_PIN
     const countRow = await dbGet('SELECT COUNT(*) as n FROM users');
-    const isAdmin  = (Number(countRow.n) === 1) || (pin === ADMIN_PIN);
+    const isAdmin  = (Number(countRow.n) === 1) || (ADMIN_PIN && pin === ADMIN_PIN);
     if (isAdmin) {
       await dbRun('UPDATE users SET is_admin = 1 WHERE id = ?', [userId]);
     }
+    _clearAuthRateLimit(ip);
     const token = genToken();
     await dbRun(
-      'INSERT OR REPLACE INTO sessions (token, user_id, name, is_admin) VALUES (?, ?, ?, ?)',
+      'INSERT INTO sessions (token, user_id, name, is_admin) VALUES (?, ?, ?, ?)',
       [token, userId, trimmedName, isAdmin ? 1 : 0]
     );
     return res.status(201).json({ token, name: trimmedName, avatar: '', isAdmin, isNew: true });
@@ -576,6 +628,9 @@ app.put('/api/predictions', requireAuth, asyncHandler(async (req, res) => {
     if (typeof matchId !== 'string' || !pred || typeof pred !== 'object') continue;
     const hs = pred.homeScore != null ? parseInt(pred.homeScore, 10) : null;
     const as_ = pred.awayScore != null ? parseInt(pred.awayScore, 10) : null;
+    // Validate scores if provided (same range as group predictions)
+    if (hs !== null && (!Number.isFinite(hs) || hs < 0 || hs > 30)) continue;
+    if (as_ !== null && (!Number.isFinite(as_) || as_ < 0 || as_ > 30)) continue;
     statements.push({
       sql: `INSERT INTO ko_predictions (user_id, match_id, home, away, home_score, away_score, pen_winner, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))

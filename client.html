@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>⚽ World Cup 2026 Predictor</title>
 <link rel="icon" type="image/png" href="/ball.png" />
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/tailwind.css" />
 <style>
   /* ───── Theme tokens ───── */
   /* LIGHT (default) */
@@ -1794,7 +1794,7 @@ const S = {
   picksTab: 'groups',
   adminGroup: 'A',
   adminUnlocked: false,
-  imported: [],
+  otherUsers: [],  // other participants' picks, loaded from server state
   gLive: {}, // transient — not persisted; {id:{hs,as,clock,detail}}
   predMapView: false, // transient — map vs list toggle for MD tabs
   lbSort: 'total',   // leaderboard sort column
@@ -1818,66 +1818,8 @@ function loadState(){
 }
 // persist() is defined later in the SERVER API section — replaces localStorage with server API.
 
-// ═══════════════════════════════════════════════════════════
-// PROFILE MANAGEMENT
-// Multiple prediction sets per browser, each keyed by name.
-// wc26_profiles = { "Alice": {name,gPreds,kPreds,avatar}, … }
-// The flat wc26_name / wc26_gp / wc26_kp keys remain as the
-// "active slot" and are kept in sync by persist().
-// ═══════════════════════════════════════════════════════════
-function allProfiles(){
-  try{ return JSON.parse(localStorage.getItem('wc26_profiles')||'{}'); }catch(e){ return {}; }
-}
-
-function loadProfile(name){
-  const p = allProfiles()[name]; if(!p) return;
-  S.name = p.name; S.gPreds = p.gPreds||{}; S.kPreds = p.kPreds||{}; S.avatar = p.avatar||'';
-  persist(); render();
-}
-
-function newProfile(){
-  // Save current picks before clearing so nothing is lost
-  if(S.name) persist();
-  S.name=''; S.gPreds={}; S.kPreds={}; S.avatar='';
-  // Don't persist here — we don't want to overwrite the active profile key with blank data
-  localStorage.setItem('wc26_name','');
-  localStorage.setItem('wc26_avatar','');
-  localStorage.setItem('wc26_gp','{}');
-  localStorage.setItem('wc26_kp','{}');
-  render();
-}
-
-function deleteProfile(name){
-  if(!confirm(`Delete predictions for "${name}"? This cannot be undone.`)) return;
-  const profiles = allProfiles();
-  delete profiles[name];
-  localStorage.setItem('wc26_profiles', JSON.stringify(profiles));
-  // If we just deleted the active profile, switch to another or go blank
-  if(S.name === name){
-    const remaining = Object.keys(profiles);
-    if(remaining.length){ loadProfile(remaining[0]); }
-    else { S.name=''; S.gPreds={}; S.kPreds={}; S.avatar=''; render(); }
-  } else { render(); }
-}
-
-function profileChips(){
-  const profiles = allProfiles();
-  const names = Object.keys(profiles);
-  if(!names.length){
-    return `<span style="font-weight:600;color:white;">${esc(S.name)}</span>`;
-  }
-  // Ensure the current user shows even if not yet in profiles (race before first persist)
-  const allNames = names.includes(S.name) ? names : [...names, S.name].filter(Boolean);
-  return allNames.map(n => {
-    const active = n === S.name;
-    if(active){
-      return `<span style="font-size:0.78rem;padding:0.22rem 0.65rem;background:rgba(22,163,74,0.2);border:1px solid rgba(22,163,74,0.4);border-radius:0.4rem;color:#4ade80;font-weight:600;">${esc(n)}</span>`;
-    }
-    return `<span style="display:inline-flex;align-items:center;gap:0.1rem;">
-      <button onclick="loadProfile('${esc(n)}')" style="font-size:0.78rem;padding:0.22rem 0.55rem;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem 0 0 0.4rem;color:#94a3b8;cursor:pointer;border-right:none;">${esc(n)}</button><button onclick="deleteProfile('${esc(n)}')" title="Delete" style="font-size:0.65rem;padding:0.22rem 0.3rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:0 0.4rem 0.4rem 0;color:#475569;cursor:pointer;line-height:1;">×</button>
-    </span>`;
-  }).join('');
-}
+// (Legacy localStorage profile management removed — accounts are server-side.
+//  The active stubs below are in the SERVER API section.)
 
 // ═══════════════════════════════════════════════════════════
 // GROUP STANDINGS (from user predictions)
@@ -2394,7 +2336,7 @@ async function doLogout(){
   localStorage.removeItem('wc26_token_name');
   localStorage.removeItem('wc26_token_admin');
   if(_ws){ _ws.close(); _ws=null; }
-  S.name=''; S.avatar=''; S.gPreds={}; S.kPreds={}; S.imported=[];
+  S.name=''; S.avatar=''; S.gPreds={}; S.kPreds={}; S.otherUsers=[];
   S.gResults={}; S.kResults={};
   showAuthOverlay();
   render();
@@ -2412,7 +2354,7 @@ function _applyServerState(data){
       gPreds: d.gPreds || {},
       kPreds: d.kPreds || {},
     }));
-  S.imported = others;
+  S.otherUsers = others;
 
   // Results from server (auto-filled by ESPN or manual admin)
   const newGR = data.results?.gResults || {};
@@ -2458,7 +2400,7 @@ function _applyServerState(data){
 }
 
 // ── WebSocket connection ──────────────────────────────────
-function showConnBanner(msg){ const el=document.getElementById('conn-banner'); if(el){el.style.background='#7c3aed'; el.textContent=msg; el.style.display=msg?'block':'none';} }
+function showConnBanner(msg){ const el=document.getElementById('conn-banner'); if(el){el.style.background='#7c3aed'; delete el.dataset.bannerType; el.textContent=msg; el.style.display=msg?'block':'none';} }
 
 function connectWS(){
   if(_ws && (_ws.readyState===0||_ws.readyState===1)) return; // already open/connecting
@@ -2523,11 +2465,15 @@ function _showSaveError(msg){
   if(!el) return;
   el.textContent = msg;
   el.style.display = 'block';
-  el.style.background = '#dc2626';  // red for errors vs purple for WS disconnect
+  el.style.background = '#dc2626';
+  el.dataset.bannerType = 'save-error'; // used to distinguish from WS disconnect banner
   clearTimeout(_saveFailTimer);
   _saveFailTimer = setTimeout(() => {
-    // Only auto-clear if it's still showing this error (not a WS disconnect message)
-    if(el.style.background.includes('220')) { el.style.display='none'; el.style.background='#7c3aed'; }
+    if(el.dataset.bannerType === 'save-error'){
+      el.style.display = 'none';
+      el.style.background = '#7c3aed';
+      delete el.dataset.bannerType;
+    }
   }, 8000);
 }
 
@@ -2561,10 +2507,6 @@ async function adminSetKOResult(matchId, homeScore, awayScore, penWinner){
 }
 
 // These are stubs so existing code that calls them still works:
-async function submitToHub(){ alert('Your predictions auto-save instantly — no submit needed! ✓'); }
-async function syncFromHub(){ alert('State syncs automatically via WebSocket — no manual sync needed! ✓'); }
-async function silentSyncFromHub(){}
-async function pushResultsToHub(){ alert('Results are set automatically from ESPN. Use the Admin panel to override manually.'); }
 
 // ── Profile management (simplified — one account per login) ──
 function allProfiles(){ return S.name ? {[S.name]:{name:S.name,gPreds:S.gPreds,kPreds:S.kPreds,avatar:S.avatar}} : {}; }
@@ -2777,45 +2719,13 @@ function cameraModalHtml(){
   <input type="file" id="avatar-file" accept="image/*" style="display:none;" onchange="handleAvatarUpload(this)" />`;
 }
 
+// Shown behind the auth overlay when S.name is empty (e.g. on first load before
+// the overlay fires). The overlay sits on top (z-index 200) so this is never seen.
 function renderNamePrompt(){
-  const avatarSrc = S.avatar;
-  const profiles = allProfiles();
-  const profileNames = Object.keys(profiles);
-  const hasProfiles = profileNames.length > 0;
-  const resumeSection = hasProfiles ? `
-    <div style="margin-bottom:1.5rem;padding:0.875rem 1rem;background:rgba(22,163,74,0.07);border:1px solid rgba(22,163,74,0.2);border-radius:0.75rem;">
-      <div style="font-size:0.72rem;color:#64748b;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em;">Resume saved predictions</div>
-      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;justify-content:center;">
-        ${profileNames.map(n=>`<button onclick="loadProfile('${esc(n)}')" style="font-size:0.875rem;padding:0.38rem 0.9rem;background:rgba(22,163,74,0.15);border:1px solid rgba(22,163,74,0.35);border-radius:0.5rem;color:#4ade80;cursor:pointer;font-weight:500;">${esc(n)}</button>`).join('')}
-      </div>
-    </div>
-    <div style="font-size:0.78rem;color:#334155;margin-bottom:1rem;">— or enter a new name to start fresh —</div>
-  ` : '';
-  return `<div style="max-width:24rem;margin:5rem auto 0;text-align:center;">
-    <div style="font-size:3.5rem;margin-bottom:0.75rem;">📝</div>
-    <h1 style="font-size:1.875rem;font-weight:700;color:white;margin-bottom:0.5rem;">${hasProfiles?'Who\'s predicting?':'Enter your name'}</h1>
-    <p style="color:#94a3b8;margin-bottom:1.5rem;">${hasProfiles?'Pick your profile or start a new one.':'Predictions auto-save in your browser as you go.'}</p>
-    ${resumeSection}
-    <input class="text-in" type="text" id="name-in" placeholder="New name" autofocus
-      onkeydown="if(event.key==='Enter')submitName()" style="margin-bottom:1rem;" />
-
-    <!-- Avatar picker -->
-    <div style="margin-bottom:1rem;">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:0.625rem;">
-        <div id="avatar-preview" style="width:80px;height:80px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:2.25rem;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.55),0 0 0 2px rgba(255,255,255,0.1);" onclick="document.getElementById('avatar-file').click()">
-          ${avatarSrc ? `<img src="${avatarSrc}" style="width:100%;height:100%;object-fit:cover;" />` : '🧑'}
-        </div>
-        <div style="display:flex;gap:0.5rem;">
-          <button class="btn-s" style="font-size:0.8rem;padding:0.4rem 0.75rem;" onclick="startAvatarCamera()">📷 Take photo</button>
-          <button class="btn-s" style="font-size:0.8rem;padding:0.4rem 0.75rem;" onclick="document.getElementById('avatar-file').click()">🖼 Upload</button>
-          ${avatarSrc ? `<button class="btn-s" style="font-size:0.8rem;padding:0.4rem 0.75rem;color:#f87171;" onclick="S.avatar='';persist();render()">✕ Clear</button>` : ''}
-        </div>
-      </div>
-    </div>
-
-    <button class="btn-g" onclick="submitName()" style="width:100%;font-size:1.0625rem;">Start predicting →</button>
-  </div>
-  ${cameraModalHtml()}`;
+  return `<div style="max-width:24rem;margin:5rem auto 0;text-align:center;color:#94a3b8;">
+    <div style="font-size:3rem;margin-bottom:1rem;">⚽</div>
+    <p>Loading…</p>
+  </div>`;
 }
 
 // ── tabs for predict view ─────────────────────────────────
@@ -2867,7 +2777,6 @@ function renderPredict(){
           ? `<img src="${S.avatar}" title="Change photo" onclick="startAvatarCamera()" style="width:28px;height:28px;border-radius:50%;object-fit:cover;cursor:pointer;border:1.5px solid rgba(22,163,74,0.4);flex-shrink:0;">`
           : `<button title="Add photo" onclick="startAvatarCamera()" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);border:1.5px dashed rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;color:#64748b;padding:0;line-height:1;">📷</button>`}
         ${profileChips()}
-        <button onclick="newProfile()" title="Start a new set of predictions" style="font-size:0.7rem;padding:0.2rem 0.55rem;background:transparent;border:1px dashed rgba(255,255,255,0.18);border-radius:0.4rem;color:#475569;cursor:pointer;white-space:nowrap;">+ New</button>
       </div>
     </div>
 
@@ -2958,7 +2867,7 @@ function _buildGWPickerMap(){
   const map = {};
   const allUsers = [
     { name: S.name||'', gPreds: S.gPreds, avatar: S.avatar||'' },
-    ...(S.imported||[])
+    ...(S.otherUsers||[])
   ];
   // Initialise slots for every team
   for(const g of Object.keys(GROUPS)){
@@ -3431,7 +3340,7 @@ function makeLineChart(series, invert){
 function renderResults(){
   const participants=[];
   if(S.name&&Object.keys(S.gPreds).length>0) participants.push({name:S.name+' (you)',gPreds:S.gPreds});
-  participants.push(...S.imported);
+  participants.push(...S.otherUsers);
 
   const liveIds = new Set(Object.keys(S.gLive).map(Number));
   const doneIds = new Set(Object.keys(S.gResults).map(Number));
@@ -3545,7 +3454,7 @@ function renderCompare(){
   const completed=GROUP_GAMES.filter(g=>S.gResults[g.id]);
   const allPred=[];
   if(S.name&&Object.keys(S.gPreds).length>0) allPred.push({name:S.name+' (you)',gPreds:S.gPreds});
-  allPred.push(...S.imported);
+  allPred.push(...S.otherUsers);
 
   const W=getWeights();
   const lb=allPred.map(p=>{
@@ -3603,7 +3512,7 @@ function renderCompare(){
       </tr></thead>
       <tbody>${lb.map((e,i)=>{
         // Find avatar for this entry
-        const imp=S.imported.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
+        const imp=S.otherUsers.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
         const isSelf=(e.name===S.name+' (you)');
         const avatarSrc=isSelf?S.avatar:(imp?.avatar||'');
         const avatarHTML=avatarSrc
@@ -3874,7 +3783,7 @@ function renderAdmin(){
         <input class="text-in" type="text" id="import-in" placeholder="Paste prediction code…" style="border-radius:0.5rem;" />
         <button class="btn-g" onclick="doImport()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
       </div>
-      ${S.imported.map((p,i)=>`
+      ${S.otherUsers.map((p,i)=>`
         <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.875rem;background:#0a1628;padding:0.5rem 0.75rem;border-radius:0.5rem;margin-top:0.5rem;">
           <span style="color:#cbd5e1;">${esc(p.name)} <span style="color:#64748b;">(${Object.keys(p.gPreds||{}).length} group preds)</span></span>
           <button onclick="removeImported(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:0.75rem;">✕</button>
@@ -3946,7 +3855,7 @@ function renderGroupsTab(){
   const grpKeys=Object.keys(GROUPS);
   const participants=[];
   if(S.name&&Object.keys(S.gPreds).length>0) participants.push({name:S.name,gPreds:S.gPreds});
-  participants.push(...S.imported);
+  participants.push(...S.otherUsers);
 
   // Picker map for group-winner predictions + uniform team column width across all 12 groups
   _gwPickerMap = _buildGWPickerMap();
@@ -4124,7 +4033,7 @@ function renderPicksKO(round){
   // Gather all participants
   const participants = [];
   if(S.name) participants.push({name:S.name, avatar:S.avatar||'', kPreds:S.kPreds||{}});
-  for(const u of S.imported||[]) participants.push({name:u.name||'', avatar:u.avatar||'', kPreds:u.kPreds||{}});
+  for(const u of S.otherUsers||[]) participants.push({name:u.name||'', avatar:u.avatar||'', kPreds:u.kPreds||{}});
 
   if(!participants.length){
     return `<div style="padding:2rem;text-align:center;color:#475569;font-size:0.875rem;">
@@ -4418,18 +4327,6 @@ function moveTied(group, dir){
   render();
 }
 
-function submitName(){
-  const n=document.getElementById('name-in')?.value?.trim();
-  if(!n) return;
-  const existing = allProfiles()[n];
-  if(existing){
-    // Resume saved profile
-    S.name=existing.name; S.gPreds=existing.gPreds||{}; S.kPreds=existing.kPreds||{}; S.avatar=existing.avatar||'';
-  } else {
-    S.name=n;
-  }
-  persist(); render();
-}
 
 // Avatar functions
 function handleAvatarUpload(input){
@@ -4474,7 +4371,6 @@ function closeAvatarCamera(){
   const modal=document.getElementById('camera-modal');
   if(modal) modal.style.display='none';
 }
-function switchUser(){ newProfile(); }
 
 // Group stage score handlers
 function setG(gid, side, val){
@@ -4629,12 +4525,12 @@ function doImport(){
   const code=el?.value?.trim(); if(!code) return;
   const p=dec(code);
   if(!p||p.type!=='predictions'||!p.name){alert('Invalid prediction code');return;}
-  const ei=S.imported.findIndex(x=>x.name===p.name);
-  if(ei>=0){ if(!confirm(`Update ${p.name}?`)) return; S.imported.splice(ei,1); }
-  S.imported.push({name:p.name,gPreds:p.gPreds||{},kPreds:p.kPreds||{}});
+  const ei=S.otherUsers.findIndex(x=>x.name===p.name);
+  if(ei>=0){ if(!confirm(`Update ${p.name}?`)) return; S.otherUsers.splice(ei,1); }
+  S.otherUsers.push({name:p.name,gPreds:p.gPreds||{},kPreds:p.kPreds||{}});
   el.value=''; render();
 }
-function removeImported(i){ S.imported.splice(i,1); render(); }
+function removeImported(i){ S.otherUsers.splice(i,1); render(); }
 
 // Admin
 function checkPass(){

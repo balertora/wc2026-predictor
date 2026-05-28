@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "build": "tailwindcss -i ./src/input.css -o ./public/tailwind.css --minify",
+    "build:watch": "tailwindcss -i ./src/input.css -o ./public/tailwind.css --watch"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
@@ -16,5 +18,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
   }
 }
