@@ -365,6 +365,58 @@
 <!-- Group winner picker tooltip -->
 <div id="gwt" style="display:none;position:fixed;z-index:300;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;padding:0.5rem 0.625rem;box-shadow:0 4px 16px rgba(0,0,0,0.35);pointer-events:none;min-width:7rem;max-width:13rem;"></div>
 
+<!-- ── Chat FAB ── -->
+<button id="chat-fab" onclick="toggleChat()"
+  style="display:none;position:fixed;bottom:1.25rem;right:1.25rem;z-index:185;
+         background:#16a34a;color:white;border:none;border-radius:9999px;
+         padding:0.55rem 1.1rem;font-size:0.875rem;font-weight:600;cursor:pointer;
+         box-shadow:0 4px 16px rgba(0,0,0,0.35);display:none;align-items:center;gap:0.4rem;
+         white-space:nowrap;line-height:1.4;">
+  💬 Chat
+  <span id="chat-badge" style="display:none;width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0;"></span>
+</button>
+
+<!-- ── Chat drawer ── -->
+<div id="chat-drawer"
+  style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;
+         flex-direction:column;height:65vh;min-height:280px;max-height:520px;
+         background:var(--bg-card);border-top:2px solid var(--border);
+         box-shadow:0 -4px 24px rgba(0,0,0,0.25);">
+
+  <!-- Drawer header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:0.7rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0;
+              background:var(--bg-nav);">
+    <span style="font-weight:700;font-size:0.95rem;color:var(--text-strong);">💬 Chat</span>
+    <button onclick="toggleChat()"
+      style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:1.2rem;line-height:1;padding:0.1rem 0.25rem;">✕</button>
+  </div>
+
+  <!-- Message list -->
+  <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0.25rem 0;"></div>
+
+  <!-- Input area -->
+  <div style="padding:0.6rem 0.75rem;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-nav);">
+    <div id="chat-logged-out" style="display:none;text-align:center;color:var(--text-faint);font-size:0.85rem;padding:0.5rem;">
+      Log in to join the chat
+    </div>
+    <div id="chat-input-row" style="display:flex;gap:0.5rem;align-items:flex-end;">
+      <div style="flex:1;position:relative;">
+        <textarea id="chat-input" maxlength="280" placeholder="Say something…" rows="2"
+          style="width:100%;background:var(--bg-input);border:1px solid var(--border-strong);
+                 border-radius:0.75rem;padding:0.55rem 0.75rem 1.4rem;color:var(--text);
+                 font-size:0.875rem;resize:none;box-sizing:border-box;font-family:inherit;line-height:1.4;"
+          oninput="_chatUpdateChars(this)"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+        <span id="chat-chars" style="position:absolute;bottom:0.3rem;right:0.6rem;font-size:0.65rem;color:var(--text-faint);">280</span>
+      </div>
+      <button onclick="sendChat()"
+        style="background:#16a34a;color:white;border:none;border-radius:0.75rem;
+               padding:0.55rem 1rem;font-weight:600;cursor:pointer;flex-shrink:0;font-size:0.9rem;">→</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
 // DATA — actual 2026 FIFA World Cup groups & schedule
@@ -1795,6 +1847,7 @@ const S = {
   adminGroup: 'A',
   adminUnlocked: false,
   otherUsers: [],  // other participants' picks, loaded from server state
+  messages:   [],  // chat messages, last 50, chronological
   gLive: {}, // transient — not persisted; {id:{hs,as,clock,detail}}
   predMapView: false, // transient — map vs list toggle for MD tabs
   lbSort: 'total',   // leaderboard sort column
@@ -2332,7 +2385,10 @@ async function doLogout(){
   localStorage.removeItem('wc26_token_admin');
   if(_ws){ _ws.close(); _ws=null; }
   S.name=''; S.avatar=''; S.gPreds={}; S.kPreds={}; S.otherUsers=[];
-  S.gResults={}; S.kResults={};
+  S.gResults={}; S.kResults={}; S.messages=[];
+  if(_chatOpen) toggleChat();
+  const chatFab = document.getElementById('chat-fab');
+  if(chatFab) chatFab.style.display = 'none';
   showAuthOverlay();
   render();
 }
@@ -2392,6 +2448,21 @@ function _applyServerState(data){
   // Update my own rePicks from server (authoritative)
   const myRePicks = Object.entries(data.rePicks || {}).find(([n]) => n.toLowerCase() === myName);
   if(myRePicks) S.rePicks = myRePicks[1] || {};
+
+  // Chat messages
+  S.messages = data.messages || [];
+  _updateChatBadge();
+  // If drawer is open, re-render and auto-scroll if user was at the bottom
+  if(_chatOpen){
+    const msgsEl = document.getElementById('chat-messages');
+    const atBottom = !msgsEl || (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 100);
+    renderChatMessages();
+    if(atBottom && msgsEl) setTimeout(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }, 0);
+  }
+
+  // Show chat FAB once logged in
+  const fab = document.getElementById('chat-fab');
+  if(fab) fab.style.display = S.name ? 'flex' : 'none';
 }
 
 // ── WebSocket connection ──────────────────────────────────
@@ -2518,6 +2589,132 @@ function profileChips(){
 
 // ═══════════════════════════════════════════════════════════
 // NAV
+// ═══════════════════════════════════════════════════════════
+// CHAT
+// ═══════════════════════════════════════════════════════════
+let _chatOpen = false;
+let _chatSending = false;
+let _chatLastSeenId = 0;
+try { _chatLastSeenId = parseInt(localStorage.getItem('wc26_chat_seen') || '0', 10) || 0; } catch(e){}
+
+function toggleChat(){
+  _chatOpen = !_chatOpen;
+  const drawer = document.getElementById('chat-drawer');
+  if(!drawer) return;
+  drawer.style.display = _chatOpen ? 'flex' : 'none';
+
+  if(_chatOpen){
+    // Mark everything seen
+    _chatLastSeenId = S.messages.length ? S.messages[S.messages.length-1].id : _chatLastSeenId;
+    try { localStorage.setItem('wc26_chat_seen', _chatLastSeenId); } catch(e){}
+    _updateChatBadge();
+    renderChatMessages();
+    // Scroll to bottom then focus input
+    setTimeout(() => {
+      const msgs = document.getElementById('chat-messages');
+      if(msgs) msgs.scrollTop = msgs.scrollHeight;
+      const input = document.getElementById('chat-input');
+      if(input && S.name) input.focus();
+    }, 30);
+  }
+}
+
+function _chatAvatar(name){
+  if(name === S.name) return S.avatar;
+  return S.otherUsers.find(u => u.name === name)?.avatar || '';
+}
+
+function renderChatMessages(){
+  const el = document.getElementById('chat-messages');
+  if(!el) return;
+
+  // Show/hide input vs logged-out notice
+  const inputRow = document.getElementById('chat-input-row');
+  const loggedOut = document.getElementById('chat-logged-out');
+  if(inputRow) inputRow.style.display = S.name ? 'flex' : 'none';
+  if(loggedOut) loggedOut.style.display = S.name ? 'none' : 'block';
+
+  if(!S.messages.length){
+    el.innerHTML = `<div style="text-align:center;color:var(--text-faint);padding:2.5rem 1rem;font-size:0.875rem;">
+      No messages yet — say hello! 👋</div>`;
+    return;
+  }
+
+  el.innerHTML = S.messages.map(m => {
+    const isMe = m.name === S.name;
+    const canDelete = isMe || _isAdmin;
+    const av = _chatAvatar(m.name);
+    // Turso stores UTC as "YYYY-MM-DD HH:MM:SS" — parse as UTC
+    const d = new Date(m.created_at.replace(' ', 'T') + 'Z');
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const dateStr = sameDay ? timeStr : d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + timeStr;
+
+    return `<div style="display:flex;gap:0.5rem;padding:0.45rem 0.75rem;align-items:flex-start;${isMe ? 'background:var(--bg-tint);' : ''}">
+      <div style="width:26px;height:26px;border-radius:50%;overflow:hidden;flex-shrink:0;
+                  background:var(--bg-tint);display:flex;align-items:center;justify-content:center;font-size:0.85rem;">
+        ${av ? `<img src="${av}" style="width:100%;height:100%;object-fit:cover;">` : '🧑'}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:0.4rem;margin-bottom:0.1rem;flex-wrap:wrap;">
+          <span style="font-size:0.76rem;font-weight:600;color:var(--text-strong);">${esc(m.name)}</span>
+          <span style="font-size:0.65rem;color:var(--text-faint);">${dateStr}</span>
+          ${canDelete ? `<button onclick="deleteChat(${m.id})" title="Delete message"
+            style="font-size:0.7rem;color:var(--text-faint);background:none;border:none;
+                   cursor:pointer;padding:0;margin-left:auto;opacity:0.5;line-height:1;"
+            onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.5'">🗑</button>` : ''}
+        </div>
+        <div style="font-size:0.875rem;color:var(--text);word-break:break-word;white-space:pre-wrap;">${esc(m.text)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _updateChatBadge(){
+  const newest = S.messages.length ? S.messages[S.messages.length-1].id : 0;
+  const hasNew = newest > _chatLastSeenId;
+  const badge = document.getElementById('chat-badge');
+  if(badge) badge.style.display = (hasNew && !_chatOpen) ? 'inline-block' : 'none';
+}
+
+function _chatUpdateChars(textarea){
+  const el = document.getElementById('chat-chars');
+  if(el) el.textContent = 280 - textarea.value.length;
+}
+
+async function sendChat(){
+  if(!_token || !S.name) return;
+  const input = document.getElementById('chat-input');
+  if(!input) return;
+  const text = input.value.trim();
+  if(!text || _chatSending) return;
+  _chatSending = true;
+  try{
+    const res = await fetch('/api/messages', {
+      method: 'POST', headers: _authHeaders(),
+      body: JSON.stringify({text}),
+    });
+    const data = await res.json();
+    if(!res.ok){ alert(data.error || 'Failed to send'); return; }
+    input.value = '';
+    _chatUpdateChars(input);
+    input.focus();
+  }catch(e){
+    alert('Network error — message not sent');
+  }finally{
+    _chatSending = false;
+  }
+}
+
+async function deleteChat(id){
+  if(!confirm('Delete this message?')) return;
+  try{
+    const res = await fetch(`/api/messages/${id}`, {method:'DELETE', headers:_authHeaders()});
+    if(!res.ok){ const d=await res.json(); alert(d.error||'Failed'); }
+  }catch(e){ alert('Network error'); }
+}
+
 // ═══════════════════════════════════════════════════════════
 function _updateNavTabs(){
   // Admin tab: only visible to admins

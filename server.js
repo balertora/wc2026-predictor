@@ -118,6 +118,13 @@ async function initDB() {
       updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, match_id)
     )`, args: [] },
+    { sql: `CREATE TABLE IF NOT EXISTS messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name       TEXT    NOT NULL,
+      text       TEXT    NOT NULL,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    )`, args: [] },
   ], 'write');
   console.log('DB schema initialised');
 }
@@ -293,7 +300,7 @@ async function buildStatePayload() {
     return _stateCache;
   }
   // Fetch all data in parallel
-  const [gPredRows, koPredRows, gResRows, koResRows, allUsers, settingRows, reBracketRows, rePickRows] =
+  const [gPredRows, koPredRows, gResRows, koResRows, allUsers, settingRows, reBracketRows, rePickRows, msgRows] =
     await Promise.all([
       dbAll(`SELECT u.name, u.avatar, gp.game_id, gp.home_score, gp.away_score
              FROM group_predictions gp JOIN users u ON u.id = gp.user_id`),
@@ -305,6 +312,8 @@ async function buildStatePayload() {
       dbAll(`SELECT key, value FROM settings`),
       dbAll(`SELECT * FROM re_bracket`),
       dbAll(`SELECT u.name, rp.match_id, rp.winner FROM re_picks rp JOIN users u ON u.id = rp.user_id`),
+      // Last 50 messages, oldest-first for display — avatar looked up client-side
+      dbAll(`SELECT id, user_id, name, text, created_at FROM messages ORDER BY id DESC LIMIT 50`),
     ]);
 
   // predictions: { name: { avatar, gPreds: {gameId:[h,a]}, kPreds: {matchId:{...}} } }
@@ -366,7 +375,8 @@ async function buildStatePayload() {
     rePicks[r.name][r.match_id] = r.winner;
   }
 
-  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks };
+  const messages = msgRows.slice().reverse(); // reverse DESC fetch → chronological order
+  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks, messages };
   _stateCache     = payload;
   _stateCacheTime = Date.now();
   return payload;
@@ -785,6 +795,49 @@ app.put('/api/re-picks', requireAuth, asyncHandler(async (req, res) => {
     await db.batch(statements, 'write');
   }
 
+  scheduleBroadcast();
+  res.json({ ok: true });
+}));
+
+// ── Chat endpoints ───────────────────────────────────────────────────────────
+
+// Simple per-user send rate limit (10 s cooldown)
+const _msgCooldown = new Map(); // userId → timestamp
+
+// POST /api/messages — send a chat message
+app.post('/api/messages', requireAuth, asyncHandler(async (req, res) => {
+  const { userId, name } = req.session;
+
+  // Rate limit: one message per 10 seconds per user
+  const last = _msgCooldown.get(userId) || 0;
+  if (Date.now() - last < 10_000) {
+    return res.status(429).json({ error: 'Please wait a moment before sending another message' });
+  }
+
+  const { text } = req.body;
+  if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text required' });
+  const trimmed = text.trim().slice(0, 280);
+  if (!trimmed) return res.status(400).json({ error: 'Message cannot be empty' });
+
+  _msgCooldown.set(userId, Date.now());
+  await dbRun('INSERT INTO messages (user_id, name, text) VALUES (?, ?, ?)', [userId, name, trimmed]);
+  scheduleBroadcast();
+  res.json({ ok: true });
+}));
+
+// DELETE /api/messages/:id — delete a message (own or admin)
+app.delete('/api/messages/:id', requireAuth, asyncHandler(async (req, res) => {
+  const { userId, isAdmin } = req.session;
+  const msgId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(msgId)) return res.status(400).json({ error: 'Invalid message ID' });
+
+  const msg = await dbGet('SELECT user_id FROM messages WHERE id = ?', [msgId]);
+  if (!msg) return res.status(404).json({ error: 'Message not found' });
+  if (!isAdmin && Number(msg.user_id) !== userId) {
+    return res.status(403).json({ error: 'You can only delete your own messages' });
+  }
+
+  await dbRun('DELETE FROM messages WHERE id = ?', [msgId]);
   scheduleBroadcast();
   res.json({ ok: true });
 }));
