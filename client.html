@@ -272,13 +272,35 @@
   #team-tooltip .tt-row span { color:#e2e8f0; }
   #team-tooltip .tt-best { color:#fbbf24; font-size:0.72rem; margin-top:0.3rem; }
 
-  /* ── Chat drawer: right-anchored panel on desktop, full width on mobile ── */
+  /* ── Global box model ── */
+  *, *::before, *::after { box-sizing: border-box; }
+
+  /* ── Chat drawer ── */
+  /* Safe-area padding so the input isn't hidden behind the iOS home indicator */
+  #chat-drawer {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow-x: hidden; /* prevent any child from blowing out the width */
+  }
+  /* Right-anchored panel on desktop, full width on mobile */
   @media (min-width: 768px) {
     #chat-drawer {
-      left: auto !important;          /* detach from left edge */
-      width: clamp(340px, 40vw, 480px) !important;  /* ~1/3–1/2 of screen */
+      left: auto !important;
+      width: clamp(340px, 40vw, 480px) !important;
       border-top-left-radius: 0.75rem;
       border-left: 1px solid var(--border);
+    }
+  }
+
+  /* ── Auth overlay cards ── */
+  /* Ensure cards never wider than the viewport minus their container's padding */
+  #auth-step1, #auth-step2 {
+    max-width: min(22rem, calc(100vw - 2rem)) !important;
+    width: 100% !important;
+  }
+  /* On very small screens (iPhone SE, 320px) reduce card padding */
+  @media (max-width: 360px) {
+    #auth-step1, #auth-step2 {
+      padding: 1.25rem !important;
     }
   }
 </style>
@@ -303,7 +325,7 @@
 <div id="app" style="max-width:54rem;margin:0 auto;padding:1.25rem 1rem;"></div>
 
 <!-- ── Auth overlay (shown before login) ── -->
-<div id="auth-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:1rem;">
+<div id="auth-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:0.75rem;overflow-y:auto;">
 
   <!-- Step 1: name + PIN -->
   <div id="auth-step1" style="background:var(--bg-card);border:1px solid var(--border);border-radius:1rem;padding:2rem;max-width:22rem;width:100%;text-align:center;">
