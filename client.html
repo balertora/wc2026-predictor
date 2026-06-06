@@ -6,6 +6,7 @@
 <title>⚽ World Cup 2026 Predictor</title>
 <link rel="icon" type="image/png" href="/ball.png" />
 <link rel="stylesheet" href="/tailwind.css" />
+<script src="/dossiers.js"></script>
 <style>
   /* ───── Theme tokens ───── */
   /* LIGHT (default) */
@@ -303,6 +304,68 @@
       padding: 1.25rem !important;
     }
   }
+
+  /* ── Dossier info button on game cards ── */
+  .dossier-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:1.35rem; height:1.35rem; flex-shrink:0;
+    background:transparent; border:none; cursor:pointer; padding:0;
+    color:var(--text-faint); border-radius:50%; transition:color .12s, background .12s;
+  }
+  .dossier-btn:hover { color:var(--accent); background:var(--bg-tint); }
+  .dossier-btn svg { width:1.1rem; height:1.1rem; }
+
+  /* ── Dossier modal ── */
+  #dossier-root:empty { display:none; }
+  .dsr-overlay {
+    position:fixed; inset:0; z-index:210; background:var(--modal-bg);
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:1.5rem 1rem; overflow-y:auto;
+  }
+  .dsr-modal {
+    background:var(--bg); border:1px solid var(--border); border-radius:1rem;
+    width:100%; max-width:54rem; box-shadow:0 12px 48px rgba(0,0,0,.4);
+    margin:auto;
+  }
+  .dsr-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0.75rem 1rem; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg-nav);
+    border-radius:1rem 1rem 0 0; z-index:1;
+  }
+  .dsr-head h2 { margin:0; font-size:0.95rem; font-weight:700; color:var(--text-strong); }
+  .dsr-close {
+    background:none; border:none; cursor:pointer; color:var(--text-faint);
+    font-size:1.3rem; line-height:1; padding:0.1rem 0.35rem;
+  }
+  .dsr-cards { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:1rem; }
+  @media (max-width:680px){ .dsr-cards { grid-template-columns:1fr; } }
+
+  .dsr-card { background:var(--bg-card); border:1px solid var(--border); border-radius:0.9rem; padding:1rem 1.1rem; box-shadow:var(--shadow); }
+  .dsr-card-head { display:flex; align-items:flex-start; gap:0.6rem; margin-bottom:0.5rem; padding-bottom:0.75rem; border-bottom:1px solid var(--border-soft); }
+  .dsr-rank { flex-shrink:0; width:2.1rem; height:2.1rem; border-radius:0.5rem; background:var(--bg-tint); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; }
+  .dsr-rank b { font-size:0.95rem; font-weight:800; color:var(--text-strong); }
+  .dsr-rank span { font-size:0.5rem; letter-spacing:0.05em; color:var(--text-faint); text-transform:uppercase; margin-top:1px; }
+  .dsr-name { font-size:1.05rem; font-weight:800; color:var(--text-strong); line-height:1.15; }
+  .dsr-nick { font-size:0.72rem; color:var(--text-faint); margin-top:1px; }
+  .dsr-meta { font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem; }
+  .dsr-best { font-size:0.72rem; color:var(--text-muted); margin-top:0.15rem; }
+
+  .dsec { margin-top:0.8rem; }
+  .dsec-h { display:flex; align-items:center; gap:0.4rem; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-faint); margin-bottom:0.3rem; }
+  .dsec-ico { width:0.95rem; height:0.95rem; flex-shrink:0; }
+  .dsec.s-strengths .dsec-h { color:var(--accent); }
+  body[data-theme="dark"] .dsec.s-strengths .dsec-h { color:#4ade80; }
+  .dsec.s-weaknesses .dsec-h { color:#dc2626; }
+  body[data-theme="dark"] .dsec.s-weaknesses .dsec-h { color:#f87171; }
+  .dsec-body { font-size:0.84rem; line-height:1.45; color:var(--text); }
+  .dsec-body.italic { font-style:italic; color:var(--text-muted); }
+  .dsr-pl { display:flex; gap:0.5rem; align-items:baseline; margin-bottom:0.3rem; }
+  .dsr-pl-pos { flex-shrink:0; font-size:0.58rem; font-weight:800; letter-spacing:0.03em; color:var(--text-faint); background:var(--bg-tint); border-radius:0.25rem; padding:0.1rem 0.3rem; min-width:1.7rem; text-align:center; }
+  .dsr-pl-name { font-weight:600; }
+  .dsr-pl-note { color:var(--text-faint); }
+  ul.dsr-sw { margin:0.1rem 0 0; padding-left:1.1rem; }
+  ul.dsr-sw li { margin-bottom:0.15rem; font-size:0.84rem; line-height:1.4; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -396,6 +459,9 @@
 
 <!-- Group winner picker tooltip -->
 <div id="gwt" style="display:none;position:fixed;z-index:300;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;padding:0.5rem 0.625rem;box-shadow:0 4px 16px rgba(0,0,0,0.35);pointer-events:none;min-width:7rem;max-width:13rem;"></div>
+
+<!-- Team dossier modal (filled by openDossier, lives outside #app so render() never touches it) -->
+<div id="dossier-root"></div>
 
 <!-- ── Chat FAB ── -->
 <button id="chat-fab" onclick="toggleChat()"
@@ -2832,6 +2898,97 @@ const TEAM_SHORT = {
 function shortTeamName(name){ return TEAM_SHORT[name] || name; }
 
 // ═══════════════════════════════════════════════════════════
+// TEAM DOSSIER MODAL (data from /dossiers.js)
+// ═══════════════════════════════════════════════════════════
+function _jss(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+// Info button shown on a game card — only when BOTH teams have a dossier
+// (i.e. resolved real teams, not "Winner of…"/"3rd…" placeholders).
+function dossierBtn(home, away){
+  const dossiers = window.TEAM_DOSSIER;
+  if(!dossiers) return '';
+  const ok = n => n && dossiers[n];
+  if(!ok(home) || !ok(away)) return '';
+  const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12" y2="7.6"/></svg>`;
+  return `<button class="dossier-btn" title="Team profiles" onclick="openDossier('${_jss(home)}','${_jss(away)}')">${icon}</button>`;
+}
+
+function openDossier(home, away){
+  hideTeamTip();
+  const root = document.getElementById('dossier-root');
+  if(!root) return;
+  root.innerHTML = `
+    <div class="dsr-overlay" onclick="if(event.target===this)closeDossier()">
+      <div class="dsr-modal" role="dialog" aria-modal="true" aria-label="Team profiles">
+        <div class="dsr-head">
+          <h2>Team profiles</h2>
+          <button class="dsr-close" onclick="closeDossier()" title="Close">✕</button>
+        </div>
+        <div class="dsr-cards">
+          ${_dossierCardHTML(home)}
+          ${_dossierCardHTML(away)}
+        </div>
+      </div>
+    </div>`;
+  document.addEventListener('keydown', _dossierEsc);
+}
+function _dossierEsc(e){ if(e.key === 'Escape') closeDossier(); }
+function closeDossier(){
+  const root = document.getElementById('dossier-root');
+  if(root) root.innerHTML = '';
+  document.removeEventListener('keydown', _dossierEsc);
+}
+
+const _DSEC_LABEL = { style:'Style of play', players:'Key players', strengths:'Strengths', weaknesses:'Weaknesses', outlook:'Outlook' };
+
+function _dossierCardHTML(name){
+  const d  = window.TEAM_DOSSIER && window.TEAM_DOSSIER[name];
+  const td = TEAM_DATA[name];
+  const ICON = window.DOSSIER_ICONS || {};
+  if(!d){
+    return `<div class="dsr-card"><div class="dsr-name">${flag(name)} ${esc(name)}</div>
+      <div class="dsec-body" style="margin-top:0.5rem;color:var(--text-faint);">No profile available.</div></div>`;
+  }
+
+  // Qualifying record + best finish pulled from the existing TEAM_DATA (tooltip source)
+  let qual = '';
+  if(td){
+    if(td.host) qual = 'Host nation — qualified automatically';
+    else { const gp = td.w + td.d + td.l; qual = `Qualifying: ${td.w}W ${td.d}D ${td.l}L · ${td.gf}–${td.ga} GF/GA (${gp} gms)`; }
+  }
+  const best = td ? esc(td.best) : '';
+
+  const sec = (key, inner, italic) =>
+    `<div class="dsec s-${key}"><div class="dsec-h">${ICON[key]||''}<span>${_DSEC_LABEL[key]}</span></div>
+      <div class="dsec-body ${italic?'italic':''}">${inner}</div></div>`;
+
+  const players = d.keyPlayers.map(p =>
+    `<div class="dsr-pl"><span class="dsr-pl-pos">${esc(p.pos)}</span>
+      <span><span class="dsr-pl-name">${esc(p.name)}</span> — <span class="dsr-pl-note">${esc(p.note)}</span></span></div>`
+  ).join('');
+  const list = arr => `<ul class="dsr-sw">${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+
+  return `
+    <div class="dsr-card">
+      <div class="dsr-card-head">
+        <div class="dsr-rank"><b>${d.rank}</b><span>FIFA</span></div>
+        <div style="min-width:0;">
+          <div class="dsr-name">${flag(name)} ${esc(name)}</div>
+          ${d.nickname ? `<div class="dsr-nick">${esc(d.nickname)}</div>` : ''}
+          <div class="dsr-meta">👔 ${esc(d.coach)}</div>
+          ${qual ? `<div class="dsr-meta">📋 ${qual}</div>` : ''}
+          ${best ? `<div class="dsr-best">🏆 ${best}</div>` : ''}
+        </div>
+      </div>
+      ${sec('style', esc(d.style))}
+      ${sec('players', players)}
+      ${sec('strengths', list(d.strengths))}
+      ${sec('weaknesses', list(d.weaknesses))}
+      ${sec('outlook', esc(d.outlook), true)}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
 // SCORE CELL (stacked +/input/-)
 // ═══════════════════════════════════════════════════════════
 function scoreCell(matchId, side, val, isKo){
@@ -3294,7 +3451,10 @@ function renderGroupGameCard(game){
         <span style="font-size:0.7rem;background:rgba(255,255,255,0.06);color:#64748b;padding:0.1rem 0.4rem;border-radius:0.25rem;">Group ${game.g}</span>
         <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
         ${venueStr?`<span style="font-size:0.7rem;color:#475569;">${venueStr}${wxStr}</span>`:''}
-        ${!done&&!isLocked()?`<span id="gmark-${game.id}" onclick="markZero(${game.id})" title="Not entered — click to record as 0–0" style="margin-left:auto;font-size:0.68rem;color:#f97316;padding:0.1rem 0.45rem;border-radius:0.25rem;border:1px solid rgba(249,115,22,0.35);background:rgba(249,115,22,0.07);cursor:pointer;user-select:none;flex-shrink:0;">○</span>`:''}
+        <div style="margin-left:auto;display:flex;align-items:center;gap:0.4rem;">
+          ${dossierBtn(game.home, game.away)}
+          ${!done&&!isLocked()?`<span id="gmark-${game.id}" onclick="markZero(${game.id})" title="Not entered — click to record as 0–0" style="font-size:0.68rem;color:#f97316;padding:0.1rem 0.45rem;border-radius:0.25rem;border:1px solid rgba(249,115,22,0.35);background:rgba(249,115,22,0.07);cursor:pointer;user-select:none;flex-shrink:0;">○</span>`:''}
+        </div>
       </div>
       <div class="card-2col">
         <div class="card-pred">
@@ -3497,7 +3657,10 @@ function renderKoCard(game, round){
         <span style="font-size:0.7rem;background:rgba(255,255,255,0.06);color:#64748b;padding:0.1rem 0.4rem;border-radius:0.25rem;">${roundLabel}</span>
         <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
         ${KO_VENUES[game.id]?`<span style="font-size:0.7rem;color:#475569;">📍 ${KO_VENUES[game.id]}</span>`:''}
-        ${done?'<span style="font-size:0.7rem;color:#4ade80;margin-left:auto;">✓</span>':''}
+        <div style="margin-left:auto;display:flex;align-items:center;gap:0.4rem;">
+          ${dossierBtn(game.home, game.away)}
+          ${done?'<span style="font-size:0.7rem;color:#4ade80;">✓</span>':''}
+        </div>
       </div>
       <div class="card-2col">
         <div class="card-pred">

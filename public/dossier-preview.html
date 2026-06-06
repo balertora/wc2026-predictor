@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dossier Preview</title>
+<script src="dossiers.js"></script>
+<style>
+  :root{
+    --bg:#f1f5f9; --bg-card:#ffffff; --bg-tint:rgba(0,0,0,0.04);
+    --text:#0f172a; --text-strong:#0a0f1e; --text-muted:#475569; --text-faint:#64748b;
+    --border:rgba(0,0,0,0.10); --border-soft:rgba(0,0,0,0.06);
+    --accent:#16a34a; --good:#15803d; --bad:#dc2626;
+  }
+  body[data-theme="dark"]{
+    --bg:#0a1628; --bg-card:#112a45; --bg-tint:rgba(255,255,255,0.06);
+    --text:#f1f5f9; --text-strong:#ffffff; --text-muted:#94a3b8; --text-faint:#64748b;
+    --border:rgba(255,255,255,0.10); --border-soft:rgba(255,255,255,0.06);
+    --accent:#16a34a; --good:#4ade80; --bad:#f87171;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;padding:1.5rem 1rem;transition:background .18s,color .18s;}
+  .wrap{max-width:60rem;margin:0 auto;}
+  .topbar{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-bottom:1.25rem;}
+  .topbar h1{font-size:1.1rem;margin:0;margin-right:auto;font-weight:700;}
+  select,button{font-family:inherit;font-size:.85rem;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:.5rem;padding:.4rem .6rem;cursor:pointer;}
+  .note{font-size:.75rem;color:var(--text-faint);margin-bottom:1.25rem;line-height:1.5;}
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  @media(max-width:680px){ .cards{grid-template-columns:1fr;} }
+
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:.9rem;padding:1rem 1.1rem;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .card-head{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.85rem;padding-bottom:.75rem;border-bottom:1px solid var(--border-soft);}
+  .rank{flex-shrink:0;width:2.1rem;height:2.1rem;border-radius:.5rem;background:var(--bg-tint);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;}
+  .rank b{font-size:.95rem;font-weight:800;color:var(--text-strong);}
+  .rank span{font-size:.5rem;letter-spacing:.05em;color:var(--text-faint);text-transform:uppercase;margin-top:1px;}
+  .name-wrap{min-width:0;}
+  .name{font-size:1.05rem;font-weight:800;color:var(--text-strong);line-height:1.15;}
+  .nick{font-size:.72rem;color:var(--text-faint);margin-top:1px;}
+  .coach{font-size:.72rem;color:var(--text-muted);margin-top:.25rem;}
+  .qual{font-size:.72rem;color:var(--text-muted);margin-top:.3rem;}
+
+  .dsec{margin-top:.85rem;}
+  .dsec-h{display:flex;align-items:center;gap:.4rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);margin-bottom:.3rem;}
+  .dsec-ico{width:.95rem;height:.95rem;flex-shrink:0;}
+  .dsec.s-strengths .dsec-h{color:var(--good);}
+  .dsec.s-weaknesses .dsec-h{color:var(--bad);}
+  .dsec-body{font-size:.84rem;line-height:1.45;color:var(--text);}
+  .dsec-body.italic{font-style:italic;color:var(--text-muted);}
+
+  .pl{display:flex;gap:.5rem;align-items:baseline;margin-bottom:.3rem;}
+  .pl-pos{flex-shrink:0;font-size:.58rem;font-weight:800;letter-spacing:.03em;color:var(--text-faint);background:var(--bg-tint);border-radius:.25rem;padding:.1rem .3rem;min-width:1.7rem;text-align:center;}
+  .pl-name{font-weight:600;}
+  .pl-note{color:var(--text-faint);}
+  ul.sw{margin:.1rem 0 0;padding-left:1.1rem;}
+  ul.sw li{margin-bottom:.15rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>⚽ Dossier card preview</h1>
+    <label>Home <select id="sel-a"></select></label>
+    <label>Away <select id="sel-b"></select></label>
+    <button id="theme">🌙 Dark</button>
+  </div>
+  <div class="note">
+    This is a throwaway preview to review the icons and card layout — not part of the app yet.
+    In the live version the <b>qualifying record + best WC finish</b> (the existing tooltip data) will sit in the header where the placeholder line is.
+    Use the dropdowns to browse all 48 teams, and toggle the theme to check both.
+  </div>
+  <div class="cards">
+    <div class="card" id="card-a"></div>
+    <div class="card" id="card-b"></div>
+  </div>
+</div>
+
+<script>
+const SECTION_LABEL = {
+  style:'Style of play', players:'Key players',
+  strengths:'Strengths', weaknesses:'Weaknesses', outlook:'Outlook',
+};
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function sectionHTML(key, inner, extraClass){
+  return `<div class="dsec s-${key} ${extraClass||''}">
+    <div class="dsec-h">${DOSSIER_ICONS[key]}<span>${SECTION_LABEL[key]}</span></div>
+    <div class="dsec-body ${key==='outlook'?'italic':''}">${inner}</div>
+  </div>`;
+}
+
+function renderCard(name){
+  const d = TEAM_DOSSIER[name];
+  if(!d) return `<div class="dsec-body">No dossier for ${esc(name)}</div>`;
+
+  const players = d.keyPlayers.map(p =>
+    `<div class="pl"><span class="pl-pos">${esc(p.pos)}</span>
+      <span><span class="pl-name">${esc(p.name)}</span> — <span class="pl-note">${esc(p.note)}</span></span></div>`
+  ).join('');
+
+  const list = arr => `<ul class="sw">${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+
+  return `
+    <div class="card-head">
+      <div class="rank"><b>${d.rank}</b><span>FIFA</span></div>
+      <div class="name-wrap">
+        <div class="name">${esc(name)}</div>
+        ${d.nickname ? `<div class="nick">${esc(d.nickname)}</div>` : ''}
+        <div class="coach">👔 ${esc(d.coach)}</div>
+        <div class="qual">📋 Qualifying record + best finish shown here</div>
+      </div>
+    </div>
+    ${sectionHTML('style', esc(d.style))}
+    ${sectionHTML('players', players)}
+    ${sectionHTML('strengths', list(d.strengths))}
+    ${sectionHTML('weaknesses', list(d.weaknesses))}
+    ${sectionHTML('outlook', esc(d.outlook))}
+  `;
+}
+
+function refresh(){
+  document.getElementById('card-a').innerHTML = renderCard(document.getElementById('sel-a').value);
+  document.getElementById('card-b').innerHTML = renderCard(document.getElementById('sel-b').value);
+}
+
+// Populate dropdowns
+const names = Object.keys(TEAM_DOSSIER).sort();
+for(const sel of [document.getElementById('sel-a'), document.getElementById('sel-b')]){
+  sel.innerHTML = names.map(n=>`<option>${esc(n)}</option>`).join('');
+  sel.addEventListener('change', refresh);
+}
+document.getElementById('sel-a').value = 'Brazil';
+document.getElementById('sel-b').value = 'Morocco';
+
+// Theme toggle
+document.getElementById('theme').addEventListener('click', ()=>{
+  const dark = document.body.getAttribute('data-theme') === 'dark';
+  document.body.setAttribute('data-theme', dark ? 'light' : 'dark');
+  document.getElementById('theme').textContent = dark ? '🌙 Dark' : '☀️ Light';
+});
+
+refresh();
+</script>
+</body>
+</html>
