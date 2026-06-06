@@ -2462,12 +2462,7 @@ function authCloseCamera(){
 async function authFinishRegistration(){
   if(!S.avatar){ alert('Please add a photo first.'); return; }
   // Save avatar to server then enter the app
-  try{
-    await fetch('/api/predictions', {
-      method:'PUT', headers:_authHeaders(),
-      body:JSON.stringify({gPreds:{}, kPreds:{}, avatar:S.avatar})
-    });
-  }catch(e){ console.warn('Avatar save failed:', e); }
+  await _saveAvatar();
   authCloseCamera();
   hideAuthOverlay();
   connectWS();
@@ -2609,13 +2604,18 @@ let _saveFailTimer = null;
 async function _doPersist(){
   if(!_token) return;
   try{
-    // Avatar is NOT included here — it's saved separately when set (keeps payload tiny)
+    // Avatar is saved separately via _saveAvatar() — this payload is picks only
     const res = await fetch('/api/predictions', {
       method:'PUT',
       headers:_authHeaders(),
       body:JSON.stringify({gPreds:S.gPreds, kPreds:S.kPreds})
     });
     if(res.status === 401){ _handleSessionExpired(); return; }
+    if(res.status === 403){ // tournament has started — picks are locked server-side
+      _showSaveError('🔒 Predictions are locked — the tournament has begun.');
+      render(); // re-render so the read-only/locked UI shows
+      return;
+    }
     if(!res.ok){
       console.warn('Auto-save failed:', res.status);
       _showSaveError('⚠ Picks not saved — tap any score to retry');
@@ -2623,6 +2623,22 @@ async function _doPersist(){
   }catch(e){
     console.warn('Auto-save failed:', e.message);
     _showSaveError('⚠ Picks not saved (network error) — tap any score to retry');
+  }
+}
+
+// Avatar saves go through a dedicated endpoint that is NOT locked during the
+// tournament, so players can change their photo any time.
+async function _saveAvatar(){
+  if(!_token) return;
+  try{
+    const res = await fetch('/api/avatar', {
+      method:'PUT', headers:_authHeaders(),
+      body:JSON.stringify({avatar:S.avatar||''})
+    });
+    if(res.status === 401){ _handleSessionExpired(); return; }
+    if(!res.ok) console.warn('Avatar save failed:', res.status);
+  }catch(e){
+    console.warn('Avatar save failed:', e.message);
   }
 }
 function _showSaveError(msg){
@@ -4735,7 +4751,7 @@ function handleAvatarUpload(input){
   const reader=new FileReader();
   reader.onload=async e=>{
     S.avatar=await _resizeAvatar(e.target.result);
-    persist(); render();
+    _saveAvatar(); render();
   };
   reader.readAsDataURL(file);
 }
@@ -4774,7 +4790,7 @@ async function captureAvatarPhoto(){
   canvas.getContext('2d').drawImage(video,0,0);
   S.avatar=await _resizeAvatar(canvas.toDataURL('image/jpeg',0.82));
   closeAvatarCamera();
-  persist(); render();
+  _saveAvatar(); render();
 }
 function closeAvatarCamera(){
   if(_cameraStream){ _cameraStream.getTracks().forEach(t=>t.stop()); _cameraStream=null; }

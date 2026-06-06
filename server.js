@@ -20,6 +20,11 @@ const TURSO_TOKEN = process.env.TURSO_TOKEN || undefined;
 // See DEVELOPMENT.md → Environment Variables.
 const ADMIN_PIN = process.env.ADMIN_PIN;
 
+// Predictions lock — first kickoff. Must match LOCK_TIME in client.html.
+// After this instant the server rejects any pick edits (avatar changes still allowed).
+const LOCK_TIME = new Date('2026-06-11T19:00:00Z');
+function predictionsLocked() { return Date.now() >= LOCK_TIME.getTime(); }
+
 if (!TURSO_URL) {
   console.error('FATAL: TURSO_URL env var is not set. Set it in the Railway dashboard (Variables tab).');
   process.exit(1);
@@ -611,7 +616,13 @@ app.get('/api/state', asyncHandler(async (req, res) => {
 // PUT /api/predictions — save my group + KO predictions
 app.put('/api/predictions', requireAuth, asyncHandler(async (req, res) => {
   const { userId } = req.session;
-  const { gPreds = {}, kPreds = {}, avatar } = req.body;
+
+  // Hard lock once the tournament has started (backstop to the client-side lock)
+  if (predictionsLocked()) {
+    return res.status(403).json({ error: 'Predictions are locked — the tournament has begun.' });
+  }
+
+  const { gPreds = {}, kPreds = {} } = req.body;
 
   const statements = [];
 
@@ -652,19 +663,22 @@ app.put('/api/predictions', requireAuth, asyncHandler(async (req, res) => {
     });
   }
 
-  // Update avatar if provided
-  if (typeof avatar === 'string') {
-    const safeAvatar = avatar.startsWith('data:image/') ? avatar : '';
-    statements.push({
-      sql: 'UPDATE users SET avatar = ? WHERE id = ?',
-      args: [safeAvatar, userId],
-    });
-  }
-
   if (statements.length > 0) {
     await db.batch(statements, 'write');
   }
 
+  scheduleBroadcast();
+  res.json({ ok: true });
+}));
+
+// PUT /api/avatar — update profile photo. Deliberately NOT subject to the
+// predictions lock, so players can still change their photo during the tournament.
+app.put('/api/avatar', requireAuth, asyncHandler(async (req, res) => {
+  const { userId } = req.session;
+  const { avatar } = req.body;
+  if (typeof avatar !== 'string') return res.status(400).json({ error: 'avatar required' });
+  const safeAvatar = avatar.startsWith('data:image/') ? avatar : '';
+  await dbRun('UPDATE users SET avatar = ? WHERE id = ?', [safeAvatar, userId]);
   scheduleBroadcast();
   res.json({ ok: true });
 }));
