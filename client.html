@@ -314,6 +314,7 @@
   }
   .dossier-btn:hover { color:var(--accent); background:var(--bg-tint); }
   .dossier-btn svg { width:1.1rem; height:1.1rem; }
+  .dossier-btn { vertical-align:middle; }
 
   /* ── Dossier modal ── */
   #dossier-root:empty { display:none; }
@@ -3801,6 +3802,7 @@ function renderResults(){
           ${grpBadge}<span style="color:white;font-weight:500;">${teamSpan(game.home)}</span>
           <span style="color:#475569;margin:0 0.3rem;">v</span>
           <span style="color:white;font-weight:500;">${teamSpan(game.away,true)}</span>
+          ${dossierBtn(game.home, game.away)}
           <span style="margin-left:0.55rem;">${scoreStr}</span>
         </td>
         ${participants.map(p=>predCell(p,game,r)).join('')}
