@@ -267,3 +267,10 @@ and `body[data-theme="dark"]`.
   migrated to CSS variables over time. New code must use variables only.
 - **GROUP_GAMES duplication**: Fixtures are defined in both server and client. A future
   improvement would serve them from the server as part of the state payload.
+- **Knockout results display + per-digit highlighting** (planned for when the KO stage
+  arrives): the Results tab currently only renders group games (`GROUP_GAMES`). Add a
+  knockout results view (or extend the Results tab with resolved KO matches from
+  `S.kResults`), and on each prediction tint the individual goal numbers green/red by
+  whether they match the actual score — partial-alignment feedback on top of the
+  existing 3/1/0 scoring. Should also reflect the penalty-shootout winner, not just the
+  90-minute score. (Group stage intentionally keeps the simpler whole-cell coloring.)
