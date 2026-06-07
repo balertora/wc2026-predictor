@@ -1636,6 +1636,13 @@ const VENUES = {
   72: {city:'Philadelphia',   lat:39.901, lon:-75.168},   // Croatia vs Ghana — Lincoln Financial
 };
 
+// City → coordinates, derived from VENUES. Used for knockout venues, which are
+// stored as city names only (KO_VENUES) — every KO city also appears in VENUES.
+const CITY_COORDS = {};
+for(const v of Object.values(VENUES)){
+  if(v.city && !CITY_COORDS[v.city]) CITY_COORDS[v.city] = {lat:v.lat, lon:v.lon};
+}
+
 // ── Weather fetching ─────────────────────────────────────────
 const _weatherCache = {};
 
@@ -1803,14 +1810,35 @@ async function fetchWeather(lat, lon, dateStr){
 }
 const WMO_ICONS={0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',61:'🌧',63:'🌧',65:'🌧',71:'🌨',73:'🌨',75:'🌨',80:'🌦',81:'🌧',82:'⛈',95:'⛈',96:'⛈',99:'⛈'};
 
+// All knockout matches as {id, date} — dates are fixed regardless of which
+// teams qualify, so we can resolve them up front for weather fetching.
+function koVenueDates(){
+  const out = R32_FIXED.map(m => ({id:m.id, date:m.date}));
+  try{
+    const {r16, qf, sf, fin} = buildAllRounds();
+    for(const g of [...r16, ...qf, ...sf, ...fin]) out.push({id:g.id, date:g.date});
+  }catch(e){ /* bracket not resolvable yet — group dates still returned */ }
+  return out;
+}
+
 async function fetchWeatherForVisible(){
   const view=S.view;
   // Collect uncached (venue, date) pairs
   const needed=[];
+  const seen=new Set();
+  const add=(lat,lon,date)=>{
+    const key=`${lat},${lon},${date}`;
+    if(!_weatherCache[key] && !seen.has(key)){ seen.add(key); needed.push({lat,lon,date}); }
+  };
   for(const game of GROUP_GAMES){
     const v=VENUES[game.id]; if(!v) continue;
-    const key=`${v.lat},${v.lon},${game.date}`;
-    if(!_weatherCache[key]) needed.push({lat:v.lat,lon:v.lon,date:game.date});
+    add(v.lat, v.lon, game.date);
+  }
+  // Knockout venues (city → coords via CITY_COORDS)
+  for(const {id,date} of koVenueDates()){
+    const city=KO_VENUES[id]; if(!city) continue;
+    const c=CITY_COORDS[city]; if(!c) continue;
+    add(c.lat, c.lon, date);
   }
   if(!needed.length) return;
   // Fire all requests in parallel — each has its own 8s abort timeout inside fetchWeather
@@ -3673,7 +3701,13 @@ function renderKoCard(game, round){
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
         <span style="font-size:0.7rem;background:rgba(255,255,255,0.06);color:#64748b;padding:0.1rem 0.4rem;border-radius:0.25rem;">${roundLabel}</span>
         <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
-        ${KO_VENUES[game.id]?`<span style="font-size:0.7rem;color:#475569;">📍 ${KO_VENUES[game.id]}</span>`:''}
+        ${(()=>{
+          const city=KO_VENUES[game.id]; if(!city) return '';
+          const c=CITY_COORDS[city];
+          const wd=c&&_weatherCache[`${c.lat},${c.lon},${game.date}`];
+          const wx=wd?` ${WMO_ICONS[wd.code]||'🌡'} ${wd.isHistorical?'~':''}${wd.tempMax}°C`:'';
+          return `<span style="font-size:0.7rem;color:#475569;">📍 ${city}${wx}</span>`;
+        })()}
         <div style="margin-left:auto;display:flex;align-items:center;gap:0.4rem;">
           ${dossierBtn(game.home, game.away)}
           ${done?'<span style="font-size:0.7rem;color:#4ade80;">✓</span>':''}
