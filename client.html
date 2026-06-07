@@ -2291,6 +2291,9 @@ const KO_ROUND_WEIGHTS = {
 const KO_CURVE_LABELS = { gentle:'Gentle (1·1.5·2·2.5·3)', moderate:'Moderate (1·2·3·4·5)', steep:'Steep (1·2·4·6·8)' };
 function koCurveName(){ return KO_ROUND_WEIGHTS[S.settings?.ko_weight_curve] ? S.settings.ko_weight_curve : 'moderate'; }
 function koWeights(){ return KO_ROUND_WEIGHTS[koCurveName()]; }
+// Repicker uses its own independent curve (falls back to moderate).
+function reCurveName(){ return KO_ROUND_WEIGHTS[S.settings?.re_weight_curve] ? S.settings.re_weight_curve : 'moderate'; }
+function reWeights(){ return KO_ROUND_WEIGHTS[reCurveName()]; }
 function koRoundKey(id){
   if(id.startsWith('r32')) return 'r32';
   if(id.startsWith('r16')) return 'r16';
@@ -2328,7 +2331,7 @@ function koScoreFor(kPreds){
 // Same scoring engine for the Repicker (separate game). Maps the repicker's
 // 'final-1' slot to the actual 'final' result; no 3rd-place game.
 function koScoreForRepicker(rePicks){
-  const w = koWeights();
+  const w = reWeights();
   const ids = [
     ...Array.from({length:16},(_,i)=>`r32-${i+1}`),
     ...Array.from({length:8}, (_,i)=>`r16-${i+1}`),
@@ -4460,19 +4463,6 @@ function renderAdmin(){
       ${(()=>{ const t=localStorage.getItem('wc26_espn_fetched'); return t?`<p style="font-size:0.72rem;color:#475569;margin-top:0.5rem;margin-bottom:0;">Last fetched: ${new Date(t).toLocaleString()}</p>`:''; })()}
     </div>
 
-    <!-- Manual score entry accordion -->
-    <details style="margin-bottom:1rem;">
-      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;" onclick="">
-        <span>✏️ Enter scores manually</span>
-        <span style="font-size:0.75rem;color:#64748b;font-weight:400;">${done}/${GROUP_GAMES.length} entered · click to expand</span>
-      </summary>
-      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
-        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.875rem;">Scores can also be pulled automatically via ESPN above.</p>
-        <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${grpTabs}</div>
-        <div>${gameRows}</div>
-      </div>
-    </details>
-
     ${(()=>{
       const enteredGames = GROUP_GAMES.filter(g=>S.gResults[g.id])
         .sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id);
@@ -4545,21 +4535,27 @@ function renderAdmin(){
       </div>
     </div>`;})()}
 
-    ${(()=>{ const cur=koCurveName(); return `
+    ${(()=>{ const koCur=koCurveName(), reCur=reCurveName(); return `
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
       <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Knockout scoring</h2>
       <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.875rem;">
-        Each KO match scores <b>0.5 per correct team</b> in the matchup, plus <b>+1</b> for the right team advancing or <b>+3</b> for the exact score (incl. penalty winner), all multiplied by a per-round weight. KO points fold into the leaderboard Total.</p>
-      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;max-width:22rem;">
-        Round-weight curve
-        <select onchange="saveKoCurve(this.value)" style="font-size:0.85rem;">
-          ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===cur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
-        </select>
-      </label>
-      <div style="font-size:0.72rem;color:#475569;margin-top:0.5rem;">R32 · R16 · QF · SF · Final multipliers (3rd-place game ×1).</div>
+        Each KO match scores <b>0.5 per correct team</b> in the matchup, plus <b>+1</b> for the right team advancing or <b>+3</b> for the exact score (incl. penalty winner), all multiplied by a per-round weight. The two games are weighted independently.</p>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+        <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">
+          Primary KO round-weight curve
+          <select onchange="saveKoCurve(this.value)" style="font-size:0.85rem;">
+            ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===koCur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">
+          Repicker round-weight curve
+          <select onchange="saveReCurve(this.value)" style="font-size:0.85rem;">
+            ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===reCur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div style="font-size:0.72rem;color:#475569;margin-top:0.5rem;">R32 · R16 · QF · SF · Final multipliers (3rd-place game ×1). Primary KO folds into the leaderboard Total; the Repicker has its own separate leaderboard.</div>
     </div>`; })()}
-
-    ${renderAdminKoEntry()}
 
     ${(()=>{
       const repickerOpen   = S.settings?.repicker_open   === 'true';
@@ -4592,7 +4588,24 @@ function renderAdmin(){
         ${(adminOpen||forceClosed)?`<button onclick="setRepickerOverride('auto')" style="padding:0.4rem 0.875rem;font-size:0.78rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;cursor:pointer;">Reset to auto</button>`:''}
       </div>
     </div>`;
-    })()}`;
+    })()}
+
+    <!-- ── Manual entry (fallbacks only — results normally auto-fill from ESPN) ── -->
+    <h2 style="font-size:1rem;font-weight:700;color:#94a3b8;margin:2rem 0 0.35rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:1.25rem;">⚙️ Manual entry (fallbacks)</h2>
+    <p style="font-size:0.78rem;color:#475569;margin-bottom:0.875rem;">Results normally auto-fill from ESPN. Use these only if ESPN is wrong or hasn't posted a result yet.</p>
+
+    <details style="margin-bottom:1rem;">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
+        <span>✏️ Enter group scores manually</span>
+        <span style="font-size:0.75rem;color:#64748b;font-weight:400;">${done}/${GROUP_GAMES.length} entered · click to expand</span>
+      </summary>
+      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
+        <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${grpTabs}</div>
+        <div>${gameRows}</div>
+      </div>
+    </details>
+
+    ${renderAdminKoEntry()}`;
 }
 
 // ── Admin: knockout result entry ─────────────────────────────
@@ -4684,6 +4697,16 @@ async function saveKoCurve(v){
     await fetch('/api/settings/ko_weight_curve', {method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:v})});
     if(!S.settings) S.settings={};
     S.settings.ko_weight_curve = v;
+    render();
+  }catch(e){ alert('Failed to save: '+e.message); }
+}
+
+async function saveReCurve(v){
+  if(!KO_ROUND_WEIGHTS[v]) return;
+  try{
+    await fetch('/api/settings/re_weight_curve', {method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:v})});
+    if(!S.settings) S.settings={};
+    S.settings.re_weight_curve = v;
     render();
   }catch(e){ alert('Failed to save: '+e.message); }
 }
