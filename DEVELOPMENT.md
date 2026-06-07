@@ -267,10 +267,23 @@ and `body[data-theme="dark"]`.
   migrated to CSS variables over time. New code must use variables only.
 - **GROUP_GAMES duplication**: Fixtures are defined in both server and client. A future
   improvement would serve them from the server as part of the state payload.
-- **Knockout results display + per-digit highlighting** (planned for when the KO stage
-  arrives): the Results tab currently only renders group games (`GROUP_GAMES`). Add a
-  knockout results view (or extend the Results tab with resolved KO matches from
-  `S.kResults`), and on each prediction tint the individual goal numbers green/red by
-  whether they match the actual score — partial-alignment feedback on top of the
-  existing 3/1/0 scoring. Should also reflect the penalty-shootout winner, not just the
-  90-minute score. (Group stage intentionally keeps the simpler whole-cell coloring.)
+- **Knockout results display** (planned for when the KO stage arrives). The Results tab
+  currently only renders group games (`GROUP_GAMES`); extend it (or add a KO section)
+  to show resolved knockout matches from `S.kResults`. Unlike the group stage — where
+  everyone predicts the same fixed fixtures — in the knockouts the **matchup itself is
+  predicted**, so each person's cell must convey three things:
+    1. **Matchup correctness** — did they have the right two teams in that slot?
+       (both / one / neither). A participant whose bracket diverged may have predicted
+       a completely different game for that slot.
+    2. **Outcome** — right winner/result.
+    3. **Score** — per-digit highlight: tint each goal number green/red by whether it
+       matches the actual score (only meaningful when the matchup matches).
+  Also reflect the penalty-shootout winner, not just the 90-minute score. When the
+  matchup is wrong, consider showing who they *had* in that slot (e.g. "had: Spain v
+  Italy") rather than a score. Goal: people can see at a glance whether they nailed the
+  matchup as well as the outcome. (Group stage intentionally keeps the simpler
+  whole-cell coloring.)
+  Open design questions to settle at build time: how to fit matchup-correctness +
+  score into a narrow per-participant column; whether "right matchup" requires exact
+  home/away orientation or just the same two teams; how KO results get entered
+  (admin-only, since the ESPN poller currently maps to group fixtures only).
