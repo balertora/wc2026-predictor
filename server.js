@@ -532,7 +532,18 @@ async function pollESPN() {
 const app = express();
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  setHeaders: (res, filePath) => {
+    // JS/CSS change with app updates — revalidate every load (cheap 304 via ETag)
+    // so fixes aren't masked by a stale 7-day cache. Images rarely change → cache long.
+    if (/\.(js|css)$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=604800');
+    }
+  },
+}));
 
 // Serve client.html at root
 app.get('/', (req, res) => {
