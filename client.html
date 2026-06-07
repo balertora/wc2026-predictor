@@ -5627,12 +5627,34 @@ function renderRepicker(){
     </div>`;
   }).join('');
 
+  // Admin-only banner making the true open/closed state unmistakable.
+  const adminStatus = (()=>{
+    if(!_isAdmin) return '';
+    const autoOpen    = S.settings?.repicker_auto==='true';
+    const forceOpen   = S.settings?.repicker_admin_open==='true';
+    const forceClosed = S.settings?.repicker_force_closed==='true';
+    let bg, border, txt;
+    if(!repickerOpen){
+      bg='rgba(100,116,139,0.12)'; border='rgba(148,163,184,0.4)';
+      txt=`🔒 <b>CLOSED to players — this is an admin-only preview.</b> It opens automatically once all 72 group results are in (currently ${gDone}/72).${forceClosed?' It is also currently force-closed by admin.':''}`;
+    } else if(forceOpen && !autoOpen){
+      bg='rgba(217,119,6,0.15)'; border='rgba(217,119,6,0.5)';
+      txt=`🟡 <b>OPEN to everyone via “Force-open (testing)”.</b> Players can use the Repicker right now, before the group stage is finished. To keep it closed until all groups are done, open <b>Admin → Repicker</b> and click <b>“Reset to auto.”</b>`;
+    } else {
+      bg='rgba(22,163,74,0.12)'; border='rgba(22,163,74,0.4)';
+      txt=`🟢 <b>OPEN automatically</b> — all 72 group results are in.`;
+    }
+    return `<div style="background:${bg};border:1px solid ${border};border-radius:0.625rem;padding:0.6rem 0.85rem;margin-bottom:1rem;font-size:0.8rem;color:var(--text);line-height:1.5;">${txt}</div>`;
+  })();
+
   return `
   <div style="padding-bottom:1.5rem;">
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
       <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Pick the winner of each match. Green = your pick. Blue = actual result. Red = wrong.</p>
     </div>
+
+    ${adminStatus}
 
     <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>
 
