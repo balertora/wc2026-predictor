@@ -4490,7 +4490,7 @@ function renderAdminKoEntry(){
         <span style="font-size:0.75rem;color:#64748b;font-weight:400;">${entered}/${order.length} entered · click to expand</span>
       </summary>
       <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
-        <p style="font-size:0.78rem;color:#64748b;margin-bottom:0.875rem;">Enter the actual matchup (teams) and score for each knockout game as it's played. For a draw decided on penalties, also set the penalty winner. These feed the Knockout results table on the Results tab. (R32 rows pre-fill from the Repicker bracket when set.)</p>
+        <p style="font-size:0.78rem;color:#64748b;margin-bottom:0.875rem;">Knockout results auto-fill from ESPN (matched by venue + date, including the penalty-shootout winner). Use this only to override or fix a game ESPN got wrong or hasn't posted — a value you save here is marked manual and won't be overwritten by ESPN. (R32 rows pre-fill from the Repicker bracket when set.)</p>
         <datalist id="ko-teams">${teamOptions}</datalist>
         ${body}
       </div>

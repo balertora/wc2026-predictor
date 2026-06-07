@@ -309,6 +309,62 @@ for (const g of GROUP_GAMES) {
   FIXTURE_LOOKUP[`${g.home}|${g.away}`] = g.id;
 }
 
+// ── Knockout schedule (for mapping ESPN KO events → our bracket-slot ids) ──────
+// ESPN doesn't expose our slot ids (r16-1, …), so we map each finished KO event
+// to a slot by date + venue. `tokens` are lowercase substrings matched against
+// ESPN's venue.fullName and venue.address.city (any one hit + a date within ±1
+// day = a match). Dates mirror the client's KO schedule.
+const KO_SCHEDULE = {
+  'r32-1':  { date:'2026-06-28', tokens:['sofi','inglewood','los angeles'] },
+  'r32-2':  { date:'2026-06-29', tokens:['nrg','houston'] },
+  'r32-3':  { date:'2026-06-29', tokens:['bbva','monterrey','guadalupe'] },
+  'r32-4':  { date:'2026-07-03', tokens:['at&t','arlington','dallas'] },
+  'r32-5':  { date:'2026-07-02', tokens:['sofi','inglewood','los angeles'] },
+  'r32-6':  { date:'2026-07-03', tokens:['hard rock','miami'] },
+  'r32-7':  { date:'2026-06-30', tokens:['at&t','arlington','dallas'] },
+  'r32-8':  { date:'2026-07-02', tokens:['bmo','toronto'] },
+  'r32-9':  { date:'2026-06-30', tokens:['azteca','banorte','mexico city'] },
+  'r32-10': { date:'2026-07-02', tokens:['bc place','vancouver'] },
+  'r32-11': { date:'2026-07-01', tokens:['levi','santa clara','san francisco'] },
+  'r32-12': { date:'2026-06-29', tokens:['gillette','foxborough','boston'] },
+  'r32-13': { date:'2026-07-01', tokens:['lumen','seattle'] },
+  'r32-14': { date:'2026-06-30', tokens:['metlife','rutherford'] },
+  'r32-15': { date:'2026-07-03', tokens:['arrowhead','kansas city'] },
+  'r32-16': { date:'2026-07-01', tokens:['mercedes','atlanta'] },
+  'r16-1':  { date:'2026-07-04', tokens:['lincoln financial','philadelphia'] },
+  'r16-2':  { date:'2026-07-04', tokens:['nrg','houston'] },
+  'r16-3':  { date:'2026-07-05', tokens:['metlife','rutherford'] },
+  'r16-4':  { date:'2026-07-05', tokens:['azteca','banorte','mexico city'] },
+  'r16-5':  { date:'2026-07-06', tokens:['at&t','arlington','dallas'] },
+  'r16-6':  { date:'2026-07-06', tokens:['lumen','seattle'] },
+  'r16-7':  { date:'2026-07-07', tokens:['mercedes','atlanta'] },
+  'r16-8':  { date:'2026-07-07', tokens:['bc place','vancouver'] },
+  'qf-1':   { date:'2026-07-09', tokens:['gillette','foxborough','boston'] },
+  'qf-2':   { date:'2026-07-11', tokens:['hard rock','miami'] },
+  'qf-3':   { date:'2026-07-10', tokens:['sofi','inglewood','los angeles'] },
+  'qf-4':   { date:'2026-07-11', tokens:['arrowhead','kansas city'] },
+  'sf-1':   { date:'2026-07-14', tokens:['at&t','arlington','dallas'] },
+  'sf-2':   { date:'2026-07-15', tokens:['mercedes','atlanta'] },
+  '3rd':    { date:'2026-07-18', tokens:['hard rock','miami'] },
+  'final':  { date:'2026-07-19', tokens:['metlife','rutherford'] },
+};
+
+function _daysApart(a, b) {
+  return Math.abs((new Date(a+'T12:00:00Z') - new Date(b+'T12:00:00Z')) / 86400000);
+}
+
+// Map a finished ESPN KO event to our slot id by venue token + nearest date (≤1 day).
+function matchKoSlot(venueName, venueCity, eventDate) {
+  const hay = `${venueName || ''} ${venueCity || ''}`.toLowerCase();
+  let best = null, bestDiff = Infinity;
+  for (const [koId, sch] of Object.entries(KO_SCHEDULE)) {
+    if (!sch.tokens.some(t => hay.includes(t))) continue;
+    const diff = _daysApart(sch.date, eventDate);
+    if (diff <= 1 && diff < bestDiff) { best = koId; bestDiff = diff; }
+  }
+  return best;
+}
+
 // ── Shared state builder ─────────────────────────────────────────────────────
 // Simple in-memory cache — avoids redundant DB queries when multiple WS clients
 // connect simultaneously or a broadcast fires within the debounce window.
@@ -499,26 +555,69 @@ async function pollESPN() {
 
       const fixtureId = FIXTURE_LOOKUP[`${homeName}|${awayName}`]
                      || FIXTURE_LOOKUP[`${awayName}|${homeName}`];
-      if (!fixtureId) continue;
 
-      const existing = await dbGet('SELECT home_score, away_score FROM group_results WHERE game_id = ?', [fixtureId]);
-      const isFlipped = !FIXTURE_LOOKUP[`${homeName}|${awayName}`];
+      if (fixtureId) {
+        // ── Group-stage fixture ──
+        const existing = await dbGet('SELECT home_score, away_score FROM group_results WHERE game_id = ?', [fixtureId]);
+        const isFlipped = !FIXTURE_LOOKUP[`${homeName}|${awayName}`];
+        const dbHome = isFlipped ? awayScore : homeScore;
+        const dbAway = isFlipped ? homeScore : awayScore;
+        if (!existing || existing.home_score !== dbHome || existing.away_score !== dbAway) {
+          await dbRun(
+            `INSERT INTO group_results (game_id, home_score, away_score, source, updated_at)
+             VALUES (?, ?, ?, ?, datetime('now'))
+             ON CONFLICT(game_id) DO UPDATE SET
+               home_score = excluded.home_score,
+               away_score = excluded.away_score,
+               source     = excluded.source,
+               updated_at = excluded.updated_at`,
+            [fixtureId, dbHome, dbAway, 'espn']
+          );
+          console.log(`ESPN: Game ${fixtureId} (${homeName} v ${awayName}) → ${dbHome}–${dbAway}`);
+          changed = true;
+        }
+        continue;
+      }
 
-      const dbHome = isFlipped ? awayScore : homeScore;
-      const dbAway = isFlipped ? homeScore : awayScore;
+      // ── Knockout match? Map ESPN event → our bracket slot by venue + date ──
+      const koId = matchKoSlot(comps.venue?.fullName, comps.venue?.address?.city, (event.date || '').slice(0, 10));
+      if (!koId) continue;
 
-      if (!existing || existing.home_score !== dbHome || existing.away_score !== dbAway) {
+      // Don't overwrite a result an admin entered manually.
+      const exKo = await dbGet('SELECT home, away, home_score, away_score, pen_winner, source FROM ko_results WHERE match_id = ?', [koId]);
+      if (exKo && exKo.source === 'manual') continue;
+
+      // Penalty winner: KO draws (incl. after extra time) are decided on penalties.
+      let penWinner = null;
+      if (homeScore === awayScore) {
+        if (homeComp.winner === true) penWinner = homeName;
+        else if (awayComp.winner === true) penWinner = awayName;
+        else {
+          const hSO = parseInt(homeComp.shootoutScore ?? '-1', 10);
+          const aSO = parseInt(awayComp.shootoutScore ?? '-1', 10);
+          if (hSO >= 0 && aSO >= 0 && hSO !== aSO) penWinner = hSO > aSO ? homeName : awayName;
+        }
+        if (!penWinner) continue; // drawn but winner not yet resolvable — wait for next poll
+      }
+
+      const koChanged = !exKo || exKo.home !== homeName || exKo.away !== awayName ||
+                        exKo.home_score !== homeScore || exKo.away_score !== awayScore ||
+                        (exKo.pen_winner || null) !== penWinner;
+      if (koChanged) {
         await dbRun(
-          `INSERT INTO group_results (game_id, home_score, away_score, source, updated_at)
-           VALUES (?, ?, ?, ?, datetime('now'))
-           ON CONFLICT(game_id) DO UPDATE SET
+          `INSERT INTO ko_results (match_id, home, away, home_score, away_score, pen_winner, source, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(match_id) DO UPDATE SET
+             home       = excluded.home,
+             away       = excluded.away,
              home_score = excluded.home_score,
              away_score = excluded.away_score,
+             pen_winner = excluded.pen_winner,
              source     = excluded.source,
              updated_at = excluded.updated_at`,
-          [fixtureId, dbHome, dbAway, 'espn']
+          [koId, homeName, awayName, homeScore, awayScore, penWinner, 'espn']
         );
-        console.log(`ESPN: Game ${fixtureId} (${homeName} v ${awayName}) → ${dbHome}–${dbAway}`);
+        console.log(`ESPN: KO ${koId} (${homeName} v ${awayName}) → ${homeScore}–${awayScore}${penWinner ? ` (pens: ${penWinner})` : ''}`);
         changed = true;
       }
     }

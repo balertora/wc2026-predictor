@@ -167,6 +167,15 @@ Team names from ESPN are mapped to app names via `ESPN_NAME_MAP` in `server.js`.
 canonical names used in the client's `GROUP_GAMES`. If a fixture is ever corrected,
 update both files.
 
+The same poll also handles **knockout** games. Group events map by team pair
+(`FIXTURE_LOOKUP`); any other finished event is matched to a bracket slot via
+`matchKoSlot()` (venue token + date within ±1 day, using `KO_SCHEDULE`) and written to
+`ko_results` with `source='espn'`, including the penalty-shootout winner (from the
+competitor `winner` flag or `shootoutScore`). A result an admin entered manually
+(`source='manual'`) is never overwritten by ESPN. Because ESPN's exact KO venue/team
+strings can't be verified pre-tournament, this should be sanity-checked on the first
+R32 games; the admin KO entry UI is the fallback/override.
+
 ---
 
 ## Fixture List Duplication
@@ -267,23 +276,7 @@ and `body[data-theme="dark"]`.
   migrated to CSS variables over time. New code must use variables only.
 - **GROUP_GAMES duplication**: Fixtures are defined in both server and client. A future
   improvement would serve them from the server as part of the state payload.
-- **Knockout results display** (planned for when the KO stage arrives). The Results tab
-  currently only renders group games (`GROUP_GAMES`); extend it (or add a KO section)
-  to show resolved knockout matches from `S.kResults`. Unlike the group stage — where
-  everyone predicts the same fixed fixtures — in the knockouts the **matchup itself is
-  predicted**, so each person's cell must convey three things:
-    1. **Matchup correctness** — did they have the right two teams in that slot?
-       (both / one / neither). A participant whose bracket diverged may have predicted
-       a completely different game for that slot.
-    2. **Outcome** — right winner/result.
-    3. **Score** — per-digit highlight: tint each goal number green/red by whether it
-       matches the actual score (only meaningful when the matchup matches).
-  Also reflect the penalty-shootout winner, not just the 90-minute score. When the
-  matchup is wrong, consider showing who they *had* in that slot (e.g. "had: Spain v
-  Italy") rather than a score. Goal: people can see at a glance whether they nailed the
-  matchup as well as the outcome. (Group stage intentionally keeps the simpler
-  whole-cell coloring.)
-  Open design questions to settle at build time: how to fit matchup-correctness +
-  score into a narrow per-participant column; whether "right matchup" requires exact
-  home/away orientation or just the same two teams; how KO results get entered
-  (admin-only, since the ESPN poller currently maps to group fixtures only).
+- **Knockout results auto-fill from ESPN — needs live validation.** Implemented (see
+  Knockout Results below), but the ESPN venue/team strings for KO games can't be
+  verified until those matches exist. If auto-fill misses a game, the admin entry is
+  the fallback. Worth a quick check once the first R32 games are played.
