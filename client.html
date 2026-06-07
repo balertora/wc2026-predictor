@@ -2994,7 +2994,7 @@ function _dossierCardHTML(name){
           ${d.nickname ? `<div class="dsr-nick">${esc(d.nickname)}</div>` : ''}
           <div class="dsr-meta">👔 ${esc(d.coach)}</div>
           ${qual ? `<div class="dsr-meta">📋 ${qual}</div>` : ''}
-          ${best ? `<div class="dsr-best">🏆 ${best}</div>` : ''}
+          ${best ? `<div class="dsr-best">🏆 ${best}${d.recent ? `, ${esc(d.recent)}` : ''}</div>` : ''}
         </div>
       </div>
       ${sec('style', esc(d.style))}

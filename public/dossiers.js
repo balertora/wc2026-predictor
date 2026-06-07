@@ -7,6 +7,8 @@
      rank        – FIFA men's world ranking (1 April 2026 update)
      coach       – head coach for the tournament
      nickname    – common national-team nickname ('' if none in English use)
+     recent      – most recent WC result, e.g. 'WC22: Round of 16' (omitted when
+                   it would duplicate the best finish, or for tournament debutants)
      style       – one-line description of playing style
      keyPlayers  – 3–5 players: { name, pos, note }   pos ∈ GK/DF/MF/FW
      strengths   – short bullet list
@@ -21,6 +23,7 @@ const TEAM_DOSSIER = {
   // ── GROUP A ────────────────────────────────────────────────────────────────
   'Mexico': {
     rank: 15, coach: 'Javier Aguirre', nickname: 'El Tri',
+    recent: 'WC22: Group stage',
     style: 'Possession-oriented co-hosts who build patiently and lean on home crowds; can lack a clinical edge.',
     keyPlayers: [
       { name: 'Raúl Jiménez', pos: 'FW', note: '3rd all-time Mexico scorer (44); Fulham target man' },
@@ -45,6 +48,7 @@ const TEAM_DOSSIER = {
   },
   'South Korea': {
     rank: 25, coach: 'Hong Myung-bo', nickname: 'Taegeuk Warriors',
+    recent: 'WC22: Round of 16',
     style: 'High-tempo, hard-running side built on European-based talent and relentless work rate.',
     keyPlayers: [
       { name: 'Son Heung-min', pos: 'FW', note: 'Captain and talisman; pace and finishing' },
@@ -56,7 +60,8 @@ const TEAM_DOSSIER = {
     outlook: 'Second favorites in Group A and a likely qualifier with their star quality.',
   },
   'Czechia': {
-    rank: 41, coach: 'Ivan Hašek', nickname: '',
+    rank: 41, coach: 'Ivan Hašek', nickname: 'Repre',
+    recent: 'WC06: Group stage',
     style: 'Organized, physical and a genuine set-piece menace — scored more corners than any European side in qualifying.',
     keyPlayers: [
       { name: 'Patrik Schick', pos: 'FW', note: 'Leverkusen striker; top scorer in qualifying (5)' },
@@ -71,6 +76,7 @@ const TEAM_DOSSIER = {
   // ── GROUP B ────────────────────────────────────────────────────────────────
   'Canada': {
     rank: 30, coach: 'Jesse Marsch', nickname: 'Les Rouges',
+    recent: 'WC22: Group stage',
     style: 'Aggressive high press and fast vertical transitions under Jesse Marsch.',
     keyPlayers: [
       { name: 'Alphonso Davies', pos: 'DF', note: 'Bayern flyer; overlapping pace down the left' },
@@ -95,6 +101,7 @@ const TEAM_DOSSIER = {
   },
   'Qatar': {
     rank: 55, coach: 'Julen Lopetegui', nickname: 'The Maroon',
+    recent: 'WC22: Group stage',
     style: 'Technical, patient possession football — a step up in pragmatism under Lopetegui after a chastening 2022.',
     keyPlayers: [
       { name: 'Almoez Ali', pos: 'FW', note: 'Record goalscorer, 2019 Asian Cup top scorer' },
@@ -107,6 +114,7 @@ const TEAM_DOSSIER = {
   },
   'Switzerland': {
     rank: 19, coach: 'Murat Yakin', nickname: 'Nati',
+    recent: 'WC22: Round of 16',
     style: 'Technically complete, defensively solid tournament side that grinds out results and excels in knockouts.',
     keyPlayers: [
       { name: 'Granit Xhaka', pos: 'MF', note: 'Captain and midfield conductor' },
@@ -121,6 +129,7 @@ const TEAM_DOSSIER = {
   // ── GROUP C ────────────────────────────────────────────────────────────────
   'Brazil': {
     rank: 6, coach: 'Carlo Ancelotti', nickname: 'Seleção',
+    recent: 'WC22: Quarterfinals',
     style: 'More measured and balanced under Ancelotti than past improvisational sides — better structured defensively, still loaded in attack.',
     keyPlayers: [
       { name: 'Vinícius Júnior', pos: 'FW', note: 'Match-winning dribbler on the left' },
@@ -140,7 +149,7 @@ const TEAM_DOSSIER = {
       { name: 'Brahim Díaz', pos: 'MF', note: 'Creative spark between the lines' },
       { name: 'Bilal El Khannouss', pos: 'MF', note: 'Rising playmaker' },
     ],
-    strengths: ['Best-ever African WC finish (4th, 2022)', 'AFCON champions', 'Tactical maturity'],
+    strengths: ['Best-ever African WC finish (4th, 2022)', 'AFCON champions (disputed)', 'Tactical maturity'],
     weaknesses: ['New coach mid-cycle', 'Reliance on transitions', 'Goal threat through the middle'],
     outlook: 'Brazil\'s biggest threat in Group C and a dark horse to go deep again.',
   },
@@ -162,7 +171,7 @@ const TEAM_DOSSIER = {
     keyPlayers: [
       { name: 'Scott McTominay', pos: 'MF', note: 'Napoli cult hero; scored a stunning qualifier' },
       { name: 'Andy Robertson', pos: 'DF', note: 'Captain; attacking left-back' },
-      { name: 'Billy Gilmour', pos: 'MF', note: 'Tidy midfield controller' },
+      { name: 'John McGinn', pos: 'MF', note: 'Aston Villa midfielder; energy and goals' },
     ],
     strengths: ['Physical and organized', 'Set-piece threat', 'Ends a 28-year WC wait fired up'],
     weaknesses: ['Never escaped a WC group', 'Limited cutting edge', 'Depth in attack'],
@@ -172,6 +181,7 @@ const TEAM_DOSSIER = {
   // ── GROUP D ────────────────────────────────────────────────────────────────
   'USA': {
     rank: 16, coach: 'Mauricio Pochettino', nickname: 'USMNT',
+    recent: 'WC22: Round of 16',
     style: 'Athletic, high-pressing co-hosts riding huge home support and a golden generation of Europe-based players.',
     keyPlayers: [
       { name: 'Christian Pulisic', pos: 'FW', note: 'Talisman; thriving at AC Milan' },
@@ -196,6 +206,7 @@ const TEAM_DOSSIER = {
   },
   'Australia': {
     rank: 27, coach: 'Tony Popovic', nickname: 'Socceroos',
+    recent: 'WC22: Round of 16',
     style: 'Organized, hard-working and resilient — defends well and grinds out tournament results.',
     keyPlayers: [
       { name: 'Mathew Ryan', pos: 'GK', note: 'Captain; nine clean sheets in LaLiga last season' },
@@ -222,6 +233,7 @@ const TEAM_DOSSIER = {
   // ── GROUP E ────────────────────────────────────────────────────────────────
   'Germany': {
     rank: 10, coach: 'Julian Nagelsmann', nickname: 'Die Mannschaft',
+    recent: 'WC22: Group stage',
     style: 'Possession-based control with aggressive counter-pressing under Nagelsmann; loaded with young creators.',
     keyPlayers: [
       { name: 'Jamal Musiala', pos: 'MF', note: 'Dribbling genius between the lines' },
@@ -253,12 +265,13 @@ const TEAM_DOSSIER = {
       { name: 'Simon Adingra', pos: 'FW', note: 'Pace and dribbling out wide' },
       { name: 'Franck Kessié', pos: 'MF', note: 'Powerful midfield driver' },
     ],
-    strengths: ['Athletic, direct wide play', 'Reigning AFCON champions (2023)', 'Young attacking talent'],
+    strengths: ['Athletic, direct wide play', 'AFCON champion in 2023', 'Young attacking talent'],
     weaknesses: ['Goal threat through the middle', 'Defensive consistency', 'Tournament-football naivety'],
     outlook: 'In a tight fight with Ecuador for second behind Germany.',
   },
   'Ecuador': {
     rank: 23, coach: 'Sebastián Beccacece', nickname: 'La Tri',
+    recent: 'WC22: Group stage',
     style: 'High-energy, technically disciplined team that presses hard and defends superbly.',
     keyPlayers: [
       { name: 'Moisés Caicedo', pos: 'MF', note: 'Chelsea engine; elite ball-winner' },
@@ -273,6 +286,7 @@ const TEAM_DOSSIER = {
   // ── GROUP F ────────────────────────────────────────────────────────────────
   'Netherlands': {
     rank: 7, coach: 'Ronald Koeman', nickname: 'Oranje',
+    recent: 'WC22: Quarterfinals',
     style: 'Technically excellent and experienced, built on a strong defense and midfield control rather than firepower.',
     keyPlayers: [
       { name: 'Virgil van Dijk', pos: 'DF', note: 'Captain; world-class centre-back' },
@@ -285,6 +299,7 @@ const TEAM_DOSSIER = {
   },
   'Japan': {
     rank: 18, coach: 'Hajime Moriyasu', nickname: 'Samurai Blue',
+    recent: 'WC22: Round of 16',
     style: 'Fluid 3-4-2-1 with slick technical interplay and fearless pressing — beat England at Wembley in build-up.',
     keyPlayers: [
       { name: 'Takefusa Kubo', pos: 'MF', note: 'Real Sociedad dribbler; chaos in the final third' },
@@ -297,6 +312,7 @@ const TEAM_DOSSIER = {
   },
   'Sweden': {
     rank: 38, coach: 'Graham Potter', nickname: 'Blågult',
+    recent: 'WC18: Quarterfinals',
     style: 'Built around two elite strikers; pragmatic under new coach Graham Potter with goals from the front.',
     keyPlayers: [
       { name: 'Viktor Gyökeres', pos: 'FW', note: 'Lethal No.9; fired Sweden to the finals late' },
@@ -309,6 +325,7 @@ const TEAM_DOSSIER = {
   },
   'Tunisia': {
     rank: 44, coach: 'Sabri Lamouchi', nickname: 'Carthage Eagles',
+    recent: 'WC22: Group stage',
     style: 'Compact, exceptionally well-drilled defensive block that frustrates and counters.',
     keyPlayers: [
       { name: 'Ellyes Skhiri', pos: 'MF', note: 'Controls midfield; Frankfurt regular' },
@@ -323,6 +340,7 @@ const TEAM_DOSSIER = {
   // ── GROUP G ────────────────────────────────────────────────────────────────
   'Belgium': {
     rank: 9, coach: 'Rudi Garcia', nickname: 'Red Devils',
+    recent: 'WC22: Group stage',
     style: 'Possession and creativity through a golden-generation core, likely making their last big run together.',
     keyPlayers: [
       { name: 'Kevin De Bruyne', pos: 'MF', note: 'Elite playmaker; arguably Belgium\'s greatest' },
@@ -335,6 +353,7 @@ const TEAM_DOSSIER = {
   },
   'Egypt': {
     rank: 29, coach: 'Hossam Hassan', nickname: 'The Pharaohs',
+    recent: 'WC18: Group stage',
     style: 'Back-five low block designed to spring Salah and Marmoush on the counter.',
     keyPlayers: [
       { name: 'Mohamed Salah', pos: 'FW', note: 'Talisman; 2nd all-time Egypt scorer' },
@@ -347,6 +366,7 @@ const TEAM_DOSSIER = {
   },
   'Iran': {
     rank: 21, coach: 'Amir Ghalenoei', nickname: 'Team Melli',
+    recent: 'WC22: Group stage',
     style: 'Organized and counter-attacking, built on a solid block and two prolific strikers.',
     keyPlayers: [
       { name: 'Mehdi Taremi', pos: 'FW', note: 'Clinical finisher; qualifying top scorer (5)' },
@@ -373,6 +393,7 @@ const TEAM_DOSSIER = {
   // ── GROUP H ────────────────────────────────────────────────────────────────
   'Spain': {
     rank: 2, coach: 'Luis de la Fuente', nickname: 'La Roja',
+    recent: 'WC22: Round of 16',
     style: 'The complete modern side — suffocating possession, a brilliant midfield and a generational winger.',
     keyPlayers: [
       { name: 'Lamine Yamal', pos: 'FW', note: 'Generational talent; Euro 2024 winner at 18' },
@@ -397,6 +418,7 @@ const TEAM_DOSSIER = {
   },
   'Saudi Arabia': {
     rank: 61, coach: 'Hervé Renard', nickname: 'The Green Falcons',
+    recent: 'WC22: Group stage',
     style: 'Aggressive pressing side that can trouble big teams when it clicks — but leaves space behind when it doesn\'t.',
     keyPlayers: [
       { name: 'Salem Al-Dawsari', pos: 'FW', note: 'Captain; scored the 2022 winner vs Argentina' },
@@ -409,6 +431,7 @@ const TEAM_DOSSIER = {
   },
   'Uruguay': {
     rank: 17, coach: 'Marcelo Bielsa', nickname: 'La Celeste',
+    recent: 'WC22: Group stage',
     style: 'Intense, aggressive Bielsa pressing — forces more high turnovers than any other CONMEBOL side.',
     keyPlayers: [
       { name: 'Federico Valverde', pos: 'MF', note: 'All-action Real Madrid engine' },
@@ -423,6 +446,7 @@ const TEAM_DOSSIER = {
   // ── GROUP I ────────────────────────────────────────────────────────────────
   'France': {
     rank: 1, coach: 'Didier Deschamps', nickname: 'Les Bleus',
+    recent: 'WC22: Runners-up',
     style: 'Pragmatic, ruthlessly efficient and absurdly deep — controls games and kills them with elite individuals.',
     keyPlayers: [
       { name: 'Kylian Mbappé', pos: 'FW', note: 'Captain and superstar; pace and goals' },
@@ -435,6 +459,7 @@ const TEAM_DOSSIER = {
   },
   'Senegal': {
     rank: 14, coach: 'Pape Thiaw', nickname: 'Lions of Teranga',
+    recent: 'WC22: Round of 16',
     style: 'Powerful, athletic and compact — defensive intensity and transition power through an elite midfield.',
     keyPlayers: [
       { name: 'Nicolas Jackson', pos: 'FW', note: 'Pace and movement up top' },
@@ -454,11 +479,12 @@ const TEAM_DOSSIER = {
       { name: 'Jalal Hassan', pos: 'GK', note: 'Reliable last line' },
     ],
     strengths: ['Defensive organization and discipline', 'Emotional motivation (first WC since 1986)', 'Resilience'],
-    weaknesses: ['Limited possession quality', 'Goal threat', 'Gulf in class vs France'],
+    weaknesses: ['Limited possession quality', 'Goal threat', 'Gulf in class'],
     outlook: 'Back after 40 years; widely tipped to finish bottom but will be hard to break down.',
   },
   'Norway': {
     rank: 31, coach: 'Ståle Solbakken', nickname: '',
+    recent: 'WC98: Round of 16',
     style: 'Direct and vertical — get the ball to a world-class striker fast, with Ødegaard controlling tempo.',
     keyPlayers: [
       { name: 'Erling Haaland', pos: 'FW', note: 'All-time top scorer (55); blazing pace and finishing' },
@@ -499,6 +525,7 @@ const TEAM_DOSSIER = {
   },
   'Austria': {
     rank: 24, coach: 'Ralf Rangnick', nickname: 'Das Team',
+    recent: 'WC98: Group stage',
     style: 'Rangnick\'s relentless, aggressive pressing system — built specifically for tournament football.',
     keyPlayers: [
       { name: 'David Alaba', pos: 'DF', note: 'Captain and defensive leader; 113+ caps' },
@@ -525,6 +552,7 @@ const TEAM_DOSSIER = {
   // ── GROUP K ────────────────────────────────────────────────────────────────
   'Portugal': {
     rank: 5, coach: 'Roberto Martínez', nickname: 'A Seleção das Quinas',
+    recent: 'WC22: Quarterfinals',
     style: 'Talent-laden possession side with elite creativity and depth across every position.',
     keyPlayers: [
       { name: 'Bruno Fernandes', pos: 'MF', note: 'Captain; one of the PL\'s top chance creators' },
@@ -561,6 +589,7 @@ const TEAM_DOSSIER = {
   },
   'Colombia': {
     rank: 13, coach: 'Néstor Lorenzo', nickname: 'Los Cafeteros',
+    recent: 'WC18: Round of 16',
     style: 'Technical, creative and balanced — controls games through midfield with dangerous wide forwards.',
     keyPlayers: [
       { name: 'Luis Díaz', pos: 'FW', note: 'Dynamic winger; 7 goals in CONMEBOL qualifying' },
@@ -575,6 +604,7 @@ const TEAM_DOSSIER = {
   // ── GROUP L ────────────────────────────────────────────────────────────────
   'England': {
     rank: 4, coach: 'Thomas Tuchel', nickname: 'Three Lions',
+    recent: 'WC22: Quarterfinals',
     style: 'Defensively elite and pragmatic under Tuchel — built on a watertight base and world-class attackers.',
     keyPlayers: [
       { name: 'Harry Kane', pos: 'FW', note: 'All-time top scorer (78); Ballon d\'Or contender' },
@@ -587,6 +617,7 @@ const TEAM_DOSSIER = {
   },
   'Croatia': {
     rank: 11, coach: 'Zlatko Dalić', nickname: 'Vatreni (Blazers)',
+    recent: 'WC22: 3rd place',
     style: 'Midfield-dominant and game-smart — controls tempo and grinds out deep tournament runs.',
     keyPlayers: [
       { name: 'Luka Modrić', pos: 'MF', note: 'Greatest-ever Croatian; nears 200 caps' },
@@ -599,6 +630,7 @@ const TEAM_DOSSIER = {
   },
   'Ghana': {
     rank: 74, coach: 'Otto Addo', nickname: 'Black Stars',
+    recent: 'WC22: Group stage',
     style: 'Athletic and direct, with pace on the break and a mix of physicality and flair.',
     keyPlayers: [
       { name: 'Antoine Semenyo', pos: 'FW', note: 'In-form forward; 21 G/6 A across clubs this season' },
