@@ -2234,6 +2234,53 @@ function loserOf(matchId, home, away){
   return w===home ? away : home;
 }
 
+// ── Knockout results comparison (for the Results tab) ─────────
+// The team that advanced from a KO match: decisive score, else penalty winner.
+function koAdvancer(home, away, hs, as_, penWinner){
+  if(hs==null||as_==null) return null;
+  if(hs>as_) return home;
+  if(as_>hs) return away;
+  return penWinner || null; // draw → pen winner (stored as a team name)
+}
+
+// Compare one participant's KO prediction for a match to the actual result.
+//   actual = { home, away, homeScore, awayScore, penWinner }  (teams known)
+//   pred   = { home, away, homeScore, awayScore, penWinner }  or undefined
+// Returns a descriptor consumed by the Results-tab renderer. Scores in the
+// participant's prediction are realigned to the actual home/away orientation by
+// TEAM, so a flipped-orientation prediction still scores correctly.
+function koCompare(pred, actual){
+  const aH=actual.home, aA=actual.away;
+  const aHS=actual.homeScore, aAS=actual.awayScore;
+  const actualSet=[aH,aA].filter(Boolean);
+  if(!pred || (!pred.home && !pred.away)) return {kind:'nopick'};
+
+  const predTeams=[pred.home,pred.away].filter(Boolean);
+  const inter=predTeams.filter(t=>actualSet.includes(t));
+  const predLabel = (pred.home||'?')+' v '+(pred.away||'?')
+    + (pred.homeScore!=null&&pred.awayScore!=null ? ` ${pred.homeScore}–${pred.awayScore}` : '');
+
+  if(inter.length===0) return {kind:'wrong', predLabel};
+  if(inter.length===1) return {kind:'half', got:inter[0], predLabel};
+
+  // Both teams correct → align predicted scores to actual orientation by team
+  let ph, pa;
+  if(pred.home===aH && pred.away===aA){ ph=pred.homeScore; pa=pred.awayScore; }
+  else { ph=pred.awayScore; pa=pred.homeScore; }            // predicted with teams flipped
+  if(ph==null || pa==null) return {kind:'teams', predLabel};  // matchup right, no score
+
+  const actualAdv = koAdvancer(aH,aA,aHS,aAS,actual.penWinner);
+  const predAdv   = koAdvancer(aH,aA,ph,pa,pred.penWinner);
+  const homeOk = ph===aHS, awayOk = pa===aAS;
+  const isDraw = aHS===aAS;
+  const advOk  = !!actualAdv && actualAdv===predAdv;
+  const exact  = homeOk && awayOk && (!isDraw || advOk); // draw must also pick right pen winner
+  return {
+    kind:'full', ph, pa, aHS, aAS, homeOk, awayOk, exact, advOk, isDraw,
+    actualPen: actual.penWinner||'', predPen: pred.penWinner||'',
+  };
+}
+
 // Build Round of 16 matchups from R32 winners
 function buildR16(q){
   // Resolve the underlying R32 games so we know who's playing whom.
@@ -2707,10 +2754,10 @@ async function adminDelGResult(gameId){
   const res = await fetch(`/api/results/group/${gameId}`, {method:'DELETE', headers:_authHeaders()});
   if(!res.ok){ const d=await res.json(); throw new Error(d.error||'Failed'); }
 }
-async function adminSetKOResult(matchId, homeScore, awayScore, penWinner){
+async function adminSetKOResult(matchId, home, away, homeScore, awayScore, penWinner){
   const res = await fetch(`/api/results/ko/${encodeURIComponent(matchId)}`, {
     method:'PUT', headers:_authHeaders(),
-    body:JSON.stringify({homeScore, awayScore, penWinner:penWinner||null})
+    body:JSON.stringify({home, away, homeScore, awayScore, penWinner:penWinner||null})
   });
   if(!res.ok){ const d=await res.json(); throw new Error(d.error||'Failed'); }
 }
@@ -3876,6 +3923,95 @@ function renderResults(){
              + completedGames.map(g=>gameRow(g,'done')).join('')
              + upcomingGames.map(g=>gameRow(g,'upcoming')).join('');
 
+  // ── Knockout results section ──────────────────────────────
+  // Mirror the group participant columns, but read KO predictions.
+  const koParticipants=[];
+  if(S.name && Object.keys(S.gPreds).length>0) koParticipants.push({name:S.name+' (you)', kPreds:S.kPreds||{}});
+  koParticipants.push(...S.otherUsers.map(u=>({name:u.name, kPreds:u.kPreds||{}})));
+
+  const koRoundLabel = id =>
+    id.startsWith('r32') ? 'Round of 32' :
+    id.startsWith('r16') ? 'Round of 16' :
+    id.startsWith('qf')  ? 'Quarter-finals' :
+    id.startsWith('sf')  ? 'Semi-finals' :
+    id==='3rd'           ? 'Third place' :
+    id==='final'         ? 'Final' : id;
+
+  function koGameCell(actual){
+    const aHS=actual.homeScore, aAS=actual.awayScore;
+    let scoreStr='';
+    if(aHS!=null && aAS!=null){
+      scoreStr = `<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${aHS}–${aAS}</span>`;
+      scoreStr += (aHS===aAS && actual.penWinner)
+        ? `<span style="color:#94a3b8;font-size:0.6rem;margin-left:0.25rem;">pens: ${esc(shortTeamName(actual.penWinner))}</span>`
+        : `<span style="color:#475569;font-size:0.6rem;margin-left:0.2rem;">FT</span>`;
+    }
+    return `<td style="${TD_GAME}font-size:0.82rem;">
+      <span style="color:white;font-weight:500;">${teamSpan(actual.home)}</span>
+      <span style="color:#475569;margin:0 0.3rem;">v</span>
+      <span style="color:white;font-weight:500;">${teamSpan(actual.away,true)}</span>
+      ${dossierBtn(actual.home, actual.away)}
+      <span style="margin-left:0.55rem;">${scoreStr}</span>
+    </td>`;
+  }
+
+  function koPredCell(p, id, actual){
+    const c=koCompare(p.kPreds[id], actual);
+    const base=`${TD}text-align:center;font-family:monospace;font-weight:600;white-space:nowrap;`;
+    if(c.kind==='nopick') return `<td style="${base}color:#334155;">–</td>`;
+    if(c.kind==='wrong')  return `<td style="${base}color:#64748b;" title="Different matchup — you had: ${esc(c.predLabel)}">✗</td>`;
+    if(c.kind==='half')   return `<td style="${base}color:#fbbf24;background:rgba(251,191,36,0.08);" title="One team right — you had: ${esc(c.predLabel)}">½</td>`;
+    if(c.kind==='teams')  return `<td style="${base}color:#4ade80;" title="Right matchup, no score predicted">✓</td>`;
+    const dh=`<span style="color:${c.homeOk?'#4ade80':'#f87171'};">${c.ph}</span>`;
+    const da=`<span style="color:${c.awayOk?'#4ade80':'#f87171'};">${c.pa}</span>`;
+    const badge=c.exact?' 🎯':c.advOk?'':' ✗';
+    const bg=c.exact?'rgba(74,222,128,0.12)':c.advOk?'rgba(74,222,128,0.06)':'rgba(248,113,113,0.06)';
+    let pen='';
+    if(c.isDraw && c.actualPen){
+      const ok=c.predPen && c.predPen===c.actualPen;
+      pen=` <span title="Penalty winner — you: ${esc(c.predPen||'—')}, actual: ${esc(c.actualPen)}" style="font-size:0.62rem;color:${ok?'#4ade80':'#f87171'};">P</span>`;
+    }
+    return `<td style="${base}background:${bg};">${dh}–${da}${badge}${pen}</td>`;
+  }
+
+  const enteredKo = Object.keys(KO_VENUES).filter(id => { const r=S.kResults[id]; return r && r.home && r.away; });
+  let koBody='', lastRound='';
+  for(const id of enteredKo){
+    const actual=S.kResults[id];
+    const rl=koRoundLabel(id);
+    if(rl!==lastRound){
+      koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
+      lastRound=rl;
+    }
+    koBody += `<tr>${koGameCell(actual)}${koParticipants.map(p=>koPredCell(p,id,actual)).join('')}</tr>`;
+  }
+
+  const koHeaderRow = `
+    <tr>
+      <th style="${TH_GAME}">Match</th>
+      ${koParticipants.map(p=>`<th style="${TH}">${esc(p.name)}</th>`).join('')}
+    </tr>`;
+
+  const koLegend = `<div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
+    <span style="color:#4ade80;">green</span>/<span style="color:#f87171;">red</span> digits = each goal number right/wrong ·
+    🎯 exact score · ✓ right teams (no score) · <span style="color:#fbbf24;">½</span> one team right ·
+    ✗ different matchup · <b>P</b> = penalty-winner pick</div>`;
+
+  const koSection = enteredKo.length ? `
+    <div style="margin-top:1.75rem;">
+      <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.5rem;">🏆 Knockout results</h2>
+      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+          <thead>${koHeaderRow}</thead>
+          <tbody>${koBody}</tbody>
+        </table>
+      </div>
+      ${koLegend}
+    </div>` : `
+    <div style="margin-top:1.75rem;padding:1rem;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.12);border-radius:0.75rem;color:#64748b;font-size:0.85rem;text-align:center;">
+      🏆 Knockout results will appear here as the matches are played — showing the actual matchup and how everyone's bracket pick lined up.
+    </div>`;
+
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
       <h1 style="font-size:1.5rem;font-weight:700;color:white;">Results</h1>
@@ -3887,6 +4023,7 @@ function renderResults(){
         <tbody>${rows}</tbody>
       </table>
     </div>
+    ${koSection}
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>`;
 }
 
@@ -4265,6 +4402,8 @@ function renderAdmin(){
       </div>
     </div>`;})()}
 
+    ${renderAdminKoEntry()}
+
     ${(()=>{
       const repickerOpen   = S.settings?.repicker_open   === 'true';
       const repickerAuto   = S.settings?.repicker_auto   === 'true';
@@ -4297,6 +4436,99 @@ function renderAdmin(){
       </div>
     </div>`;
     })()}`;
+}
+
+// ── Admin: knockout result entry ─────────────────────────────
+function renderAdminKoEntry(){
+  const order = Object.keys(KO_VENUES);
+  const teamOptions = Object.keys(TEAM_DATA).sort().map(t=>`<option value="${esc(t)}"></option>`).join('');
+  const roundLabel = id =>
+    id.startsWith('r32')?'Round of 32':id.startsWith('r16')?'Round of 16':
+    id.startsWith('qf')?'Quarter-finals':id.startsWith('sf')?'Semi-finals':
+    id==='3rd'?'Third place':id==='final'?'Final':id;
+  const tIn = 'background:var(--bg-input);border:1px solid var(--border-strong);border-radius:0.375rem;color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;min-width:6.5rem;flex:1;';
+  let lastRound='', body='', entered=0;
+  for(const id of order){
+    const r = S.kResults[id] || {};
+    const reb = (S.reBracket && S.reBracket[id]) || {};
+    const h = r.home || reb.home || '';
+    const a = r.away || reb.away || '';
+    const hs = r.homeScore!=null ? r.homeScore : '';
+    const as_ = r.awayScore!=null ? r.awayScore : '';
+    const pen = r.penWinner || '';
+    const has = !!(r.home && r.away && r.homeScore!=null && r.awayScore!=null);
+    if(has) entered++;
+    const rl = roundLabel(id);
+    if(rl!==lastRound){
+      body += `<div style="font-size:0.66rem;color:#fbbf24;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin:0.75rem 0 0.4rem;">${rl}</div>`;
+      lastRound = rl;
+    }
+    body += `
+      <div style="background:#0a1628;border:1px solid ${has?'rgba(22,163,74,0.35)':'rgba(255,255,255,0.08)'};border-radius:0.6rem;padding:0.55rem 0.7rem;margin-bottom:0.4rem;">
+        <div style="font-size:0.64rem;color:#475569;margin-bottom:0.4rem;">${id} · ${esc(KO_VENUES[id]||'')} ${has?'<span style="color:#4ade80;">✓</span>':''}</div>
+        <div style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap;">
+          <input list="ko-teams" id="ko-h-${id}" value="${esc(h)}" placeholder="Home team" style="${tIn}" />
+          <input class="score-in" type="number" min="0" max="30" id="ko-hs-${id}" value="${hs}" style="width:2.6rem;" />
+          <span style="color:#475569;font-weight:700;">–</span>
+          <input class="score-in" type="number" min="0" max="30" id="ko-as-${id}" value="${as_}" style="width:2.6rem;" />
+          <input list="ko-teams" id="ko-a-${id}" value="${esc(a)}" placeholder="Away team" style="${tIn}" />
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.4rem;flex-wrap:wrap;">
+          <span style="font-size:0.64rem;color:#64748b;">Pen winner (only if drawn):</span>
+          <input list="ko-teams" id="ko-pen-${id}" value="${esc(pen)}" placeholder="—" style="${tIn}max-width:9rem;flex:0 0 auto;" />
+          <span style="margin-left:auto;display:flex;gap:0.3rem;">
+            ${has?`<button onclick="delKoResult('${id}')" style="font-size:0.7rem;color:#f87171;background:rgba(153,27,27,0.18);border:1px solid rgba(153,27,27,0.3);border-radius:0.35rem;padding:0.3rem 0.6rem;cursor:pointer;">Remove</button>`:''}
+            <button onclick="saveKoResult('${id}')" style="font-size:0.7rem;background:#15803d;color:white;border:none;border-radius:0.35rem;padding:0.3rem 0.75rem;cursor:pointer;font-weight:500;">Save</button>
+          </span>
+        </div>
+      </div>`;
+  }
+  return `
+    <details style="margin-top:1.25rem;">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
+        <span>🏆 Enter knockout results</span>
+        <span style="font-size:0.75rem;color:#64748b;font-weight:400;">${entered}/${order.length} entered · click to expand</span>
+      </summary>
+      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
+        <p style="font-size:0.78rem;color:#64748b;margin-bottom:0.875rem;">Enter the actual matchup (teams) and score for each knockout game as it's played. For a draw decided on penalties, also set the penalty winner. These feed the Knockout results table on the Results tab. (R32 rows pre-fill from the Repicker bracket when set.)</p>
+        <datalist id="ko-teams">${teamOptions}</datalist>
+        ${body}
+      </div>
+    </details>`;
+}
+
+async function saveKoResult(id){
+  const home = document.getElementById('ko-h-'+id)?.value?.trim()||'';
+  const away = document.getElementById('ko-a-'+id)?.value?.trim()||'';
+  const hsRaw = document.getElementById('ko-hs-'+id)?.value;
+  const asRaw = document.getElementById('ko-as-'+id)?.value;
+  const pen = document.getElementById('ko-pen-'+id)?.value?.trim()||'';
+  if(!home || !away){ alert('Enter both teams.'); return; }
+  if(hsRaw==='' || asRaw===''){ alert('Enter both scores.'); return; }
+  const hs = parseInt(hsRaw,10), as_ = parseInt(asRaw,10);
+  if(!Number.isFinite(hs) || !Number.isFinite(as_)){ alert('Invalid scores.'); return; }
+  let penWinner = null;
+  if(hs===as_){
+    if(!pen){ alert('Draw — set the penalty winner (one of the two teams).'); return; }
+    if(pen!==home && pen!==away){ alert('Penalty winner must be exactly one of the two teams.'); return; }
+    penWinner = pen;
+  }
+  try{
+    await adminSetKOResult(id, home, away, hs, as_, penWinner);
+    if(!S.kResults) S.kResults={};
+    S.kResults[id] = {home, away, homeScore:hs, awayScore:as_, penWinner:penWinner||''};
+    render();
+  }catch(e){ alert('Save failed: '+e.message); }
+}
+
+async function delKoResult(id){
+  if(!confirm('Remove this knockout result?')) return;
+  try{
+    const res = await fetch(`/api/results/ko/${encodeURIComponent(id)}`, {method:'DELETE', headers:_authHeaders()});
+    if(!res.ok){ const d=await res.json(); throw new Error(d.error||'Failed'); }
+    if(S.kResults) delete S.kResults[id];
+    render();
+  }catch(e){ alert('Delete failed: '+e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════

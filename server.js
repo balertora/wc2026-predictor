@@ -96,6 +96,8 @@ async function initDB() {
     )`, args: [] },
     { sql: `CREATE TABLE IF NOT EXISTS ko_results (
       match_id   TEXT    PRIMARY KEY,
+      home       TEXT,
+      away       TEXT,
       home_score INTEGER,
       away_score INTEGER,
       pen_winner TEXT,
@@ -140,6 +142,8 @@ async function initDB() {
   const migrations = [
     'ALTER TABLE ko_predictions ADD COLUMN pen_home INTEGER',
     'ALTER TABLE ko_predictions ADD COLUMN pen_away INTEGER',
+    'ALTER TABLE ko_results ADD COLUMN home TEXT',
+    'ALTER TABLE ko_results ADD COLUMN away TEXT',
   ];
   for (const sql of migrations) {
     try { await db.execute(sql); }
@@ -369,6 +373,7 @@ async function buildStatePayload() {
   const kResults = {};
   for (const row of koResRows) {
     kResults[row.match_id] = {
+      home: row.home || '', away: row.away || '',
       homeScore: row.home_score, awayScore: row.away_score, penWinner: row.pen_winner || '',
     };
   }
@@ -752,19 +757,23 @@ app.delete('/api/results/group/:gameId', requireAdmin, asyncHandler(async (req, 
 // PUT /api/results/ko/:matchId — manually set a KO result (admin)
 app.put('/api/results/ko/:matchId', requireAdmin, asyncHandler(async (req, res) => {
   const { matchId } = req.params;
-  const { homeScore, awayScore, penWinner } = req.body;
+  const { home, away, homeScore, awayScore, penWinner } = req.body;
   const h = homeScore != null ? parseInt(homeScore, 10) : null;
   const a = awayScore != null ? parseInt(awayScore, 10) : null;
+  const homeTeam = typeof home === 'string' && home.trim() ? home.trim().slice(0, 40) : null;
+  const awayTeam = typeof away === 'string' && away.trim() ? away.trim().slice(0, 40) : null;
   await dbRun(
-    `INSERT INTO ko_results (match_id, home_score, away_score, pen_winner, source, updated_at)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO ko_results (match_id, home, away, home_score, away_score, pen_winner, source, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(match_id) DO UPDATE SET
+       home       = excluded.home,
+       away       = excluded.away,
        home_score = excluded.home_score,
        away_score = excluded.away_score,
        pen_winner = excluded.pen_winner,
        source     = excluded.source,
        updated_at = excluded.updated_at`,
-    [matchId, h, a, penWinner || null, 'manual']
+    [matchId, homeTeam, awayTeam, h, a, penWinner || null, 'manual']
   );
   scheduleBroadcast();
   res.json({ ok: true });
