@@ -123,7 +123,14 @@ async function initDB() {
     { sql: `CREATE TABLE IF NOT EXISTS re_picks (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       match_id   TEXT    NOT NULL,
-      winner     TEXT    NOT NULL,
+      winner     TEXT    NOT NULL DEFAULT '',
+      home       TEXT,
+      away       TEXT,
+      home_score INTEGER,
+      away_score INTEGER,
+      pen_winner TEXT,
+      pen_home   INTEGER,
+      pen_away   INTEGER,
       updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, match_id)
     )`, args: [] },
@@ -144,6 +151,13 @@ async function initDB() {
     'ALTER TABLE ko_predictions ADD COLUMN pen_away INTEGER',
     'ALTER TABLE ko_results ADD COLUMN home TEXT',
     'ALTER TABLE ko_results ADD COLUMN away TEXT',
+    'ALTER TABLE re_picks ADD COLUMN home TEXT',
+    'ALTER TABLE re_picks ADD COLUMN away TEXT',
+    'ALTER TABLE re_picks ADD COLUMN home_score INTEGER',
+    'ALTER TABLE re_picks ADD COLUMN away_score INTEGER',
+    'ALTER TABLE re_picks ADD COLUMN pen_winner TEXT',
+    'ALTER TABLE re_picks ADD COLUMN pen_home INTEGER',
+    'ALTER TABLE re_picks ADD COLUMN pen_away INTEGER',
   ];
   for (const sql of migrations) {
     try { await db.execute(sql); }
@@ -391,7 +405,7 @@ async function buildStatePayload() {
       dbAll(`SELECT id, name, avatar FROM users`),
       dbAll(`SELECT key, value FROM settings`),
       dbAll(`SELECT * FROM re_bracket`),
-      dbAll(`SELECT u.name, rp.match_id, rp.winner FROM re_picks rp JOIN users u ON u.id = rp.user_id`),
+      dbAll(`SELECT u.name, rp.* FROM re_picks rp JOIN users u ON u.id = rp.user_id`),
       // Last 50 messages, oldest-first for display — avatar looked up client-side
       dbAll(`SELECT id, user_id, name, text, created_at FROM messages ORDER BY id DESC LIMIT 50`),
     ]);
@@ -455,7 +469,14 @@ async function buildStatePayload() {
   const rePicks = {};
   for (const r of rePickRows) {
     if (!rePicks[r.name]) rePicks[r.name] = {};
-    rePicks[r.name][r.match_id] = r.winner;
+    rePicks[r.name][r.match_id] = {
+      home: r.home || '', away: r.away || '',
+      homeScore: r.home_score, awayScore: r.away_score,
+      penWinner: r.pen_winner || '',
+      penHome: r.pen_home != null ? r.pen_home : undefined,
+      penAway: r.pen_away != null ? r.pen_away : undefined,
+      winner: r.winner || '',
+    };
   }
 
   const messages = msgRows.slice().reverse(); // reverse DESC fetch → chronological order
@@ -925,27 +946,49 @@ app.put('/api/re-bracket', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// PUT /api/re-picks — save authenticated user's Repicker picks
+// Advancing team from a repicker score (decisive score, else pen winner).
+function reAdvancer(home, away, hs, as_, penWinner) {
+  if (hs == null || as_ == null) return '';
+  if (hs > as_) return home || '';
+  if (as_ > hs) return away || '';
+  return penWinner || '';
+}
+
+// PUT /api/re-picks — save the user's Repicker score predictions.
+// Body: { picks: { matchId: { home, away, homeScore, awayScore, penWinner, penHome, penAway } } }
+// A null/empty pick (no teams) deletes that slot.
 app.put('/api/re-picks', requireAuth, asyncHandler(async (req, res) => {
   const { userId } = req.session;
   const { picks } = req.body;
   if (!picks || typeof picks !== 'object') return res.status(400).json({ error: 'picks required' });
 
+  const intOrNull = (v, max) => {
+    if (v == null) return null;
+    const n = parseInt(v, 10);
+    return (Number.isFinite(n) && n >= 0 && n <= max) ? n : null;
+  };
+
   const statements = [];
-  for (const [matchId, winner] of Object.entries(picks)) {
+  for (const [matchId, pred] of Object.entries(picks)) {
     if (typeof matchId !== 'string' || !matchId) continue;
-    if (!winner) {
-      statements.push({
-        sql: 'DELETE FROM re_picks WHERE user_id = ? AND match_id = ?',
-        args: [userId, matchId],
-      });
-    } else {
-      statements.push({
-        sql: `INSERT OR REPLACE INTO re_picks (user_id, match_id, winner, updated_at)
-              VALUES (?, ?, ?, datetime('now'))`,
-        args: [userId, matchId, String(winner)],
-      });
+    if (!pred || typeof pred !== 'object' || (!pred.home && !pred.away)) {
+      statements.push({ sql: 'DELETE FROM re_picks WHERE user_id = ? AND match_id = ?', args: [userId, matchId] });
+      continue;
     }
+    const home = typeof pred.home === 'string' ? pred.home.slice(0, 40) : null;
+    const away = typeof pred.away === 'string' ? pred.away.slice(0, 40) : null;
+    const hs = intOrNull(pred.homeScore, 30);
+    const as_ = intOrNull(pred.awayScore, 30);
+    const penWinner = (pred.penWinner && (pred.penWinner === home || pred.penWinner === away)) ? pred.penWinner : null;
+    const ph = intOrNull(pred.penHome, 30);
+    const pa = intOrNull(pred.penAway, 30);
+    const winner = reAdvancer(home, away, hs, as_, penWinner);
+    statements.push({
+      sql: `INSERT OR REPLACE INTO re_picks
+            (user_id, match_id, winner, home, away, home_score, away_score, pen_winner, pen_home, pen_away, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      args: [userId, matchId, winner, home, away, hs, as_, penWinner, ph, pa],
+    });
   }
 
   if (statements.length > 0) {

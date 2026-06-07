@@ -2325,6 +2325,33 @@ function koScoreFor(kPreds){
   return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
 }
 
+// Same scoring engine for the Repicker (separate game). Maps the repicker's
+// 'final-1' slot to the actual 'final' result; no 3rd-place game.
+function koScoreForRepicker(rePicks){
+  const w = koWeights();
+  const ids = [
+    ...Array.from({length:16},(_,i)=>`r32-${i+1}`),
+    ...Array.from({length:8}, (_,i)=>`r16-${i+1}`),
+    ...Array.from({length:4}, (_,i)=>`qf-${i+1}`),
+    'sf-1','sf-2','final-1',
+  ];
+  const rk = id => id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':'final';
+  let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
+  for(const id of ids){
+    const actual = S.kResults[id==='final-1'?'final':id];
+    if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
+    const c = koCompare(rePicks ? rePicks[id] : undefined, actual);
+    let teams=0, resultPts=0;
+    if(c.kind==='half')       teams=1;
+    else if(c.kind==='teams') teams=2;
+    else if(c.kind==='full'){ teams=2; resultPts = c.exact?3 : c.advOk?1 : 0; if(c.exact)exacts++; else if(c.advOk)advancers++; }
+    if(teams>0 || resultPts>0) scored++;
+    const mp=0.5*teams; matchups += mp;
+    koTotal += (mp+resultPts) * (w[rk(id)] || 1);
+  }
+  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
+}
+
 // Build Round of 16 matchups from R32 winners
 function buildR16(q){
   // Resolve the underlying R32 games so we know who's playing whom.
@@ -2656,11 +2683,16 @@ function _applyServerState(data){
   // Re-bracket
   S.reBracket = data.reBracket || {};
 
-  // Re-picks
+  // Re-picks (score objects). Merge server picks into local without clobbering
+  // in-flight edits (mirror the kPreds merge).
   S.allRePicks = data.rePicks || {};
-  // Update my own rePicks from server (authoritative)
   const myRePicks = Object.entries(data.rePicks || {}).find(([n]) => n.toLowerCase() === myName);
-  if(myRePicks) S.rePicks = myRePicks[1] || {};
+  if(myRePicks){
+    const serverRe = myRePicks[1] || {};
+    for(const [id, pick] of Object.entries(serverRe)){
+      if(S.rePicks[id] == null) S.rePicks[id] = pick;
+    }
+  }
 
   // Chat messages
   S.messages = data.messages || [];
@@ -4211,6 +4243,58 @@ function renderCompare(){
       </div>`;
   }).join('');
 
+  // ── Repicker standings (separate game) — appears once KO results exist ──
+  const reLbAll = Object.entries(S.allRePicks||{})
+    .map(([name,picks])=>({ name, ...koScoreForRepicker(picks) }))
+    .filter(x=>x.scored>0)
+    .sort((a,b)=>b.koTotal-a.koTotal||b.matchups-a.matchups||a.name.localeCompare(b.name));
+  const reSectionHTML = (()=>{
+    if(reLbAll.length===0) return '';
+    const avFor = name => {
+      const src = (name===S.name) ? S.avatar : (S.otherUsers.find(x=>x.name===name)?.avatar||'');
+      return src
+        ? `<img src="${src}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;margin-right:0.4rem;vertical-align:middle;">`
+        : `<span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.07);text-align:center;line-height:22px;margin-right:0.4rem;font-size:0.7rem;vertical-align:middle;">🧑</span>`;
+    };
+    const leader = reLbAll[0];
+    const matchLeader = [...reLbAll].sort((a,b)=>b.matchups-a.matchups)[0];
+    const tile = (icon,label,name,val,accent)=>`
+      <div style="background:#112a45;border:1px solid ${accent}33;border-radius:0.75rem;padding:0.75rem;min-width:0;">
+        <div style="font-size:1rem;margin-bottom:0.25rem;">${icon}</div>
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.375rem;">${label}</div>
+        <div style="font-size:0.85rem;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(name)}">${esc(name)}</div>
+        <div style="font-size:1.1rem;font-weight:800;color:${accent};margin-top:0.125rem;">${val}</div>
+      </div>`;
+    const MED=['🥇','🥈','🥉'];
+    const rows = reLbAll.map((e,i)=>`
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+        <td style="padding:0.6rem 1rem;">${i<3?MED[i]:i+1}</td>
+        <td style="padding:0.6rem 1rem;color:white;font-weight:500;white-space:nowrap;">${avFor(e.name)}${esc(e.name)}${e.name===S.name?' (you)':''}</td>
+        <td style="padding:0.6rem 1rem;text-align:right;font-weight:700;color:#a78bfa;">${e.koTotal}</td>
+        <td style="padding:0.6rem 1rem;text-align:right;color:#22d3ee;">${e.matchups}</td>
+        <td style="padding:0.6rem 1rem;text-align:right;color:#4ade80;">${e.exacts}</td>
+      </tr>`).join('');
+    return `
+      <h2 style="font-size:1.125rem;font-weight:700;color:white;margin:0.5rem 0 0.75rem;">🔄 Repicker leaderboard
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">— separate game (KO bracket re-picked from the real Round of 32)</span></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem;margin-bottom:0.75rem;">
+        ${tile('🔄','Repicker leader',leader.name,leader.koTotal,'#a78bfa')}
+        ${tile('🎯','Most matchups',matchLeader.name,matchLeader.matchups,'#22d3ee')}
+      </div>
+      <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
+          <thead><tr style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid rgba(255,255,255,0.08);">
+            <th style="padding:0.6rem 1rem;text-align:left;width:2rem;">#</th>
+            <th style="padding:0.6rem 1rem;text-align:left;">Name</th>
+            <th style="padding:0.6rem 1rem;text-align:right;">KO pts</th>
+            <th style="padding:0.6rem 1rem;text-align:right;">Match</th>
+            <th style="padding:0.6rem 1rem;text-align:right;">Exact</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+  })();
+
   return `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.5rem;">
       <div>
@@ -4284,6 +4368,8 @@ function renderCompare(){
     </div>`:''}
 
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">${lbHTML}</div>
+
+    ${reSectionHTML}
 
     ${completed.length>0?`<h2 style="font-size:1.125rem;font-weight:700;color:white;margin-bottom:0.75rem;">Game breakdown</h2>${resultCards}`
       :`<div style="text-align:center;padding:2.5rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">⏳ Game results appear here once entered in Admin.</div>`}
@@ -5390,117 +5476,92 @@ function repickerTeamKnown(name){
   return !!name && !name.includes('Group') && !name.includes('TBD') && !name.includes('place');
 }
 
-// Build the user's repicker bracket from their picks.
-// R32 teams come from actual group results; later rounds come from the user's own picks.
-// Returns { matchId: {home,away} }
-function repickerBuildUser(userPicks){
-  const r32 = repickerR32Teams();
-  const teams = {...r32};
-  RE_R32_PAIRS.forEach(([ai,bi],i)=>{
-    const id=`r16-${i+1}`;
-    teams[id]={ home: userPicks[`r32-${ai}`]||null, away: userPicks[`r32-${bi}`]||null };
-  });
-  RE_R16_PAIRS.forEach(([ai,bi],i)=>{
-    const id=`qf-${i+1}`;
-    teams[id]={ home: userPicks[`r16-${ai}`]||null, away: userPicks[`r16-${bi}`]||null };
-  });
-  RE_QF_PAIRS.forEach(([ai,bi],i)=>{
-    const id=`sf-${i+1}`;
-    teams[id]={ home: userPicks[`qf-${ai}`]||null, away: userPicks[`qf-${bi}`]||null };
-  });
-  teams['final-1']={ home: userPicks['sf-1']||null, away: userPicks['sf-2']||null };
-  return teams;
+// Advancing team from a repicker score pick (decisive score, else pen winner).
+function reAdvancerOf(slotTeams, rp){
+  if(!slotTeams || !rp) return null;
+  if(!repickerTeamKnown(slotTeams.home) || !repickerTeamKnown(slotTeams.away)) return null;
+  if(rp.homeScore==null || rp.awayScore==null) return null;
+  if(rp.homeScore>rp.awayScore) return slotTeams.home;
+  if(rp.awayScore>rp.homeScore) return slotTeams.away;
+  return (rp.penWinner===slotTeams.home||rp.penWinner===slotTeams.away) ? rp.penWinner : null;
 }
 
-// Build actual winners from kResults + group qualifiers (for scoring).
-// Returns { matchId: actualWinnerTeamName|null }
-function repickerActualWinners(){
-  const r32 = repickerR32Teams();
-  const kr  = S.kResults||{};
-  const teamFor = {...r32};
+// Build the user's repicker bracket (score-by-game). R32 teams come from actual
+// group results; each later round's teams come from the user's advancing picks.
+// Returns { matchId: {home,away} } (home/away may be null until upstream is decided).
+function repickerUserBracket(rePicks){
+  const slots = {...repickerR32Teams()};
+  const adv = id => reAdvancerOf(slots[id], rePicks[id]);
+  RE_R32_PAIRS.forEach(([ai,bi],i)=>{ slots[`r16-${i+1}`]={ home: adv(`r32-${ai}`), away: adv(`r32-${bi}`) }; });
+  RE_R16_PAIRS.forEach(([ai,bi],i)=>{ slots[`qf-${i+1}`] ={ home: adv(`r16-${ai}`), away: adv(`r16-${bi}`) }; });
+  RE_QF_PAIRS.forEach(([ai,bi],i)=>{  slots[`sf-${i+1}`] ={ home: adv(`qf-${ai}`),  away: adv(`qf-${bi}`) }; });
+  slots['final-1']={ home: adv('sf-1'), away: adv('sf-2') };
+  return slots;
+}
 
-  function getWinner(matchId){
-    const t=teamFor[matchId]; const r=kr[matchId];
-    if(!t||!r||r.homeScore===undefined) return null;
-    if(!repickerTeamKnown(t.home)||!repickerTeamKnown(t.away)) return null; // teams not resolved yet
-    if(r.homeScore>r.awayScore) return t.home;
-    if(r.awayScore>r.homeScore) return t.away;
-    if(r.penWinner){ return (r.penWinner===t.home||r.penWinner===t.away)?r.penWinner:(r.penWinner==='home'?t.home:t.away); }
-    return null;
+// Goal-cell input for the Repicker (mirrors the predict page; isPen → penalty cell).
+function reScoreCell(matchId, side, val, locked, isPen){
+  const v=(val!=null&&val!=='')?val:'';
+  if(locked){
+    return `<div class="goal-cell"><div class="goal-frame" style="pointer-events:none;opacity:0.55;"><input class="goal-input" type="number" value="${v}" readonly tabindex="-1" /></div></div>`;
   }
-  RE_R32_PAIRS.forEach(([ai,bi],i)=>{
-    const id=`r16-${i+1}`;
-    teamFor[id]={ home: getWinner(`r32-${ai}`), away: getWinner(`r32-${bi}`) };
-  });
-  RE_R16_PAIRS.forEach(([ai,bi],i)=>{
-    const id=`qf-${i+1}`;
-    teamFor[id]={ home: getWinner(`r16-${ai}`), away: getWinner(`r16-${bi}`) };
-  });
-  RE_QF_PAIRS.forEach(([ai,bi],i)=>{
-    const id=`sf-${i+1}`;
-    teamFor[id]={ home: getWinner(`qf-${ai}`), away: getWinner(`qf-${bi}`) };
-  });
-  teamFor['final-1']={ home: getWinner('sf-1'), away: getWinner('sf-2') };
-
-  const winners = {};
-  for(const id of Object.keys(teamFor)) winners[id] = getWinner(id);
-  return winners;
+  const gfmid=(isPen?'re-pen-':'re-')+matchId;
+  const oninput=isPen?`setRePenScore('${matchId}','${side}',this.value)`:`inputRe('${matchId}','${side}',this)`;
+  const adj=isPen?`adj_repen('${matchId}','${side}',DELTA)`:`adj_re('${matchId}','${side}',DELTA)`;
+  return `<div class="goal-cell">
+    <div class="goal-frame" data-gf-mid="${gfmid}" data-gf-side="${side}">
+      <input class="goal-input" type="number" min="0" max="20" value="${v}" data-mid="${gfmid}" data-side="${side}" oninput="${oninput}" />
+    </div>
+    <div class="goal-btns">
+      <button class="goal-btn" onclick="${adj.replace('DELTA','-1')}">−</button>
+      <button class="goal-btn" onclick="${adj.replace('DELTA','1')}">+</button>
+    </div>
+  </div>`;
 }
 
-// Score a user's rePicks against actual results
-function calcReScore(userPicks){
-  const actuals = repickerActualWinners();
-  let correct=0, possible=0;
-  for(const [matchId, winner] of Object.entries(userPicks)){
-    if(!winner) continue;
-    const actual = actuals[matchId];
-    if(actual){ possible++; if(actual===winner) correct++; }
-  }
-  return { correct, possible };
-}
-
-// Get downstream match IDs that depend on a given match
-function _reDownstream(matchId){
-  const ds=[];
-  function follow(id){
-    let nextId=null;
-    if(id.startsWith('r32-')){
-      const n=parseInt(id.split('-')[1]);
-      nextId=`r16-${Math.ceil(n/2)}`;
-    } else if(id.startsWith('r16-')){
-      const n=parseInt(id.split('-')[1]);
-      nextId=`qf-${Math.ceil(n/2)}`;
-    } else if(id.startsWith('qf-')){
-      const n=parseInt(id.split('-')[1]);
-      nextId=`sf-${Math.ceil(n/2)}`;
-    } else if(id.startsWith('sf-')){
-      nextId='final-1';
-    }
-    if(nextId){ ds.push(nextId); follow(nextId); }
-  }
-  follow(matchId);
-  return ds;
-}
-
-async function setRePick(matchId, winner){
-  // Toggle: click same winner again to deselect
-  const current = S.rePicks[matchId];
-  const newWinner = (current===winner) ? '' : winner;
-
-  // Clear downstream picks
-  const downstream = _reDownstream(matchId);
-  const picks = { [matchId]: newWinner };
-  for(const id of downstream){ picks[id]=''; }
-
-  // Apply locally
-  if(newWinner) S.rePicks[matchId]=newWinner; else delete S.rePicks[matchId];
-  for(const id of downstream) delete S.rePicks[id];
-  render();
-
-  // Save to server
+// ── Repicker score handlers (persist to /api/re-picks, debounced) ──
+let _reSaveTimer=null;
+function persistRe(){ clearTimeout(_reSaveTimer); _reSaveTimer=setTimeout(_doPersistRe,600); }
+async function _doPersistRe(){
+  if(!_token) return;
   try{
-    await fetch('/api/re-picks',{ method:'PUT', headers:_authHeaders(), body:JSON.stringify({picks}) });
-  }catch(e){ console.warn('Re-pick save failed:',e.message); }
+    const res=await fetch('/api/re-picks',{method:'PUT',headers:_authHeaders(),body:JSON.stringify({picks:S.rePicks})});
+    if(res.status===401){ _handleSessionExpired(); return; }
+    if(!res.ok) _showSaveError('⚠ Repicker not saved — try again');
+  }catch(e){ _showSaveError('⚠ Repicker not saved (network) — try again'); }
+}
+function _reEnsure(mid){
+  if(!S.rePicks[mid]) S.rePicks[mid]={home:'',away:'',homeScore:undefined,awayScore:undefined,penWinner:'',penHome:undefined,penAway:undefined};
+  return S.rePicks[mid];
+}
+function inputRe(mid,side,inp){ setReScore(mid,side,inp.value); }
+function setReScore(mid, side, val){
+  const rp=_reEnsure(mid);
+  const v=val===''?undefined:Math.max(0,Math.min(20,parseInt(val)||0));
+  if(side==='h') rp.homeScore=v!=null?v:0; else rp.awayScore=v!=null?v:0;
+  if(rp.homeScore!==undefined && rp.awayScore===undefined) rp.awayScore=0;
+  if(rp.awayScore!==undefined && rp.homeScore===undefined) rp.homeScore=0;
+  if(rp.homeScore!==undefined && rp.awayScore!==undefined && rp.homeScore!==rp.awayScore){ rp.penHome=undefined; rp.penAway=undefined; rp.penWinner=''; }
+  persistRe();
+  if(rp.homeScore!==undefined && rp.awayScore!==undefined) render(); // re-render to flow the bracket forward
+}
+function adj_re(mid, side, delta){
+  const rp=_reEnsure(mid);
+  const cur=side==='h'?(rp.homeScore??0):(rp.awayScore??0);
+  setReScore(mid, side, String(Math.max(0,Math.min(20,cur+delta))));
+}
+function setRePenScore(mid, side, val){
+  const rp=_reEnsure(mid);
+  const v=val===''?undefined:Math.max(0,Math.min(20,parseInt(val)||0));
+  if(side==='h') rp.penHome=v; else rp.penAway=v;
+  const {valid}=_penIsValid(rp.penHome, rp.penAway);
+  rp.penWinner = valid ? (rp.penHome>rp.penAway?rp.home:rp.away) : '';
+  persistRe(); render();
+}
+function adj_repen(mid, side, delta){
+  const rp=_reEnsure(mid);
+  const cur=side==='h'?(rp.penHome??0):(rp.penAway??0);
+  setRePenScore(mid, side, String(Math.max(0,cur+delta)));
 }
 
 async function setRepickerOverride(mode){
@@ -5542,8 +5603,9 @@ function renderRepicker(){
       <p style="color:#64748b;font-size:0.875rem;">${gDone}/72 group results in. Opens automatically once all groups are done.</p>
     </div>`;
 
-  const userTeams = repickerBuildUser(S.rePicks);
-  const actuals   = repickerActualWinners();
+  const userBracket = repickerUserBracket(S.rePicks);
+  const locked = !repickerOpen;                       // editable only while the Repicker is open
+  const reActualId = id => id==='final-1' ? 'final' : id; // map repicker final → results id
 
   const rounds=[
     {key:'r32',  label:'Round of 32', ids: Array.from({length:16},(_,i)=>`r32-${i+1}`)},
@@ -5552,78 +5614,85 @@ function renderRepicker(){
     {key:'sf',   label:'Semis',       ids: ['sf-1','sf-2']},
     {key:'final',label:'Final',       ids: ['final-1']},
   ];
+  const reHasScore = id => { const rp=S.rePicks[id]; return rp && rp.homeScore!=null && rp.awayScore!=null; };
   const tab = S.rePickTab||'r32';
   const round = rounds.find(r=>r.key===tab)||rounds[0];
 
   const tabsHtml = rounds.map(r=>{
-    const allPicked = r.ids.every(id=>S.rePicks[id]);
-    const cls = r.key===tab ? 'rnd-tab on' : (allPicked ? 'rnd-tab done' : 'rnd-tab');
-    return `<button class="${cls}" onclick="S.rePickTab='${r.key}';render()">${allPicked&&r.key!==tab?'✓ ':''} ${r.label}</button>`;
+    const allDone = r.ids.every(reHasScore);
+    const cls = r.key===tab ? 'rnd-tab on' : (allDone ? 'rnd-tab done' : 'rnd-tab');
+    return `<button class="${cls}" onclick="S.rePickTab='${r.key}';render()">${allDone&&r.key!==tab?'✓ ':''} ${r.label}</button>`;
   }).join('');
 
   const matchesHtml = round.ids.map(id=>{
-    const t = userTeams[id]||{};
-    const homeTeam = t.home; const awayTeam = t.away;
-    const picked = S.rePicks[id];
-    const actual = actuals[id];
+    const t = userBracket[id]||{};
+    const home=t.home, away=t.away;
+    const homeKnown=repickerTeamKnown(home), awayKnown=repickerTeamKnown(away);
 
-    // Null/empty means "pick winner in previous round first"; placeholder string means "group result not in yet"
-    const homeKnown = repickerTeamKnown(homeTeam);
-    const awayKnown = repickerTeamKnown(awayTeam);
-
-    if(!homeTeam && !awayTeam){
-      return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.875rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;">
-        <span style="color:#475569;font-size:0.875rem;">— TBD · pick winner in previous round first —</span>
-      </div>`;
+    if(!home && !away){
+      return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.875rem;margin-bottom:0.5rem;text-align:center;color:#475569;font-size:0.85rem;">— TBD · enter the previous round first —</div>`;
+    }
+    if(!homeKnown || !awayKnown){
+      return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.875rem;margin-bottom:0.5rem;text-align:center;color:#475569;font-size:0.85rem;">${esc(home||'TBD')} vs ${esc(away||'TBD')} — finish the previous round</div>`;
     }
 
-    const makeBtn=(team, known)=>{
-      if(!team) return `<div style="flex:1;padding:0.6rem 0.5rem;text-align:center;color:#334155;font-size:0.8rem;font-style:italic;">TBD</div>`;
-      if(!known){
-        // Group result not yet in — show placeholder, no click
-        return `<div style="flex:1;padding:0.6rem 0.5rem;text-align:center;color:#475569;font-size:0.78rem;font-style:italic;border:1.5px dashed rgba(255,255,255,0.08);border-radius:0.5rem;">${esc(team)}</div>`;
-      }
-      const isPicked = picked===team;
-      const isActual = actual===team;
-      const isWrong  = picked===team && actual && actual!==team;
-      let bg='rgba(255,255,255,0.04)'; let border='rgba(255,255,255,0.08)'; let color='#cbd5e1';
-      if(isPicked && !actual){   bg='rgba(22,163,74,0.2)';   border='rgba(22,163,74,0.5)'; color='#4ade80'; }
-      if(isPicked && isActual){  bg='rgba(22,163,74,0.3)';   border='rgba(22,163,74,0.8)'; color='#4ade80'; }
-      if(isWrong){               bg='rgba(239,68,68,0.15)';  border='rgba(239,68,68,0.4)'; color='#f87171'; }
-      if(isActual && !isPicked){ bg='rgba(96,165,250,0.1)';  border='rgba(96,165,250,0.3)'; color='#93c5fd'; }
-      return `<button onclick="setRePick('${id}','${esc(team)}')"
-        data-team="${esc(team)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()"
-        style="flex:1;padding:0.6rem 0.5rem;background:${bg};border:1.5px solid ${border};border-radius:0.5rem;color:${color};font-size:0.82rem;font-weight:${isPicked?600:400};cursor:pointer;text-align:center;transition:all 0.1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${flag(team)} ${esc(team)}${isPicked&&isActual?' ✓':''}${isWrong?' ✗':''}
-      </button>`;
-    };
+    // Sync teams into the stored pick; if the upstream advancer changed, reset this slot.
+    let rp = S.rePicks[id];
+    if(!rp){ rp = S.rePicks[id] = {home,away,homeScore:undefined,awayScore:undefined,penWinner:'',penHome:undefined,penAway:undefined}; }
+    else if(rp.home!==home || rp.away!==away){
+      S.rePicks[id] = {home,away,homeScore:undefined,awayScore:undefined,penWinner:'',penHome:undefined,penAway:undefined};
+      rp = S.rePicks[id]; if(!locked) persistRe();
+    }
+
+    const hv=rp.homeScore!==undefined?rp.homeScore:'';
+    const av=rp.awayScore!==undefined?rp.awayScore:'';
+    const isDraw = hv!=='' && av!=='' && Number(hv)===Number(av);
+    const penH=rp.penHome!==undefined?rp.penHome:'';
+    const penA=rp.penAway!==undefined?rp.penAway:'';
+
+    const ar = S.kResults[reActualId(id)];
+    const actualNote = (ar && ar.home && ar.homeScore!=null)
+      ? `<div style="text-align:center;font-size:0.66rem;color:#64748b;margin-top:0.45rem;">Actual: ${esc(shortTeamName(ar.home))} ${ar.homeScore}–${ar.awayScore} ${esc(shortTeamName(ar.away))}${(ar.homeScore===ar.awayScore&&ar.penWinner)?` · pens ${esc(shortTeamName(ar.penWinner))}`:''}</div>`
+      : '';
+
+    const penSection = isDraw ? `
+      <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.72rem;color:#fbbf24;margin-bottom:0.4rem;text-align:center;">🎯 Penalty shootout — goals scored</div>
+        <div style="display:flex;align-items:center;gap:0.6rem;justify-content:center;">
+          <div style="flex:1;text-align:right;font-size:0.78rem;color:#94a3b8;">${teamSpan(home)}</div>
+          ${reScoreCell(id,'h',penH,locked,true)}
+          <span style="color:#334155;font-weight:700;">–</span>
+          ${reScoreCell(id,'a',penA,locked,true)}
+          <div style="flex:1;text-align:left;font-size:0.78rem;color:#94a3b8;">${teamSpan(away,true)}</div>
+        </div>
+      </div>` : '';
 
     return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.75rem;margin-bottom:0.5rem;">
-      <div style="display:flex;align-items:center;gap:0.5rem;">
-        ${makeBtn(homeTeam, homeKnown)}
-        <span style="color:#334155;font-size:0.75rem;font-weight:700;flex-shrink:0;">vs</span>
-        ${makeBtn(awayTeam, awayKnown)}
+      <div style="display:flex;align-items:center;gap:0.6rem;">
+        <div style="flex:1;text-align:right;font-size:0.85rem;font-weight:500;">${teamSpan(home)}</div>
+        ${reScoreCell(id,'h',hv,locked,false)}
+        <span style="color:#334155;font-weight:700;">–</span>
+        ${reScoreCell(id,'a',av,locked,false)}
+        <div style="flex:1;text-align:left;font-size:0.85rem;font-weight:500;">${teamSpan(away,true)}</div>
       </div>
+      ${penSection}
+      ${actualNote}
     </div>`;
   }).join('');
 
   // Leaderboard
   const allRP = S.allRePicks||{};
   const scored = Object.entries(allRP)
-    .map(([name,picks])=>({ name, ...calcReScore(picks) }))
-    .filter(x=>x.possible>0||Object.keys(allRP[x.name]||{}).length>0)
-    .sort((a,b)=>b.correct-a.correct||a.name.localeCompare(b.name));
+    .map(([name,picks])=>({ name, ...koScoreForRepicker(picks) }))
+    .filter(x=>x.scored>0 || Object.keys(allRP[x.name]||{}).length>0)
+    .sort((a,b)=>b.koTotal-a.koTotal||b.matchups-a.matchups||a.name.localeCompare(b.name));
   const lbRows = scored.map((s,i)=>{
     const isSelf=s.name===S.name;
-    const myPicks=allRP[s.name]||{};
-    const picked=Object.values(myPicks).filter(Boolean).length;
-    const allIds=rounds.flatMap(r=>r.ids);
-    const total=allIds.length;
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;${isSelf?'background:rgba(22,163,74,0.08);border-radius:0.5rem;':''}">
       <span style="color:#475569;font-size:0.75rem;width:1.5rem;text-align:center;">#${i+1}</span>
       <span style="flex:1;font-size:0.875rem;color:${isSelf?'#4ade80':'#cbd5e1'};font-weight:${isSelf?600:400};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.name)}${isSelf?' (you)':''}</span>
-      <span style="font-size:0.72rem;color:#64748b;white-space:nowrap;">${picked}/${total} picked</span>
-      <span style="font-size:0.82rem;color:#fcd34d;font-weight:700;font-family:monospace;white-space:nowrap;min-width:3rem;text-align:right;">${s.correct}/${s.possible}</span>
+      <span style="font-size:0.72rem;color:#22d3ee;white-space:nowrap;" title="Matchups called right">${s.matchups} mt</span>
+      <span style="font-size:0.82rem;color:#fcd34d;font-weight:700;font-family:monospace;white-space:nowrap;min-width:3rem;text-align:right;">${s.koTotal}</span>
     </div>`;
   }).join('');
 
@@ -5651,7 +5720,7 @@ function renderRepicker(){
   <div style="padding-bottom:1.5rem;">
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
-      <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Pick the winner of each match. Green = your pick. Blue = actual result. Red = wrong.</p>
+      <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Predict the <b>score</b> of each knockout game, starting from the real Round-of-32 teams. Your bracket advances from your scores. Locks when the knockouts kick off.</p>
     </div>
 
     ${adminStatus}
@@ -5662,7 +5731,7 @@ function renderRepicker(){
 
     ${scored.length ? `
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.5rem;">
-      <h2 style="font-weight:600;color:white;font-size:0.9rem;margin-bottom:0.625rem;">🏆 Repicker Leaderboard <span style="color:#64748b;font-weight:400;font-size:0.75rem;">(correct picks / results in)</span></h2>
+      <h2 style="font-weight:600;color:white;font-size:0.9rem;margin-bottom:0.625rem;">🏆 Repicker Leaderboard <span style="color:#64748b;font-weight:400;font-size:0.75rem;">(KO points · matchups)</span></h2>
       ${lbRows}
     </div>` : ''}
   </div>`;
