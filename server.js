@@ -82,6 +82,8 @@ async function initDB() {
       home_score INTEGER,
       away_score INTEGER,
       pen_winner TEXT,
+      pen_home   INTEGER,
+      pen_away   INTEGER,
       updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, match_id)
     )`, args: [] },
@@ -131,6 +133,19 @@ async function initDB() {
       created_at TEXT    NOT NULL DEFAULT (datetime('now'))
     )`, args: [] },
   ], 'write');
+
+  // Migrations for existing databases (CREATE TABLE IF NOT EXISTS won't add
+  // columns to a table that already exists). Run individually; ignore the
+  // "duplicate column" error when the column is already present.
+  const migrations = [
+    'ALTER TABLE ko_predictions ADD COLUMN pen_home INTEGER',
+    'ALTER TABLE ko_predictions ADD COLUMN pen_away INTEGER',
+  ];
+  for (const sql of migrations) {
+    try { await db.execute(sql); }
+    catch (e) { if (!/duplicate column/i.test(e.message || '')) throw e; }
+  }
+
   console.log('DB schema initialised');
 }
 
@@ -333,6 +348,8 @@ async function buildStatePayload() {
       home: row.home, away: row.away,
       homeScore: row.home_score, awayScore: row.away_score,
       penWinner: row.pen_winner || '',
+      penHome: row.pen_home != null ? row.pen_home : undefined,
+      penAway: row.pen_away != null ? row.pen_away : undefined,
     };
   }
 
@@ -652,14 +669,21 @@ app.put('/api/predictions', requireAuth, asyncHandler(async (req, res) => {
     // Validate scores if provided (same range as group predictions)
     if (hs !== null && (!Number.isFinite(hs) || hs < 0 || hs > 30)) continue;
     if (as_ !== null && (!Number.isFinite(as_) || as_ < 0 || as_ > 30)) continue;
+    // Penalty shootout scores (only present when regulation was a draw)
+    let ph = pred.penHome != null ? parseInt(pred.penHome, 10) : null;
+    let pa = pred.penAway != null ? parseInt(pred.penAway, 10) : null;
+    if (ph !== null && (!Number.isFinite(ph) || ph < 0 || ph > 30)) ph = null;
+    if (pa !== null && (!Number.isFinite(pa) || pa < 0 || pa > 30)) pa = null;
     statements.push({
-      sql: `INSERT INTO ko_predictions (user_id, match_id, home, away, home_score, away_score, pen_winner, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      sql: `INSERT INTO ko_predictions (user_id, match_id, home, away, home_score, away_score, pen_winner, pen_home, pen_away, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(user_id, match_id) DO UPDATE SET
               home = excluded.home, away = excluded.away,
               home_score = excluded.home_score, away_score = excluded.away_score,
-              pen_winner = excluded.pen_winner, updated_at = excluded.updated_at`,
-      args: [userId, matchId, pred.home || null, pred.away || null, hs, as_, pred.penWinner || null],
+              pen_winner = excluded.pen_winner,
+              pen_home = excluded.pen_home, pen_away = excluded.pen_away,
+              updated_at = excluded.updated_at`,
+      args: [userId, matchId, pred.home || null, pred.away || null, hs, as_, pred.penWinner || null, ph, pa],
     });
   }
 
