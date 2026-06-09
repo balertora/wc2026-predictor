@@ -316,6 +316,13 @@
   .dossier-btn svg { width:1.1rem; height:1.1rem; }
   .dossier-btn { vertical-align:middle; }
 
+  /* Country flags rendered as images (cross-platform; Windows lacks flag emoji).
+     height in em → scales with the surrounding font-size (incl. animated markers). */
+  img.flag {
+    height:0.95em; width:auto; vertical-align:-0.12em; display:inline-block;
+    border-radius:2px; box-shadow:0 0 0 0.5px rgba(0,0,0,0.2); object-fit:cover;
+  }
+
   /* ── Auto-pick helper ── */
   #bot-bar:empty { display:none; }
   /* Compact popover anchored to the current game card (positioned by JS). */
@@ -3040,7 +3047,23 @@ function showView(v){
 }
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function flag(t){ return FLAGS[t]||'🏳️'; }
+// Country flags as images (Windows ships no flag-emoji glyphs, so emoji flags
+// render as bare letters there). The emoji are regional-indicator pairs that
+// encode the ISO 3166 code directly; England/Scotland use subdivision flags.
+const FLAG_SUBDIV = { 'Scotland':'gb-sct', 'England':'gb-eng' };
+function _flagCode(t){
+  if(FLAG_SUBDIV[t]) return FLAG_SUBDIV[t];
+  const e=FLAGS[t]; if(!e) return null;
+  const cps=[...e].map(c=>c.codePointAt(0));
+  if(cps.length>=2 && cps[0]>=0x1F1E6 && cps[0]<=0x1F1FF && cps[1]>=0x1F1E6 && cps[1]<=0x1F1FF)
+    return String.fromCharCode(97+cps[0]-0x1F1E6)+String.fromCharCode(97+cps[1]-0x1F1E6);
+  return null;
+}
+function flag(t){
+  const code=_flagCode(t);
+  if(!code) return FLAGS[t]||'🏳️';   // placeholders (Winner of…, etc.) keep the emoji
+  return `<img class="flag" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" onerror="this.style.display='none'">`;
+}
 
 // ── Team tooltip ─────────────────────────────────────────────
 function showTeamTip(event, name){
