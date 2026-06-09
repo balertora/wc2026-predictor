@@ -318,19 +318,20 @@
 
   /* ── Auto-pick helper ── */
   #bot-bar:empty { display:none; }
-  .bot-bar-inner {
-    position:fixed; left:0; right:0; bottom:0; z-index:188;
-    background:var(--bg-nav); border-top:2px solid var(--accent);
-    box-shadow:0 -4px 20px rgba(0,0,0,0.3);
-    padding:0.6rem 0.85rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
-    display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; justify-content:center;
+  /* Compact popover anchored to the current game card (positioned by JS). */
+  .bot-pop {
+    position:fixed; z-index:188; transform:translateX(-50%);
+    background:var(--bg-nav); border:1px solid var(--accent); border-radius:0.7rem;
+    box-shadow:0 6px 24px rgba(0,0,0,0.45);
+    padding:0.4rem 0.5rem; display:flex; align-items:center; gap:0.35rem;
+    flex-wrap:wrap; justify-content:center; max-width:94vw;
   }
   .bot-num {
-    width:2.6rem; text-align:center; font-size:1.05rem; font-weight:800; font-family:'Courier New',monospace;
+    width:2.4rem; text-align:center; font-size:1rem; font-weight:800; font-family:'Courier New',monospace;
     background:var(--bg-input); border:1px solid var(--border-strong); border-radius:0.4rem;
-    color:var(--text); padding:0.25rem 0;
+    color:var(--text); padding:0.2rem 0;
   }
-  .bot-btn { border:none; border-radius:0.5rem; padding:0.45rem 0.8rem; font-weight:600; font-size:0.85rem; cursor:pointer; white-space:nowrap; }
+  .bot-btn { border:none; border-radius:0.45rem; padding:0.4rem 0.55rem; font-weight:600; font-size:0.9rem; cursor:pointer; white-space:nowrap; line-height:1; }
   @keyframes botPulse { 0%,100%{box-shadow:0 0 0 2px rgba(22,163,74,0.7);} 50%{box-shadow:0 0 0 4px rgba(22,163,74,0.25);} }
   .game-card.bot-target { animation:botPulse 1.4s ease-in-out infinite; border-color:rgba(22,163,74,0.6) !important; }
 
@@ -5931,28 +5932,44 @@ function botHighlight(){
   const id = (S.bot.game.ko?'card-ko-':'card-g-')+S.bot.game.id;
   const el = document.getElementById(id);
   if(el){ el.classList.add('bot-target'); el.scrollIntoView({block:'center',behavior:'smooth'}); }
-}
-function _botLabel(tab){
-  return {md1:'Matchday 1',md2:'Matchday 2',md3:'Matchday 3',r32:'Round of 32',r16:'Round of 16',qf:'Quarter-final',sf:'Semi-final',f:'Final'}[tab]||tab;
+  _positionBotPop();
+  setTimeout(_positionBotPop, 400); // settle after the smooth scroll
 }
 function _renderBotBar(){
   const bar=document.getElementById('bot-bar'); if(!bar) return;
   const g=S.bot.game;
   if(!S.bot.active || !g){ bar.innerHTML=''; return; }
+  // Compact — team names are already on the card the popover sits over.
   bar.innerHTML=`
-    <div class="bot-bar-inner">
-      <span style="font-size:0.72rem;color:var(--text-faint);white-space:nowrap;">🤖 ${_botLabel(S.bot.tab)}</span>
-      <span style="font-size:0.9rem;font-weight:600;color:var(--text-strong);white-space:nowrap;">${flag(g.home)} ${esc(shortTeamName(g.home))}</span>
+    <div class="bot-pop">
+      <span style="font-size:0.7rem;">🤖</span>
       <input class="bot-num" type="number" min="0" max="20" value="${S.bot.h}" oninput="botEdit('h',this.value)" aria-label="home score" />
       <span style="color:var(--text-faint);font-weight:700;">–</span>
       <input class="bot-num" type="number" min="0" max="20" value="${S.bot.a}" oninput="botEdit('a',this.value)" aria-label="away score" />
-      <span style="font-size:0.9rem;font-weight:600;color:var(--text-strong);white-space:nowrap;">${esc(shortTeamName(g.away))} ${flag(g.away)}</span>
       <button class="bot-btn" style="background:var(--bg-tint);color:var(--text);" onclick="botReroll()" title="Suggest a different score">🎲</button>
-      <button class="bot-btn" style="background:#16a34a;color:#fff;" onclick="botConfirm()">✓ Confirm</button>
-      <button class="bot-btn" style="background:var(--bg-tint);color:var(--text-faint);" onclick="botSkip()" title="Skip this game">Skip</button>
+      <button class="bot-btn" style="background:#16a34a;color:#fff;padding:0.4rem 0.7rem;" onclick="botConfirm()" title="Confirm & next">✓</button>
+      <button class="bot-btn" style="background:var(--bg-tint);color:var(--text-faint);" onclick="botSkip()" title="Skip this game">↷</button>
       <button class="bot-btn" style="background:var(--bg-tint);color:var(--text-faint);" onclick="botStop()" title="Stop the helper">✕</button>
     </div>`;
+  _positionBotPop();
 }
+// Anchor the popover just below (or above) the current game card.
+function _positionBotPop(){
+  const pop=document.querySelector('#bot-bar .bot-pop');
+  if(!pop || !S.bot.game) return;
+  const card=document.getElementById((S.bot.game.ko?'card-ko-':'card-g-')+S.bot.game.id);
+  if(!card){ pop.style.visibility='hidden'; return; }
+  pop.style.visibility='visible';
+  const r=card.getBoundingClientRect();
+  const ph=pop.offsetHeight, pw=pop.offsetWidth, half=pw/2;
+  let top=r.bottom+8;
+  if(top+ph > window.innerHeight-8) top=Math.max(8, r.top-ph-8); // flip above if no room
+  let left=Math.max(half+6, Math.min(window.innerWidth-half-6, r.left+r.width/2));
+  pop.style.top=top+'px';
+  pop.style.left=left+'px';
+}
+window.addEventListener('scroll', ()=>{ if(S.bot.active) _positionBotPop(); }, {passive:true});
+window.addEventListener('resize', ()=>{ if(S.bot.active) _positionBotPop(); });
 
 // ═══════════════════════════════════════════════════════════
 // BOOT (Railway version)
