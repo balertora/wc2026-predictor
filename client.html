@@ -316,6 +316,24 @@
   .dossier-btn svg { width:1.1rem; height:1.1rem; }
   .dossier-btn { vertical-align:middle; }
 
+  /* ── Auto-pick helper ── */
+  #bot-bar:empty { display:none; }
+  .bot-bar-inner {
+    position:fixed; left:0; right:0; bottom:0; z-index:188;
+    background:var(--bg-nav); border-top:2px solid var(--accent);
+    box-shadow:0 -4px 20px rgba(0,0,0,0.3);
+    padding:0.6rem 0.85rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+    display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; justify-content:center;
+  }
+  .bot-num {
+    width:2.6rem; text-align:center; font-size:1.05rem; font-weight:800; font-family:'Courier New',monospace;
+    background:var(--bg-input); border:1px solid var(--border-strong); border-radius:0.4rem;
+    color:var(--text); padding:0.25rem 0;
+  }
+  .bot-btn { border:none; border-radius:0.5rem; padding:0.45rem 0.8rem; font-weight:600; font-size:0.85rem; cursor:pointer; white-space:nowrap; }
+  @keyframes botPulse { 0%,100%{box-shadow:0 0 0 2px rgba(22,163,74,0.7);} 50%{box-shadow:0 0 0 4px rgba(22,163,74,0.25);} }
+  .game-card.bot-target { animation:botPulse 1.4s ease-in-out infinite; border-color:rgba(22,163,74,0.6) !important; }
+
   /* ── Dossier modal ── */
   #dossier-root:empty { display:none; }
   .dsr-overlay {
@@ -463,6 +481,9 @@
 
 <!-- Team dossier modal (filled by openDossier, lives outside #app so render() never touches it) -->
 <div id="dossier-root"></div>
+
+<!-- Auto-pick helper bar (filled by _renderBotBar; lives outside #app) -->
+<div id="bot-bar"></div>
 
 <!-- ── Chat FAB ── -->
 <button id="chat-fab" onclick="toggleChat()"
@@ -1978,6 +1999,7 @@ const S = {
   adminUnlocked: false,
   otherUsers: [],  // other participants' picks, loaded from server state
   messages:   [],  // chat messages, last 50, chronological
+  bot: { active:false, game:null, h:0, a:0, skipped:[] }, // auto-pick helper
   gLive: {}, // transient — not persisted; {id:{hs,as,clock,detail}}
   predMapView: false, // transient — map vs list toggle for MD tabs
   lbSort: 'total',   // leaderboard sort column
@@ -3237,6 +3259,7 @@ function render(){
   if(_predMap){ _predMap.remove(); _predMap = null; }
   document.getElementById('app').innerHTML = renderMain();
   _updateNavUser(); // Keep nav avatar current whenever state changes
+  _renderBotBar();  // Keep the auto-pick bar in sync (lives outside #app)
   if(_pendingGoalAnim){
     const {mid, side, count=1} = _pendingGoalAnim; _pendingGoalAnim = null;
     for(let i=0; i<count; i++) _fireGoalAnim(mid, side, i*300);
@@ -3355,6 +3378,13 @@ function renderPredict(){
         <div style="height:100%;background:#16a34a;border-radius:9999px;width:${(done/total*100).toFixed(1)}%;transition:width 0.3s;"></div>
       </div>
     </div>
+
+    ${!locked?`<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:1rem;">
+      <button onclick="${S.bot.active?'botStop()':'botStart()'}" class="btn-s" style="font-size:0.85rem;padding:0.5rem 0.9rem;${S.bot.active?'border-color:rgba(22,163,74,0.5);color:#16a34a;':''}">
+        ${S.bot.active?'■ Stop auto-pick':'🤖 Auto-pick helper'}
+      </button>
+      <span style="font-size:0.72rem;color:#64748b;">Suggests a plausible score for each open game — confirm or edit, one at a time.</span>
+    </div>`:''}
 
     ${predTabs()}
     <div style="margin-top:1rem;">${renderPredSection()}</div>
@@ -5761,6 +5791,167 @@ function renderRepicker(){
       ${lbRows}
     </div>` : ''}
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-PICK HELPER ("the bot")
+// Suggests semi-random but plausible scores from a light probabilistic model:
+// FIFA ranking + qualifier form + head-to-head, sampled via Poisson so stronger
+// teams tend to score more but upsets remain possible. Guides one game at a time
+// and auto-advances across matchday/round pages.
+// ═══════════════════════════════════════════════════════════
+const BOT_TABS = ['md1','md2','md3','r32','r16','qf','sf','f'];
+
+// Overall team quality in [0.05, 1] from FIFA rank (55%) + qualifier form (45%).
+function _botStrength(team){
+  const rank = FIFA_RANK[team] || 64;
+  const rankQ = Math.max(0.05, Math.min(1, 1-(rank-1)/90));
+  const d = TEAM_DATA[team];
+  let qualQ = rankQ;
+  if(d && !d.host && (d.w+d.d+d.l)>0){
+    const g=d.w+d.d+d.l;
+    const winRate=(d.w+0.5*d.d)/g;
+    const gd=(d.gf-d.ga)/g;                     // goal diff per qualifying game
+    qualQ = Math.max(0, Math.min(1, 0.5*winRate + 0.5*(0.5 + gd/6)));
+  }
+  return Math.max(0.05, Math.min(1, 0.55*rankQ + 0.45*qualQ));
+}
+// Competitive head-to-head goals per game, oriented to (home, away). null if none.
+function _botH2H(home, away){
+  let d=H2H[home+'|'+away], rev=false;
+  if(!d && H2H[away+'|'+home]){ d=H2H[away+'|'+home]; rev=true; }
+  if(!d || !d.comp) return null;
+  const c=d.comp, g=c.w+c.d+c.l; if(g<=0) return null;
+  return { hg:(rev?c.ga:c.gf)/g, ag:(rev?c.gf:c.ga)/g };
+}
+function _botPoisson(l){ l=Math.max(0.05,l); const L=Math.exp(-l); let k=0,p=1; do{k++;p*=Math.random();}while(p>L); return k-1; }
+
+// Suggest a scoreline. koDecisive=true biases away from draws (avoids pens).
+function botSuggest(home, away, koDecisive){
+  const sh=_botStrength(home), sa=_botStrength(away);
+  const diff=sh-sa;                              // -1 … 1
+  const BASE=1.25, K=1.25, HOME=0.08;
+  let lamH=BASE+K*diff+HOME, lamA=BASE-K*diff;
+  const h2h=_botH2H(home,away);
+  if(h2h){ lamH=0.82*lamH+0.18*h2h.hg; lamA=0.82*lamA+0.18*h2h.ag; }
+  lamH=Math.max(0.3,Math.min(2.0,lamH))*(0.9+Math.random()*0.25);
+  lamA=Math.max(0.3,Math.min(2.0,lamA))*(0.9+Math.random()*0.25);
+  let h=Math.min(_botPoisson(lamH),4), a=Math.min(_botPoisson(lamA),4); // >3 stays rare
+  if(koDecisive && h===a){
+    if(sh>=sa) h=Math.min(h+1,4); else a=Math.min(a+1,4);
+    if(h===a){ if(sh>=sa) a=Math.max(a-1,0); else h=Math.max(h-1,0); }
+  }
+  return {h,a};
+}
+
+// Games for a predict tab → [{id, home, away, ko}]
+function botGamesForTab(tab){
+  if(/^md[123]$/.test(tab)){
+    const md=parseInt(tab[2],10);
+    return GROUP_GAMES.filter(g=>g.md===md).map(g=>({id:g.id,home:g.home,away:g.away,ko:false}));
+  }
+  const {q, r16, qf, sf, fin} = buildAllRounds();
+  const mk = arr => arr.map(g=>({id:g.id,home:g.home,away:g.away,ko:true}));
+  if(tab==='r32') return R32_FIXED.map(m=>({id:m.id,home:resolvePos(m.posA,q),away:resolvePos(m.posB,q),ko:true}));
+  if(tab==='r16') return mk(r16);
+  if(tab==='qf')  return mk(qf);
+  if(tab==='sf')  return mk(sf);
+  if(tab==='f')   return mk(fin);
+  return [];
+}
+const _botReal = name => !!TEAM_DATA[name];
+function _botGameDone(g){
+  if(g.ko){ const kp=S.kPreds[g.id]; return !!(kp && kp.homeScore!=null && kp.awayScore!=null); }
+  return S.gPreds[g.id]!=null;
+}
+// Find the next game to suggest (skips unresolved KO, already-predicted, and skipped).
+function botNextGame(){
+  for(const tab of BOT_TABS){
+    for(const g of botGamesForTab(tab)){
+      if(!_botReal(g.home) || !_botReal(g.away)) continue;
+      if(S.bot.skipped.includes(g.id)) continue;
+      if(!_botGameDone(g)) return {tab, game:g};
+    }
+  }
+  return null;
+}
+
+function botStart(){
+  if(isLocked()) return;
+  S.bot.active=true; S.bot.skipped=[];
+  botAdvance();
+}
+function botAdvance(){
+  const n=botNextGame();
+  if(!n){ botFinish(); return; }
+  S.bot.tab=n.tab; S.bot.game=n.game;
+  const {h,a}=botSuggest(n.game.home,n.game.away,n.game.ko);
+  S.bot.h=h; S.bot.a=a;
+  S.view='predict'; S.predTab=n.tab;              // keep on the page holding this game
+  render();
+  setTimeout(botHighlight,30);
+}
+function botReroll(){
+  if(!S.bot.game) return;
+  const {h,a}=botSuggest(S.bot.game.home,S.bot.game.away,S.bot.game.ko);
+  S.bot.h=h; S.bot.a=a; _renderBotBar();
+}
+function botEdit(side,val){
+  const v=Math.max(0,Math.min(20,parseInt(val)||0));
+  if(side==='h') S.bot.h=v; else S.bot.a=v;
+}
+function _botWritePick(g,h,a){
+  if(g.ko){
+    if(!S.kPreds[g.id]) S.kPreds[g.id]={};
+    Object.assign(S.kPreds[g.id], {home:g.home,away:g.away,homeScore:h,awayScore:a,penWinner:'',penHome:undefined,penAway:undefined});
+  } else {
+    S.gPreds[g.id]=[h,a];
+  }
+  persist();
+}
+function botConfirm(){
+  if(!S.bot.game) return;
+  _botWritePick(S.bot.game, S.bot.h, S.bot.a);
+  botAdvance();
+}
+function botSkip(){
+  if(S.bot.game) S.bot.skipped.push(S.bot.game.id);
+  botAdvance();
+}
+function botStop(){
+  S.bot.active=false; S.bot.game=null; render();
+}
+function botFinish(){
+  S.bot.active=false; S.bot.game=null; render();
+  setTimeout(()=>alert('🤖 All caught up — every available game has a pick!'),50);
+}
+function botHighlight(){
+  document.querySelectorAll('.bot-target').forEach(el=>el.classList.remove('bot-target'));
+  if(!S.bot.active || !S.bot.game) return;
+  const id = (S.bot.game.ko?'card-ko-':'card-g-')+S.bot.game.id;
+  const el = document.getElementById(id);
+  if(el){ el.classList.add('bot-target'); el.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+function _botLabel(tab){
+  return {md1:'Matchday 1',md2:'Matchday 2',md3:'Matchday 3',r32:'Round of 32',r16:'Round of 16',qf:'Quarter-final',sf:'Semi-final',f:'Final'}[tab]||tab;
+}
+function _renderBotBar(){
+  const bar=document.getElementById('bot-bar'); if(!bar) return;
+  const g=S.bot.game;
+  if(!S.bot.active || !g){ bar.innerHTML=''; return; }
+  bar.innerHTML=`
+    <div class="bot-bar-inner">
+      <span style="font-size:0.72rem;color:var(--text-faint);white-space:nowrap;">🤖 ${_botLabel(S.bot.tab)}</span>
+      <span style="font-size:0.9rem;font-weight:600;color:var(--text-strong);white-space:nowrap;">${flag(g.home)} ${esc(shortTeamName(g.home))}</span>
+      <input class="bot-num" type="number" min="0" max="20" value="${S.bot.h}" oninput="botEdit('h',this.value)" aria-label="home score" />
+      <span style="color:var(--text-faint);font-weight:700;">–</span>
+      <input class="bot-num" type="number" min="0" max="20" value="${S.bot.a}" oninput="botEdit('a',this.value)" aria-label="away score" />
+      <span style="font-size:0.9rem;font-weight:600;color:var(--text-strong);white-space:nowrap;">${esc(shortTeamName(g.away))} ${flag(g.away)}</span>
+      <button class="bot-btn" style="background:var(--bg-tint);color:var(--text);" onclick="botReroll()" title="Suggest a different score">🎲</button>
+      <button class="bot-btn" style="background:#16a34a;color:#fff;" onclick="botConfirm()">✓ Confirm</button>
+      <button class="bot-btn" style="background:var(--bg-tint);color:var(--text-faint);" onclick="botSkip()" title="Skip this game">Skip</button>
+      <button class="bot-btn" style="background:var(--bg-tint);color:var(--text-faint);" onclick="botStop()" title="Stop the helper">✕</button>
+    </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
