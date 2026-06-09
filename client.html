@@ -1345,9 +1345,12 @@ function h2hPanel(home, away){
   const fgf = rev ? f.ga : f.gf;
   const fga = rev ? f.gf : f.ga;
 
+  // count > 0 → proportional segment with its number; count === 0 → a thin dimmed
+  // sliver so every bucket (wins / draws / losses) stays visible and it's always
+  // obvious which side the record favors.
   const seg = (count, bg, label) => count > 0
     ? `<div class="h2h-seg" style="flex:${count};background:${bg};display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;min-width:1rem;">${label}</div>`
-    : '';
+    : `<div style="flex:0 0 3px;background:${bg};opacity:0.45;" title="0"></div>`;
 
   const row = (label,w,d,l,gf,ga) => {
     if(w+d+l===0) return '';
