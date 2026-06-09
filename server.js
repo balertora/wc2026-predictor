@@ -757,6 +757,30 @@ app.post('/api/auth/logout', requireAuth, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// DELETE /api/users/:name — admin removes a user and ALL their data.
+// Child rows are deleted explicitly (FK cascade isn't guaranteed on Turso's
+// HTTP transport, where PRAGMA foreign_keys can't be enabled).
+app.delete('/api/users/:name', requireAdmin, asyncHandler(async (req, res) => {
+  const name = (req.params.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name required' });
+  const target = await dbGet('SELECT id FROM users WHERE name = ? COLLATE NOCASE', [name]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  const id = Number(target.id);
+  if (id === req.session.userId) return res.status(400).json({ error: 'You cannot delete your own account' });
+
+  await db.batch([
+    { sql: 'DELETE FROM group_predictions WHERE user_id = ?', args: [id] },
+    { sql: 'DELETE FROM ko_predictions    WHERE user_id = ?', args: [id] },
+    { sql: 'DELETE FROM re_picks          WHERE user_id = ?', args: [id] },
+    { sql: 'DELETE FROM sessions          WHERE user_id = ?', args: [id] },
+    { sql: 'DELETE FROM messages          WHERE user_id = ?', args: [id] },
+    { sql: 'DELETE FROM users             WHERE id = ?',      args: [id] },
+  ], 'write');
+
+  scheduleBroadcast();
+  res.json({ ok: true });
+}));
+
 // ── State endpoint ───────────────────────────────────────────────────────────
 
 // GET /api/state — return full shared state (no auth needed — read-only)

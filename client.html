@@ -4532,17 +4532,25 @@ function renderAdmin(){
     })()}
 
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Import predictions</h2>
-      <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.75rem;">Paste a code from another participant to add them to the comparison.</p>
-      <div style="display:flex;gap:0.5rem;">
-        <input class="text-in" type="text" id="import-in" placeholder="Paste prediction code…" style="border-radius:0.5rem;" />
-        <button class="btn-g" onclick="doImport()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
-      </div>
-      ${S.otherUsers.map((p,i)=>`
-        <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.875rem;background:#0a1628;padding:0.5rem 0.75rem;border-radius:0.5rem;margin-top:0.5rem;">
-          <span style="color:#cbd5e1;">${esc(p.name)} <span style="color:#64748b;">(${Object.keys(p.gPreds||{}).length} group preds)</span></span>
-          <button onclick="removeImported(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:0.75rem;">✕</button>
-        </div>`).join('')}
+      <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Participants</h2>
+      <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.5rem;">Remove a user and <b>all</b> of their picks. <span style="color:#f87171;">Permanent</span> and syncs to everyone. To protect real players, deleting anyone with picks requires typing their name to confirm.</p>
+      ${[{name:S.name,gPreds:S.gPreds,kPreds:S.kPreds,_self:true}, ...S.otherUsers].map(p=>{
+        const gC=Object.keys(p.gPreds||{}).length, kC=Object.keys(p.kPreds||{}).length;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;font-size:0.875rem;background:#0a1628;padding:0.5rem 0.75rem;border-radius:0.5rem;margin-top:0.5rem;">
+          <span style="color:#cbd5e1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}${p._self?' <span style="color:#4ade80;">(you)</span>':''}
+            <span style="color:#64748b;font-size:0.75rem;">· ${gC} group · ${kC} KO</span></span>
+          ${p._self
+            ? `<span style="color:#475569;font-size:0.7rem;flex-shrink:0;">admin · protected</span>`
+            : `<button onclick="deleteUser('${_jss(p.name)}')" style="background:rgba(153,27,27,0.18);border:1px solid rgba(153,27,27,0.3);color:#f87171;cursor:pointer;font-size:0.72rem;border-radius:0.35rem;padding:0.25rem 0.6rem;flex-shrink:0;">Delete</button>`}
+        </div>`;
+      }).join('')}
+      <details style="margin-top:0.875rem;">
+        <summary style="cursor:pointer;font-size:0.78rem;color:#64748b;user-select:none;">Import a prediction code (advanced)</summary>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+          <input class="text-in" type="text" id="import-in" placeholder="Paste prediction code…" style="border-radius:0.5rem;" />
+          <button class="btn-g" onclick="doImport()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
+        </div>
+      </details>
     </div>
 
     ${(()=>{const W=getWeights();return`
@@ -5447,6 +5455,27 @@ function doImport(){
   el.value=''; render();
 }
 function removeImported(i){ S.otherUsers.splice(i,1); render(); }
+
+// Admin: permanently delete a user (and all their picks) from the server.
+async function deleteUser(name){
+  if(name===S.name){ alert("You can't delete your own admin account."); return; }
+  const u=S.otherUsers.find(x=>x.name===name);
+  const gC=Object.keys(u?.gPreds||{}).length, kC=Object.keys(u?.kPreds||{}).length;
+  if(gC+kC>0){
+    const typed=prompt(`⚠ "${name}" has ${gC} group + ${kC} knockout picks.\n\nThis permanently deletes the user and ALL their picks — it cannot be undone.\n\nType the name exactly to confirm:`);
+    if(typed==null) return;                       // cancelled
+    if(typed!==name){ alert('Name did not match — nothing was deleted.'); return; }
+  } else {
+    if(!confirm(`Delete "${name}"? (They have no picks.)`)) return;
+  }
+  try{
+    const res=await fetch('/api/users/'+encodeURIComponent(name),{method:'DELETE',headers:_authHeaders()});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok){ alert(d.error||'Delete failed'); return; }
+    S.otherUsers=S.otherUsers.filter(x=>x.name!==name);
+    render();
+  }catch(e){ alert('Delete failed: '+e.message); }
+}
 
 // Admin
 function checkPass(){
