@@ -2098,6 +2098,20 @@ function predGroupStandings(g, gPreds){
   return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
 }
 
+// Points each team in group g has accumulated from the user's predictions of
+// the matchdays *before* `md` (e.g. md=3 → counts only Matchday 1 & 2 picks).
+function groupPointsBeforeMd(g, md){
+  const teams = {};
+  for(const n of GROUPS[g]) teams[n] = { name:n, pts:0, played:0, gf:0, gd:0 };
+  for(const game of GROUP_GAMES.filter(x=>x.g===g && x.md<md)){
+    const p = S.gPreds[game.id]; if(!p) continue;
+    const [h,a] = p; const H=teams[game.home], A=teams[game.away]; if(!H||!A) continue;
+    H.played++; A.played++; H.gf+=h; A.gf+=a; H.gd+=h-a; A.gd+=a-h;
+    if(h>a) H.pts+=3; else if(a>h) A.pts+=3; else { H.pts++; A.pts++; }
+  }
+  return GROUPS[g].map(n=>teams[n]);
+}
+
 // ── 3rd-place ranking & slot assignment ───────────────────
 
 // Assign the 8 qualifying 3rd-place groups to the 8 winner-vs-3rd slots
@@ -3712,7 +3726,30 @@ function renderGroupGameCard(game){
         </div>
         ${infoPanel(game.home, game.away)}
       </div>
+      ${game.md===3 ? md3StandingsStrip(game) : ''}
     </div>`;
+}
+
+// Compact "points going into Matchday 3" strip for an MD3 card. Uses only the
+// user's own Matchday 1 & 2 predictions. The two teams in this match are
+// highlighted; the other two group members are shown (dimmed) for context.
+function md3StandingsStrip(game){
+  const rows = groupPointsBeforeMd(game.g, 3)
+    .sort((a,b)=> b.pts-a.pts || b.gd-a.gd || b.gf-a.gf || a.name.localeCompare(b.name));
+  if(!rows.some(t=>t.played>0)){
+    return `<div style="margin-top:0.45rem;padding-top:0.45rem;border-top:1px solid rgba(255,255,255,0.06);font-size:0.68rem;color:#475569;">
+      Predict the Matchday 1–2 games to see each team's points going into this one.</div>`;
+  }
+  const inMatch = new Set([game.home, game.away]);
+  const chips = rows.map((t,i)=>{
+    const hot = inMatch.has(t.name);
+    return `<span title="${esc(t.name)} — ${t.pts} pts from ${t.played} game${t.played===1?'':'s'} (GD ${t.gd>=0?'+':''}${t.gd})"
+        style="display:inline-flex;align-items:center;gap:0.28rem;padding:0.12rem 0.4rem;border-radius:0.3rem;${hot?'background:rgba(59,130,246,0.14);':''}color:${hot?'#e2e8f0':'#64748b'};${hot?'font-weight:700;':''}white-space:nowrap;">
+        <span style="color:#475569;font-size:0.62rem;">${i+1}</span>${flag(t.name)} ${esc(shortTeamName(t.name))}
+        <b style="color:${hot?'#fbbf24':'#94a3b8'};">${t.pts}</b></span>`;
+  }).join('');
+  return `<div style="margin-top:0.45rem;padding-top:0.45rem;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;font-size:0.72rem;">
+    <span style="color:#475569;white-space:nowrap;">Points so far:</span>${chips}</div>`;
 }
 
 // ── Tiebreaker UI (shown at top of R32 tab when needed) ──
