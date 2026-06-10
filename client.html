@@ -3976,6 +3976,60 @@ function makeLineChart(series, invert){
 }
 
 // ═══════════════════════════════════════════════════════════
+// SHORT NAMES — unique 3-4 char abbreviations for compact headers
+// ═══════════════════════════════════════════════════════════
+// Build a {rawName: short} map where every short is unique within the set.
+// Tries readable candidates first (the name itself if short, a prefix, multi-
+// word initials) and only falls back to a numeric suffix if everything clashes.
+function buildShortNames(names){
+  const uniq = [...new Set(names.filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const taken = new Set(), out = {};
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  for(const name of uniq){
+    const clean = name.replace(/\s*\(you\)\s*/i,'').trim();
+    const words = clean.split(/[\s._\-&/]+/).filter(Boolean);
+    const alnum = clean.replace(/[^A-Za-z0-9]/g,'');
+    const cands = [];
+    if(clean.length>=2 && clean.length<=4) cands.push(clean);       // e.g. "G&S", "Bob"
+    if(alnum.length>=3) cands.push(cap(alnum.slice(0,3).toLowerCase()));
+    if(alnum.length>=4) cands.push(cap(alnum.slice(0,4).toLowerCase()));
+    if(words.length>=2){
+      const ini = words.map(w=>w[0]).join('').replace(/[^A-Za-z0-9]/g,'');
+      if(ini.length>=2) cands.push(ini.slice(0,4).toUpperCase());
+      cands.push(cap((words[0].slice(0,2)+words[1].slice(0,2)).toLowerCase()));
+    }
+    if(alnum.length>=3) cands.push(cap((alnum.slice(0,2)+alnum.slice(-1)).toLowerCase()));
+    let pick = null;
+    for(const c of cands){ if(c && c.length>=2 && !taken.has(c.toLowerCase())){ pick=c; break; } }
+    if(!pick){
+      const base = (alnum.slice(0,3) || 'usr');
+      for(let i=1;i<999 && !pick;i++){ const c=cap((base.slice(0,3)+i).toLowerCase()); if(!taken.has(c.toLowerCase())) pick=c; }
+    }
+    pick = pick || cap((alnum.slice(0,2)||'us')+'1');
+    taken.add(pick.toLowerCase());
+    out[name] = pick;
+    if(clean!==name) out[clean] = pick;
+  }
+  return out;
+}
+let _shortMap = {}, _shortSig = '';
+function refreshShortNames(){
+  const names = [];
+  if(S.name) names.push(S.name);
+  for(const u of S.otherUsers||[]) if(u.name) names.push(u.name);
+  const sig = [...new Set(names)].sort().join('|');
+  if(sig === _shortSig) return;
+  _shortSig = sig; _shortMap = buildShortNames(names);
+}
+// Compact, unique label for a participant name (full name kept for tooltips).
+function abbrevName(name){
+  if(!name) return '';
+  refreshShortNames();
+  const key = name.replace(/\s*\(you\)\s*/i,'').trim();
+  return _shortMap[name] || _shortMap[key] || key.slice(0,4);
+}
+
+// ═══════════════════════════════════════════════════════════
 // RESULTS TAB
 // ═══════════════════════════════════════════════════════════
 
@@ -4112,7 +4166,7 @@ function renderResults(){
   const headerRow = `
     <tr>
       <th style="${TH_GAME}">Game</th>
-      ${participants.map(p=>`<th style="${TH}">${esc(p.name)}</th>`).join('')}
+      ${participants.map(p=>`<th style="${TH}" title="${esc(p.name)}">${esc(abbrevName(p.name))}</th>`).join('')}
     </tr>`;
 
   const rows = liveGames.map(g=>gameRow(g,'live')).join('')
@@ -4185,7 +4239,7 @@ function renderResults(){
   const koHeaderRow = `
     <tr>
       <th style="${TH_GAME}">Match</th>
-      ${koParticipants.map(p=>`<th style="${TH}">${esc(p.name)}</th>`).join('')}
+      ${koParticipants.map(p=>`<th style="${TH}" title="${esc(p.name)}">${esc(abbrevName(p.name))}</th>`).join('')}
     </tr>`;
 
   const koLegend = `<div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
@@ -4960,8 +5014,7 @@ function renderGroupsTab(){
         {label:'Standings', key:'positions', lowerBetter:false, den:()=>allDone?4:null,   tip:'How many of the 4 final group positions each person predicted correctly (shown once all group games are played)'},
       ];
 
-      const shortName=u=>esc(u.name.length>10?u.name.slice(0,9)+'…':u.name);
-      const colHeaders=stats.map(s=>`<th style="padding:${_rp};text-align:center;font-size:0.7rem;color:#64748b;font-weight:500;max-width:5rem;" title="${esc(s.name)}">${shortName(s)}</th>`).join('');
+      const colHeaders=stats.map(s=>`<th style="padding:${_rp};text-align:center;font-size:0.7rem;color:#64748b;font-weight:500;max-width:5rem;" title="${esc(s.name)}">${esc(abbrevName(s.name))}</th>`).join('');
 
       const metricRows=metrics.map(m=>{
         const vals=stats.map(s=>m.key==='positions'?s.positions:s[m.key]);
@@ -5016,18 +5069,113 @@ function renderGroupsTab(){
 // PICKS TAB (subtabs: Group Stage + KO rounds comparison)
 // ═══════════════════════════════════════════════════════════
 
+// ── Crowd "title odds" ─────────────────────────────────────
+// How strongly the field's brackets back each team to win the whole thing.
+// For every participant and every KO match they predicted, the predicted
+// winner earns that round's weight (the KO curve) × a confidence factor from
+// the goal margin. Summed across the field and normalized, the result is the
+// share of weighted conviction behind each team — i.e. how many people (and
+// how confidently) would need to be wrong for them NOT to lift the trophy.
+const TITLE_ODDS_CFG = { confFloor: 0.5, marginScale: 1.5 }; // tune: pen/coin-flip floor & how fast margins → certainty
+function _titleRoundOf(id){
+  return id.startsWith('r32') ? 'r32'
+       : id.startsWith('r16') ? 'r16'
+       : id.startsWith('qf')  ? 'qf'
+       : id.startsWith('sf')  ? 'sf'
+       : id==='final'         ? 'final' : null; // '3rd' excluded — not a path to the title
+}
+function _winConfidence(margin){
+  const { confFloor, marginScale } = TITLE_ODDS_CFG;
+  return 1 - (1-confFloor)*Math.exp(-Math.abs(margin)/marginScale); // pens(0)→floor, big wins→~1
+}
+function computeTitleOdds(participants){
+  const w = koWeights(); // {r32,r16,qf,sf,final,...} from the selected admin curve
+  const support = {}, champCount = {};
+  let bracketsWithFinal = 0;
+  for(const p of participants){
+    const kp = p.kPreds || {};
+    for(const [id,pred] of Object.entries(kp)){
+      const round = _titleRoundOf(id);
+      if(!round || !pred || pred.homeScore==null || pred.awayScore==null) continue;
+      const hs=+pred.homeScore, as=+pred.awayScore;
+      let winner=null, margin=0;
+      if(hs>as){ winner=pred.home; margin=hs-as; }
+      else if(as>hs){ winner=pred.away; margin=as-hs; }
+      else { winner=pred.penWinner||null; margin=0; }
+      if(!winner || winner.includes('Group') || winner.includes('place') || winner.includes('TBD')) continue;
+      support[winner] = (support[winner]||0) + (w[round]||1) * _winConfidence(margin);
+      if(round==='final'){ bracketsWithFinal++; champCount[winner]=(champCount[winner]||0)+1; }
+    }
+  }
+  const total = Object.values(support).reduce((a,b)=>a+b,0);
+  const rows = Object.entries(support)
+    .map(([team,s])=>({ team, support:s, odds: total>0 ? s/total : 0, champBrackets: champCount[team]||0 }))
+    .sort((a,b)=> b.support-a.support || a.team.localeCompare(b.team));
+  return { rows, total, bracketsWithFinal };
+}
+function renderTitleOdds(){
+  const participants = [];
+  if(S.name) participants.push({ name:S.name, kPreds:S.kPreds||{} });
+  for(const u of S.otherUsers||[]) participants.push({ name:u.name, kPreds:u.kPreds||{} });
+  const { rows, total, bracketsWithFinal } = computeTitleOdds(participants);
+
+  if(!total) return `<div style="padding:2.5rem 1rem;text-align:center;color:#64748b;font-size:0.9rem;">
+    🏆 No knockout picks yet — once people fill in their brackets, crowd title odds will appear here.</div>`;
+
+  const curveLabel = (KO_CURVE_LABELS[koCurveName()] || koCurveName());
+  const maxOdds = rows[0].odds;
+  const pct = x => x>=0.095 ? Math.round(x*100)+'%' : (x*100).toFixed(1)+'%';
+  const dec = x => x>0 ? (1/x).toFixed(x<0.1?0:1) : '—';
+
+  const bars = rows.map((r,i)=>{
+    const w = Math.max(2, Math.round(r.odds/maxOdds*100));
+    const lead = i===0;
+    const champLine = bracketsWithFinal
+      ? `<span style="color:#475569;">champion in ${r.champBrackets}/${bracketsWithFinal}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="width:1.4rem;text-align:right;color:#475569;font-size:0.72rem;flex-shrink:0;">${i+1}</span>
+        <span style="width:9.5rem;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:0.86rem;color:white;">${flag(r.team)} ${esc(shortTeamName(r.team))}</span>
+        <div style="flex:1;min-width:60px;height:18px;background:#0a1628;border-radius:4px;overflow:hidden;position:relative;">
+          <div style="height:100%;width:${w}%;background:${lead?'#fbbf24':'#3b82f6'};opacity:${lead?0.95:0.65};border-radius:4px;"></div>
+        </div>
+        <span style="width:3.2rem;text-align:right;flex-shrink:0;font-family:monospace;font-weight:700;color:${lead?'#fbbf24':'#93c5fd'};">${pct(r.odds)}</span>
+        <span title="Fair decimal odds (1 / probability)" style="width:3.2rem;text-align:right;flex-shrink:0;font-family:monospace;font-size:0.74rem;color:#64748b;">${dec(r.odds)}</span>
+        <span style="width:8rem;flex-shrink:0;font-size:0.66rem;text-align:right;">${champLine}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;padding:1rem 1.1rem;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.6rem;">
+        <h2 style="font-size:1.05rem;font-weight:700;color:white;margin:0;">🏆 Crowd title odds</h2>
+        <span style="font-size:0.68rem;color:#64748b;">weighting: <b style="color:#93c5fd;">${esc(curveLabel)}</b> · ${participants.length} ${participants.length===1?'bracket':'brackets'}</span>
+      </div>
+      <p style="font-size:0.7rem;color:#64748b;line-height:1.5;margin:0 0 0.75rem;">
+        Each bracket's predicted winners earn that round's weight × confidence from the goal margin (a 3-0 counts more than a 1-0; a penalty win least). Normalized across all teams — so the % is the field's collective conviction in each team lifting the trophy.
+      </p>
+      ${bars}
+      <div style="font-size:0.64rem;color:#475569;margin-top:0.6rem;line-height:1.5;">
+        <span style="color:#fbbf24;">gold</span> = current favourite · the decimal column is fair odds (1 / probability) · tune the weighting in the admin scoring section.
+      </div>
+    </div>`;
+}
+
 function renderPicksTab(){
   const tab = S.picksTab || 'groups';
   const koRounds = [{key:'r32',label:'R32'},{key:'r16',label:'R16'},{key:'qf',label:'Quarters'},{key:'sf',label:'Semis'},{key:'f',label:'Final'}];
   const groupBtn = `<button class="tab${tab==='groups'?' on':''}" onclick="S.picksTab='groups';render()">📊 Group Stage</button>`;
+  const oddsBtn  = `<button class="tab${tab==='odds'?' on':''}" onclick="S.picksTab='odds';render()">🏆 Title odds</button>`;
   const koButtons = koRounds.map(r=>`<button class="rnd-tab${tab===r.key?' on':''}" onclick="S.picksTab='${r.key}';render()">${r.label}</button>`).join('');
   const tabBar = `<div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.5rem;flex-wrap:nowrap;align-items:center;margin-bottom:0.75rem;">
     ${groupBtn}
+    ${oddsBtn}
     <span style="color:#334155;margin:0 0.25rem;">|</span>
     <span style="font-size:0.7rem;color:#475569;white-space:nowrap;margin-right:0.25rem;">Knockout:</span>
     ${koButtons}
   </div>`;
-  const content = tab === 'groups' ? renderGroupsTab() : renderPicksKO(tab);
+  const content = tab === 'groups' ? renderGroupsTab()
+                : tab === 'odds'   ? renderTitleOdds()
+                : renderPicksKO(tab);
   return tabBar + content;
 }
 
