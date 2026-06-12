@@ -2508,15 +2508,26 @@ function pts(ph,pa,rh,ra){
 // ═══════════════════════════════════════════════════════════
 // ENCODE / DECODE
 // ═══════════════════════════════════════════════════════════
+// Weighted-score weights are a SHARED setting (server-synced like the KO curve)
+// so every viewer's "Weighted score" tile uses the same formula. Stored as the
+// string "a,b,c" under settings.weight_formula. Falls back to any legacy local
+// value, then the default.
 function getWeights(){
+  const s = S.settings?.weight_formula;
+  if(s){ const [a,b,c] = String(s).split(',').map(parseFloat); if([a,b,c].every(n=>!isNaN(n))) return {a,b,c}; }
   try{ return JSON.parse(localStorage.getItem('wc26_weights'))||{a:1,b:2,c:0.5}; }catch(e){ return {a:1,b:2,c:0.5}; }
 }
-function saveWeights(){
+async function saveWeights(){
   const a=parseFloat(document.getElementById('w-a').value)||0;
   const b=parseFloat(document.getElementById('w-b').value)||0;
   const c=parseFloat(document.getElementById('w-c').value)||0;
-  localStorage.setItem('wc26_weights',JSON.stringify({a,b,c}));
-  render();
+  const val=`${a},${b},${c}`;
+  try{
+    await fetch('/api/settings/weight_formula', {method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:val})});
+    if(!S.settings) S.settings={};
+    S.settings.weight_formula = val;
+    render();
+  }catch(e){ alert('Failed to save weights: '+e.message); }
 }
 
 function enc(o){ return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
@@ -4506,6 +4517,20 @@ function setLbSort(key){
   render();
 }
 
+// Render a row of avatars for everyone tied for a title (name on hover). The
+// viewer's own avatar bounces when bounceSelf is set (they just took the lead).
+function _tiedAvatars(names, accent, bounceSelf, size){
+  size = size || 30;
+  return names.map(nm=>{
+    const av = _entryAvatar(nm);
+    const isSelf = (nm===S.name || nm===S.name+' (you)');
+    const cls = (bounceSelf && isSelf) ? 'lead-bounce' : '';
+    const common = `width:${size}px;height:${size}px;border-radius:50%;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.5),0 0 0 1.5px ${accent}66;`;
+    return av
+      ? `<img src="${av}" title="${esc(nm)}" class="${cls}" style="${common}object-fit:cover;">`
+      : `<span title="${esc(nm)}" class="${cls}" style="${common}background:rgba(255,255,255,0.09);display:inline-flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#cbd5e1;">${esc(abbrevName(nm))}</span>`;
+  }).join('');
+}
 // Resolve a leaderboard entry's avatar from its display name (may end " (you)").
 function _entryAvatar(name){
   const clean = name.replace(/\s*\(you\)\s*$/i,'');
@@ -4674,18 +4699,18 @@ function renderCompare(){
     if(rePrev){ for(const k in reCur){ if(reCur[k] && !rePrev[k]) reBounce[k]=true; } }
     _saveTitleLeaders(reCur, 'wc26_re_title_leaders');
 
-    const tile = (icon,label,name,val,accent,bounce)=>{
-      const av = _entryAvatar(name);
-      const avHTML = av
-        ? `<img src="${av}" title="${esc(name)}" class="${bounce?'lead-bounce':''}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.5),0 0 0 1.5px ${accent}66;">`
-        : `<span title="${esc(name)}" class="${bounce?'lead-bounce':''}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.09);display:inline-flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.4);">${esc(abbrevName(name))}</span>`;
+    const koWinners    = reLbAll.filter(e=>e.koTotal===maxKo).map(e=>e.name);
+    const matchWinners = reLbAll.filter(e=>e.matchups===maxMatch).map(e=>e.name);
+    const tile = (icon,label,names,val,accent,bounce)=>{
+      const avs = _tiedAvatars(names, accent, bounce, 30);
       return `<div style="background:#112a45;border:1px solid ${accent}33;border-radius:0.75rem;padding:0.75rem;min-width:0;">
         <div style="font-size:1rem;margin-bottom:0.25rem;">${icon}</div>
         <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.5rem;">${label}</div>
-        <div style="display:flex;align-items:center;gap:0.5rem;">
-          ${avHTML}
+        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+          ${avs}
           <div style="font-size:1.1rem;font-weight:800;color:${accent};">${val}</div>
         </div>
+        ${names.length>1?`<div style="font-size:0.58rem;color:#64748b;margin-top:0.3rem;">${names.length} tied for top</div>`:''}
       </div>`;
     };
     const MED=['🥇','🥈','🥉'];
@@ -4701,8 +4726,8 @@ function renderCompare(){
       <h2 style="font-size:1.125rem;font-weight:700;color:white;margin:0.5rem 0 0.75rem;">🔄 Repicker leaderboard
         <span style="font-size:0.72rem;color:#64748b;font-weight:400;">— separate game (KO bracket re-picked from the real Round of 32)</span></h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem;margin-bottom:0.75rem;">
-        ${tile('🔄','Repicker leader',leader.name,leader.koTotal,'#a78bfa',reBounce['Repicker leader'])}
-        ${tile('🎯','Most matchups',matchLeader.name,matchLeader.matchups,'#22d3ee',reBounce['Most matchups'])}
+        ${tile('🔄','Repicker leader',koWinners,leader.koTotal,'#a78bfa',reBounce['Repicker leader'])}
+        ${tile('🎯','Most matchups',matchWinners,matchLeader.matchups,'#22d3ee',reBounce['Most matchups'])}
       </div>
       <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
@@ -4775,24 +4800,18 @@ function renderCompare(){
       return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.625rem;margin-bottom:1.25rem;">
         ${boxes.map(b=>{
           const noData=!b.r||b.r.val===null;
-          const lead = noData ? null : b.r.winners[0];
-          const av = lead ? _entryAvatar(lead.name) : '';
-          const bounce = bounceTitle[b.label];
-          const avHTML = noData ? '' : (av
-            ? `<img src="${av}" title="${esc(lead.name)}" class="${bounce?'lead-bounce':''}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.5),0 0 0 1.5px ${b.accent}66;" />`
-            : `<span title="${esc(lead.name)}" class="${bounce?'lead-bounce':''}" style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.09);display:inline-flex;align-items:center;justify-content:center;font-size:0.62rem;font-weight:700;color:#cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.4);">${esc(abbrevName(lead.name))}</span>`);
+          const names = noData ? [] : b.r.winners.map(w=>w.name);
+          const avs = _tiedAvatars(names, b.accent, bounceTitle[b.label], 30);
           return `<div style="background:#112a45;border:1px solid ${noData?'rgba(255,255,255,0.07)':b.accent+'33'};border-radius:0.75rem;padding:0.75rem;min-width:0;">
             <div style="font-size:1rem;margin-bottom:0.25rem;">${b.icon}</div>
             <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.5rem;">${b.label}</div>
             ${noData
               ? `<div style="font-size:0.8rem;color:#334155;">–</div>`
-              : `<div style="display:flex;align-items:center;gap:0.5rem;">
-                   ${avHTML}
-                   <div style="min-width:0;">
-                     <div style="font-size:1.1rem;font-weight:800;color:${b.accent};line-height:1.1;">${b.fmt(b.r.val)}</div>
-                     ${b.r.tied?`<div style="font-size:0.6rem;color:#64748b;">+${b.r.winners.length-1} tied</div>`:''}
-                   </div>
-                 </div>`}
+              : `<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+                   ${avs}
+                   <div style="font-size:1.1rem;font-weight:800;color:${b.accent};">${b.fmt(b.r.val)}</div>
+                 </div>
+                 ${b.r.tied?`<div style="font-size:0.58rem;color:#64748b;margin-top:0.3rem;">${names.length} tied for top</div>`:''}`}
             ${b.sub?`<div style="font-size:0.6rem;color:#475569;margin-top:0.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.sub}</div>`:''}
           </div>`;
         }).join('')}
