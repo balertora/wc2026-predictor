@@ -2004,7 +2004,7 @@ const GROUP_COLORS = {
 // STATE
 // ═══════════════════════════════════════════════════════════
 const S = {
-  view: 'predict',
+  view: 'compare',
   name: '',
   avatar: '',
   gPreds: {},   // { gameId: [homeScore, awayScore] }
@@ -4594,6 +4594,44 @@ function _entryAvatar(name){
 function _loadTitleLeaders(key){ try{ return JSON.parse(localStorage.getItem(key||'wc26_title_leaders')||'null'); }catch(e){ return null; } }
 function _saveTitleLeaders(map,key){ try{ localStorage.setItem(key||'wc26_title_leaders', JSON.stringify(map)); }catch(e){} }
 
+// Count how the crowd picked a group game: home wins / draws / away wins.
+function _pickDist(gameId, parts){
+  let h=0,d=0,a=0;
+  for(const p of parts){ const pr=p.gPreds&&p.gPreds[gameId]; if(!pr) continue; if(pr[0]>pr[1])h++; else if(pr[0]<pr[1])a++; else d++; }
+  return {h,d,a,total:h+d+a};
+}
+// Compact "today's games" strip for the leaderboard: live/final/upcoming score
+// plus the high-level pick split (home · draw · away), highlighting the result.
+function todaysGamesPanel(parts){
+  const todayKey = localDateKey(new Date().toISOString());
+  const games = GROUP_GAMES.filter(g=>{ const iso=gameKickoff(g); return iso && localDateKey(iso)===todayKey; })
+    .sort((x,y)=>(gameKickoff(x)||'').localeCompare(gameKickoff(y)||''));
+  if(!games.length) return '';
+  const rowFor = g => {
+    const live=S.gLive[g.id], done=S.gResults[g.id];
+    let mid='', actual=null;
+    if(live){ mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
+    else if(done){ mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done[0]}–${done[1]}</span> <span style="color:#475569;font-size:0.56rem;">FT</span>`; actual=done[0]>done[1]?'h':done[0]<done[1]?'a':'d'; }
+    else { const iso=gameKickoff(g); mid=`<span style="color:#475569;font-size:0.72rem;">${iso?esc(fmtKickoffTime(iso)):''}</span>`; }
+    const d=_pickDist(g.id, parts);
+    const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
+    const dist=`${seg(d.h,'#60a5fa',actual==='h')}·${seg(d.d,'#94a3b8',actual==='d')}·${seg(d.a,'#fb923c',actual==='a')}`;
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;">
+      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${esc(shortTeamName(g.home))} ${flag(g.home)}</span>
+      <span style="flex-shrink:0;min-width:5.5rem;text-align:center;">${mid}</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${flag(g.away)} ${esc(shortTeamName(g.away))}</span>
+      <span title="How players picked — home win · draw · away win" style="flex-shrink:0;font-size:0.72rem;font-family:monospace;min-width:3.5rem;text-align:right;">${dist}</span>
+    </div>`;
+  };
+  return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.6rem 1rem 0.4rem;margin-bottom:1.25rem;">
+    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
+      <span>📅 Today's games</span>
+      <span style="text-transform:none;font-size:0.62rem;color:#475569;">picks: <span style="color:#60a5fa;">home</span>·<span style="color:#94a3b8;">draw</span>·<span style="color:#fb923c;">away</span></span>
+    </div>
+    ${games.map(rowFor).join('')}
+  </div>`;
+}
+
 function renderCompare(){
   const completed=GROUP_GAMES.filter(g=>S.gResults[g.id]);
   const allPred=[];
@@ -4603,14 +4641,28 @@ function renderCompare(){
 
   const koActive = Object.keys(KO_VENUES).some(id=>{ const r=S.kResults[id]; return r&&r.home&&r.away&&r.homeScore!=null; });
 
+  // Crowd-odds weight per completed game: the actual result's "decimal odds"
+  // from how people guessed (total picks / picks for the actual outcome). The
+  // fewer people who called it, the higher the weight — so a correct call on an
+  // upset is worth more. Used for the "Surprise" (odds-weighted) column.
+  const gameOddsWeight={};
+  for(const game of completed){
+    const r=S.gResults[game.id]; if(!r) continue;
+    const actual = r[0]>r[1]?'h':r[0]<r[1]?'a':'d';
+    const d=_pickDist(game.id, allPred);
+    const cnt = actual==='h'?d.h:actual==='a'?d.a:d.d;
+    gameOddsWeight[game.id] = (d.total>0 && cnt>0) ? +(d.total/cnt).toFixed(2) : 1;
+  }
+
   const W=getWeights();
   const lb=allPred.map(p=>{
-    let groupTotal=0,exact=0,correct=0,scored=0,bad=0;
+    let groupTotal=0,exact=0,correct=0,scored=0,bad=0,surprise=0;
     for(const [gid,pr] of Object.entries(p.gPreds)){
       const r=S.gResults[gid]; if(!r) continue;
       scored++;
       const p2=pts(pr[0],pr[1],r[0],r[1]);
       groupTotal+=p2; if(p2===3)exact++; if(p2>=1)correct++;
+      if(p2>0) surprise += p2 * (gameOddsWeight[gid]||1); // base points × crowd odds of the result
       bad+=Math.abs(pr[0]-r[0])+Math.abs(pr[1]-r[1]);
     }
     const ko=koScoreFor(p.kPreds);
@@ -4618,7 +4670,7 @@ function renderCompare(){
     const weighted=scored>0?+(W.a*correct+W.b*exact-W.c*bad).toFixed(2):null;
     const total=+(((weighted ?? 0)+ko.koTotal)).toFixed(2);
     return {name:p.name,total,groupTotal,koTotal:ko.koTotal,matchups:ko.matchups,
-            exact,correct,scored,bad,weighted,predCount:Object.keys(p.gPreds).length};
+            exact,correct,scored,bad,weighted,surprise:+surprise.toFixed(1),predCount:Object.keys(p.gPreds).length};
   }).sort((a,b)=>{
     const key=S.lbSort, dir=S.lbSortDir;
     const av=a[key]??-Infinity, bv=b[key]??-Infinity;
@@ -4657,6 +4709,7 @@ function renderCompare(){
         <th style="padding:0.75rem 1rem;text-align:left;width:2rem;">#</th>
         <th style="padding:0.75rem 1rem;text-align:left;">Name</th>
         ${thSort('total',   'Total',   'Weighted score (A×correct + B×exact − C×PAB) + weighted knockout points')}
+        ${thSort('surprise','Surprise','Odds-weighted: each correct group result earns its points × the crowd odds of that outcome — calling an upset everyone missed is worth more')}
         ${koActive?thSort('weighted','Group','Weighted group score: A×correct + B×exact − C×PAB'):''}
         ${koActive?thSort('koTotal',  'KO',    'Knockout points (matchup + result, weighted by round)'):''}
         ${koActive?thSort('matchups', 'Match', 'Knockout matchups called right (0.5 per correct team)'):''}
@@ -4680,6 +4733,7 @@ function renderCompare(){
             ${maxPts>0?`<div style="margin-top:3px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;width:7rem;overflow:hidden;"><div style="height:100%;background:#16a34a;width:${Math.max(0,Math.min(100,e.total/maxPts*100)).toFixed(1)}%;"></div></div>`:''}
           </td>
           <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total}</td>
+          <td style="padding:0.75rem 1rem;text-align:right;color:#f0abfc;font-weight:600;">${e.scored>0?e.surprise:'–'}</td>
           ${koActive?`<td style="padding:0.75rem 1rem;text-align:right;color:#94a3b8;">${e.weighted ?? 0}</td>`:''}
           ${koActive?`<td style="padding:0.75rem 1rem;text-align:right;color:#a78bfa;font-weight:600;">${e.koTotal}</td>`:''}
           ${koActive?`<td style="padding:0.75rem 1rem;text-align:right;color:#22d3ee;">${e.matchups}</td>`:''}
@@ -4868,6 +4922,8 @@ function renderCompare(){
         }).join('')}
       </div>`;
     })():''}
+
+    ${todaysGamesPanel(allPred)}
 
     ${completed.length>0&&chartSeries.length>0?`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
@@ -6653,12 +6709,12 @@ if(_isAdmin){ S.adminUnlocked=true; _updateNavTabs(); }
 // Server will immediately push the full state.
 // If no token, show the auth overlay.
 if(_token && S.name){
-  showView('predict');
+  showView('compare'); // tournament has started — default to the leaderboard
   connectWS();
   // Show app immediately with empty state; WS will fill it in <1 second
   render();
 } else {
-  showView('predict');
+  showView('compare');
   render();
   showAuthOverlay();
 }
