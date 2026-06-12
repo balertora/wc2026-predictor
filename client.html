@@ -2761,6 +2761,14 @@ function _applyServerState(data){
 
   // Chat messages
   S.messages = data.messages || [];
+  // If the drawer is open the user is actively reading — advance the "seen"
+  // marker to the newest message so the unread dot doesn't reappear when they
+  // close it. (Previously seen was only bumped when opening the drawer, so any
+  // message that arrived while it was open re-flagged as unread on close.)
+  if(_chatOpen && S.messages.length){
+    _chatLastSeenId = S.messages[S.messages.length-1].id;
+    try { localStorage.setItem('wc26_chat_seen', _chatLastSeenId); } catch(e){}
+  }
   _updateChatBadge();
   renderMentionToasts();
   // If drawer is open, re-render and auto-scroll if user was at the bottom
@@ -4492,8 +4500,8 @@ function _entryAvatar(name){
 }
 // Per-viewer record of which titles the viewer currently holds (for the
 // "you took the lead" bounce). { label: bool }.
-function _loadTitleLeaders(){ try{ return JSON.parse(localStorage.getItem('wc26_title_leaders')||'null'); }catch(e){ return null; } }
-function _saveTitleLeaders(map){ try{ localStorage.setItem('wc26_title_leaders', JSON.stringify(map)); }catch(e){} }
+function _loadTitleLeaders(key){ try{ return JSON.parse(localStorage.getItem(key||'wc26_title_leaders')||'null'); }catch(e){ return null; } }
+function _saveTitleLeaders(map,key){ try{ localStorage.setItem(key||'wc26_title_leaders', JSON.stringify(map)); }catch(e){} }
 
 function renderCompare(){
   const completed=GROUP_GAMES.filter(g=>S.gResults[g.id]);
@@ -4639,13 +4647,33 @@ function renderCompare(){
     };
     const leader = reLbAll[0];
     const matchLeader = [...reLbAll].sort((a,b)=>b.matchups-a.matchups)[0];
-    const tile = (icon,label,name,val,accent)=>`
-      <div style="background:#112a45;border:1px solid ${accent}33;border-radius:0.75rem;padding:0.75rem;min-width:0;">
+
+    // "You took the lead" bounce for the repicker titles (separate localStorage key).
+    const maxKo = reLbAll[0].koTotal;
+    const maxMatch = Math.max(...reLbAll.map(e=>e.matchups));
+    const reCur = {
+      'Repicker leader': reLbAll.some(e=>e.koTotal===maxKo && e.name===S.name),
+      'Most matchups':   reLbAll.some(e=>e.matchups===maxMatch && e.name===S.name),
+    };
+    const rePrev = _loadTitleLeaders('wc26_re_title_leaders');
+    const reBounce = {};
+    if(rePrev){ for(const k in reCur){ if(reCur[k] && !rePrev[k]) reBounce[k]=true; } }
+    _saveTitleLeaders(reCur, 'wc26_re_title_leaders');
+
+    const tile = (icon,label,name,val,accent,bounce)=>{
+      const av = _entryAvatar(name);
+      const avHTML = av
+        ? `<img src="${av}" title="${esc(name)}" class="${bounce?'lead-bounce':''}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.5),0 0 0 1.5px ${accent}66;">`
+        : `<span title="${esc(name)}" class="${bounce?'lead-bounce':''}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.09);display:inline-flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.4);">${esc(abbrevName(name))}</span>`;
+      return `<div style="background:#112a45;border:1px solid ${accent}33;border-radius:0.75rem;padding:0.75rem;min-width:0;">
         <div style="font-size:1rem;margin-bottom:0.25rem;">${icon}</div>
-        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.375rem;">${label}</div>
-        <div style="font-size:0.85rem;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(name)}">${esc(name)}</div>
-        <div style="font-size:1.1rem;font-weight:800;color:${accent};margin-top:0.125rem;">${val}</div>
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.5rem;">${label}</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          ${avHTML}
+          <div style="font-size:1.1rem;font-weight:800;color:${accent};">${val}</div>
+        </div>
       </div>`;
+    };
     const MED=['🥇','🥈','🥉'];
     const rows = reLbAll.map((e,i)=>`
       <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
@@ -4659,8 +4687,8 @@ function renderCompare(){
       <h2 style="font-size:1.125rem;font-weight:700;color:white;margin:0.5rem 0 0.75rem;">🔄 Repicker leaderboard
         <span style="font-size:0.72rem;color:#64748b;font-weight:400;">— separate game (KO bracket re-picked from the real Round of 32)</span></h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem;margin-bottom:0.75rem;">
-        ${tile('🔄','Repicker leader',leader.name,leader.koTotal,'#a78bfa')}
-        ${tile('🎯','Most matchups',matchLeader.name,matchLeader.matchups,'#22d3ee')}
+        ${tile('🔄','Repicker leader',leader.name,leader.koTotal,'#a78bfa',reBounce['Repicker leader'])}
+        ${tile('🎯','Most matchups',matchLeader.name,matchLeader.matchups,'#22d3ee',reBounce['Most matchups'])}
       </div>
       <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
