@@ -8,6 +8,17 @@ const { WebSocketServer } = require('ws');
 const { createClient } = require('@libsql/client');
 const bcrypt     = require('bcrypt');
 const path       = require('path');
+const fs         = require('fs');
+
+// App version = short hash of the client.html this server is serving. Injected
+// into the page (replacing __APP_VERSION__) and sent in every state payload, so
+// a tab still running an older build can prompt the user to reload after a deploy.
+let CLIENT_HTML = '', CLIENT_VERSION = '';
+try {
+  const raw = fs.readFileSync(path.join(__dirname, 'client.html'), 'utf8');
+  CLIENT_VERSION = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 8);
+  CLIENT_HTML = raw.replace('__APP_VERSION__', CLIENT_VERSION);
+} catch (e) { console.error('client.html load failed:', e.message); }
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const PORT        = parseInt(process.env.PORT || '3000', 10);
@@ -481,7 +492,7 @@ async function buildStatePayload() {
 
   const messages = msgRows.slice().reverse(); // reverse DESC fetch → chronological order
   // liveScores: transient in-progress scores from the ESPN poll (not persisted).
-  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks, messages, liveScores: _liveScores };
+  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks, messages, liveScores: _liveScores, serverVersion: CLIENT_VERSION };
   _stateCache     = payload;
   _stateCacheTime = Date.now();
   return payload;
@@ -696,9 +707,12 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// Serve client.html at root
+// Serve client.html at root. no-cache so a reload always revalidates and picks
+// up a new deploy; serve the version-injected copy when available.
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client.html'));
+  res.setHeader('Cache-Control', 'no-cache');
+  if (CLIENT_HTML) res.type('html').send(CLIENT_HTML);
+  else res.sendFile(path.join(__dirname, 'client.html'));
 });
 
 // Health check — reports DB readiness so Railway healthcheck passes even during slow cold starts

@@ -485,6 +485,7 @@
 
 <!-- ── Connection status banner ── -->
 <div id="conn-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:150;background:#7c3aed;color:#fff;text-align:center;font-size:0.72rem;font-weight:600;letter-spacing:0.04em;padding:0.25rem 0.5rem;pointer-events:none;"></div>
+<div id="update-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:160;background:#16a34a;color:#fff;text-align:center;font-size:0.78rem;font-weight:700;padding:0.4rem;cursor:pointer;" onclick="location.reload(true)">🔄 A new version is available — tap to reload</div>
 
 <!-- Group winner picker tooltip -->
 <div id="gwt" style="display:none;position:fixed;z-index:300;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;padding:0.5rem 0.625rem;box-shadow:0 4px 16px rgba(0,0,0,0.35);pointer-events:none;min-width:7rem;max-width:13rem;"></div>
@@ -553,6 +554,10 @@
 </div>
 
 <script>
+// Build id of this page, injected by the server (hash of client.html). If the
+// server later reports a different version, this tab is stale — see checkVersion.
+const APP_VERSION = '__APP_VERSION__';
+
 // ═══════════════════════════════════════════════════════════
 // DATA — actual 2026 FIFA World Cup groups & schedule
 // ═══════════════════════════════════════════════════════════
@@ -2523,7 +2528,8 @@ async function saveWeights(){
   const c=parseFloat(document.getElementById('w-c').value)||0;
   const val=`${a},${b},${c}`;
   try{
-    await fetch('/api/settings/weight_formula', {method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:val})});
+    const res = await fetch('/api/settings/weight_formula', {method:'PUT', headers:_authHeaders(), body:JSON.stringify({value:val})});
+    if(!res.ok){ const d=await res.json().catch(()=>({})); alert('Weights NOT saved to server ('+(d.error||('HTTP '+res.status))+') — other players won’t see this change.'); return; }
     if(!S.settings) S.settings={};
     S.settings.weight_formula = val;
     render();
@@ -2709,8 +2715,22 @@ async function doLogout(){
   render();
 }
 
+// Nudge the user to reload when the server is serving a newer build than this
+// tab is running (e.g. after a deploy). Only fires when versions are real and
+// differ — never on the local/static fallback where the placeholder is intact.
+let _updateNudged = false;
+function checkVersion(data){
+  if(_updateNudged || !data || !data.serverVersion) return;
+  if(APP_VERSION === '__APP_VERSION__') return; // served without injection (local/static)
+  if(data.serverVersion === APP_VERSION) return;
+  _updateNudged = true;
+  const el = document.getElementById('update-banner');
+  if(el) el.style.display = 'block';
+}
+
 // ── Server state application ──────────────────────────────
 function _applyServerState(data){
+  checkVersion(data);
   const myName = S.name.toLowerCase();
   const preds  = data.predictions || {};
   const others = Object.entries(preds)
