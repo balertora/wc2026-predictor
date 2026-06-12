@@ -2724,6 +2724,10 @@ function _applyServerState(data){
     S.kResults[id] = r;
   }
 
+  // Live (in-progress) scores from the server's ESPN poll — authoritative, so
+  // all clients see active games update automatically without each hitting ESPN.
+  S.gLive = data.liveScores || {};
+
   // Restore own data from server (critical for page reload — picks live in DB, not localStorage)
   const myData = Object.entries(preds).find(([n]) => n.toLowerCase() === myName);
   if(myData && myData[1]){
@@ -4302,20 +4306,26 @@ function renderResults(){
     if(!pred) return `<td style="${TD}color:#334155;text-align:center;font-family:monospace;">–</td>`;
     const [ph,pa] = pred;
     const p_pts = r!=null ? pts(ph,pa,r.hs,r.as) : null;
-    // Exact (3pts) = green + bullseye; Correct result (1pt) = green, no badge; Wrong (0pts) = red
+    // Exact (3pts) = green + bullseye; Correct result (1pt) = green; Wrong (0pts) = red
     const col   = p_pts===3?'#4ade80':p_pts===1?'#4ade80':p_pts===0?'#f87171':'#94a3b8';
     const bg    = p_pts===3?'rgba(74,222,128,0.12)':p_pts===1?'rgba(74,222,128,0.06)':p_pts===0?'rgba(248,113,113,0.06)':'transparent';
-    const badge = p_pts===3?' 🎯':p_pts===0?' ✗':'';
     // Contrarian bar (behind the score): violet wash sized by how far this pick
     // sits from the crowd's average scoreline. Conformists show nothing.
-    let devBar='', devTip='';
+    let devBar='', titleTxt='';
     if(cons && cons.n>=2){
       const dist = Math.hypot(ph-cons.avgH, pa-cons.avgA);
       const norm = Math.min(1, dist/3); // 3 goals away (Euclidean) = full bar
-      devTip = ` title="${dist.toFixed(1)} goals from the crowd avg (${cons.avgH.toFixed(1)}–${cons.avgA.toFixed(1)})"`;
+      titleTxt = `${dist.toFixed(1)} goals from the crowd avg (${cons.avgH.toFixed(1)}–${cons.avgA.toFixed(1)})`;
       if(norm>0.02) devBar = `<div style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:72%;width:${(norm*100).toFixed(0)}%;background:#a78bfa;opacity:0.20;border-radius:0 3px 3px 0;pointer-events:none;"></div>`;
     }
-    return `<td${devTip} style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;text-align:center;white-space:nowrap;position:relative;">${devBar}<span style="position:relative;">${ph}–${pa}${badge}</span></td>`;
+    // Compact display: exact → bullseye only; wrong → colour only (no digits, so
+    // the actual pick is on hover); correct-result / not-yet-scored → show score.
+    let content;
+    if(p_pts===3){ content='🎯'; titleTxt=`${ph}–${pa} · exact${titleTxt?' · '+titleTxt:''}`; }
+    else if(p_pts===0){ content=''; titleTxt=`${ph}–${pa} · wrong${titleTxt?' · '+titleTxt:''}`; }
+    else { content=`${ph}–${pa}`; }
+    const titleAttr = titleTxt?` title="${esc(titleTxt)}"`:'';
+    return `<td${titleAttr} style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;text-align:center;white-space:nowrap;position:relative;">${devBar}<span style="position:relative;">${content}</span></td>`;
   }
 
   function gameRow(game, mode){
@@ -4462,7 +4472,10 @@ function renderResults(){
       🏆 Knockout results will appear here as the matches are played — showing the actual matchup and how everyone's bracket pick lined up.
     </div>`;
 
+  // Full-bleed: the results grid can be very wide, so break out of the centered
+  // page column and use up to ~96vw (capped) on larger screens, full width on phones.
   return `
+  <div style="position:relative;left:50%;transform:translateX(-50%);width:96vw;max-width:96rem;box-sizing:border-box;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
       <h1 style="font-size:1.5rem;font-weight:700;color:white;">Results</h1>
       <button onclick="fetchLiveScores()" class="btn-s" id="fetch-btn" style="font-size:0.8rem;padding:0.4rem 0.875rem;white-space:nowrap;">🔄 Refresh scores</button>
@@ -4478,7 +4491,8 @@ function renderResults(){
       the <span style="color:#a78bfa;">violet bar</span> behind a score shows how far that pick is from the crowd's average — wider = more contrarian.
     </div>
     ${koSection}
-    <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>`;
+    <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
+  </div>`;
 }
 
 function setLbSort(key){

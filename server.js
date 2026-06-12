@@ -480,7 +480,8 @@ async function buildStatePayload() {
   }
 
   const messages = msgRows.slice().reverse(); // reverse DESC fetch → chronological order
-  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks, messages };
+  // liveScores: transient in-progress scores from the ESPN poll (not persisted).
+  const payload = { predictions, results: { gResults, kResults }, settings, reBracket, rePicks, messages, liveScores: _liveScores };
   _stateCache     = payload;
   _stateCacheTime = Date.now();
   return payload;
@@ -531,6 +532,9 @@ const TOURNAMENT_END   = new Date('2026-07-20T00:00:00Z');
 
 let _espnLiveGamesDetected = false;
 let _espnPollTimer = null;
+// Transient in-progress scores, keyed by group fixture id (number) or KO slot id.
+// { id: { hs, as, clock, detail } }. Rebuilt every poll, broadcast to clients.
+let _liveScores = {};
 
 async function pollESPN() {
   const now = new Date();
@@ -555,13 +559,11 @@ async function pollESPN() {
     if (!resp.ok) throw new Error(`ESPN HTTP ${resp.status}`);
     const data = await resp.json();
 
+    const nextLive = {};
     for (const event of (data.events || [])) {
       const status = event.status?.type?.state;
       const comps  = event.competitions?.[0];
       if (!comps) continue;
-
-      if (status === 'in') hasLive = true;
-      if (status !== 'post') continue;
 
       const competitors = comps.competitors || [];
       const homeComp = competitors.find(c => c.homeAway === 'home');
@@ -572,15 +574,33 @@ async function pollESPN() {
       const awayName = mapTeamName(awayComp.team?.displayName || '');
       const homeScore = parseInt(homeComp.score ?? '-1', 10);
       const awayScore = parseInt(awayComp.score ?? '-1', 10);
-      if (homeScore < 0 || awayScore < 0 || !homeName || !awayName) continue;
 
       const fixtureId = FIXTURE_LOOKUP[`${homeName}|${awayName}`]
                      || FIXTURE_LOOKUP[`${awayName}|${homeName}`];
+      const isFlipped = fixtureId ? !FIXTURE_LOOKUP[`${homeName}|${awayName}`] : false;
+
+      // ── Live (in-progress) game: capture transient score for broadcast ──
+      if (status === 'in') {
+        hasLive = true;
+        if (homeScore >= 0 && awayScore >= 0 && homeName && awayName) {
+          const clock  = comps.status?.displayClock || event.status?.displayClock || '';
+          const detail = event.status?.type?.shortDetail || event.status?.type?.description || 'LIVE';
+          if (fixtureId) {
+            nextLive[fixtureId] = { hs: isFlipped ? awayScore : homeScore, as: isFlipped ? homeScore : awayScore, clock, detail };
+          } else {
+            const liveKo = matchKoSlot(comps.venue?.fullName, comps.venue?.address?.city, (event.date || '').slice(0, 10));
+            if (liveKo) nextLive[liveKo] = { hs: homeScore, as: awayScore, home: homeName, away: awayName, clock, detail };
+          }
+        }
+        continue;
+      }
+
+      if (status !== 'post') continue;
+      if (homeScore < 0 || awayScore < 0 || !homeName || !awayName) continue;
 
       if (fixtureId) {
         // ── Group-stage fixture ──
         const existing = await dbGet('SELECT home_score, away_score FROM group_results WHERE game_id = ?', [fixtureId]);
-        const isFlipped = !FIXTURE_LOOKUP[`${homeName}|${awayName}`];
         const dbHome = isFlipped ? awayScore : homeScore;
         const dbAway = isFlipped ? homeScore : awayScore;
         if (!existing || existing.home_score !== dbHome || existing.away_score !== dbAway) {
@@ -642,11 +662,14 @@ async function pollESPN() {
         changed = true;
       }
     }
+    // Replace the live snapshot; broadcast if it (or the DB) changed so clients
+    // see in-progress scores update without each hitting ESPN directly.
+    const liveChanged = JSON.stringify(_liveScores) !== JSON.stringify(nextLive);
+    _liveScores = nextLive;
+    if (changed || liveChanged) { invalidateStateCache(); scheduleBroadcast(); }
   } catch (err) {
     console.warn('ESPN poll error:', err.message);
   }
-
-  if (changed) scheduleBroadcast();
 
   _espnLiveGamesDetected = hasLive;
   const interval = hasLive ? 30_000 : 60_000;
