@@ -504,6 +504,9 @@
   <span id="chat-badge" style="display:none;width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0;"></span>
 </button>
 
+<!-- ── @-mention notifications (shown to the mentioned user) ── -->
+<div id="mention-toasts" style="position:fixed;right:1.25rem;bottom:4.25rem;z-index:186;display:flex;flex-direction:column;gap:0.5rem;max-width:20rem;"></div>
+
 <!-- ── Chat drawer ── -->
 <div id="chat-drawer"
   style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:190;
@@ -530,12 +533,14 @@
     </div>
     <div id="chat-input-row" style="display:flex;gap:0.5rem;align-items:flex-end;">
       <div style="flex:1;position:relative;">
-        <textarea id="chat-input" maxlength="280" placeholder="Say something…" rows="2"
+        <div id="chat-mention-menu" style="display:none;position:absolute;bottom:100%;left:0;right:0;margin-bottom:0.3rem;background:var(--bg-card);border:1px solid var(--border-strong);border-radius:0.5rem;box-shadow:0 4px 16px rgba(0,0,0,0.3);max-height:9rem;overflow-y:auto;z-index:5;"></div>
+        <textarea id="chat-input" maxlength="280" placeholder="Say something… (@ to mention)" rows="2"
           style="width:100%;background:var(--bg-input);border:1px solid var(--border-strong);
                  border-radius:0.75rem;padding:0.55rem 0.75rem 1.4rem;color:var(--text);
                  font-size:0.875rem;resize:none;box-sizing:border-box;font-family:inherit;line-height:1.4;"
-          oninput="_chatUpdateChars(this)"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+          oninput="_chatOnInput(this)"
+          onkeydown="_chatKeydown(event,this)"
+          onblur="setTimeout(_closeMentionMenu,150)"></textarea>
         <span id="chat-chars" style="position:absolute;bottom:0.3rem;right:0.6rem;font-size:0.65rem;color:var(--text-faint);">280</span>
       </div>
       <button onclick="sendChat()"
@@ -2755,6 +2760,7 @@ function _applyServerState(data){
   // Chat messages
   S.messages = data.messages || [];
   _updateChatBadge();
+  renderMentionToasts();
   // If drawer is open, re-render and auto-scroll if user was at the bottom
   if(_chatOpen){
     const msgsEl = document.getElementById('chat-messages');
@@ -2921,6 +2927,148 @@ let _chatSending = false;
 let _chatLastSeenId = 0;
 try { _chatLastSeenId = parseInt(localStorage.getItem('wc26_chat_seen') || '0', 10) || 0; } catch(e){}
 
+// ── @-mentions ────────────────────────────────────────────
+let _mentionMenu = {open:false, items:[], idx:0, start:0};
+let _dismissedMentions = new Set();
+try { _dismissedMentions = new Set(JSON.parse(localStorage.getItem('wc26_mentions_dismissed') || '[]')); } catch(e){}
+function _saveDismissedMentions(){ try { localStorage.setItem('wc26_mentions_dismissed', JSON.stringify([..._dismissedMentions])); } catch(e){} }
+function _reEsc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Everyone who can be mentioned (self + other participants).
+function _chatNames(){
+  const names = [];
+  if(S.name) names.push(S.name);
+  for(const u of S.otherUsers||[]) if(u.name) names.push(u.name);
+  return [...new Set(names)];
+}
+// Which known participants are @-mentioned in a raw message string.
+function _messageMentions(text){
+  const found = new Set();
+  for(const n of _chatNames()){
+    const re = new RegExp('@'+_reEsc(n)+'(?![\\p{L}\\p{N}_])', 'iu');
+    if(re.test(text)) found.add(n);
+  }
+  return found;
+}
+function _mentionsMe(text){
+  if(!S.name) return false;
+  const me = S.name.toLowerCase();
+  return [..._messageMentions(text)].some(n => n.toLowerCase() === me);
+}
+// Render message text with @mentions highlighted (everything else escaped).
+function renderMentionText(text){
+  const names = _chatNames().sort((a,b)=>b.length-a.length);
+  if(!names.length) return esc(text);
+  const re = new RegExp('@('+names.map(_reEsc).join('|')+')(?![\\p{L}\\p{N}_])', 'giu');
+  let out='', last=0, m;
+  while((m = re.exec(text))){
+    out += esc(text.slice(last, m.index));
+    const isMe = (S.name||'').toLowerCase() === m[1].toLowerCase();
+    out += `<span style="color:${isMe?'#fcd34d':'#4ade80'};font-weight:700;background:${isMe?'rgba(252,211,77,0.16)':'rgba(74,222,128,0.12)'};border-radius:0.25rem;padding:0 0.15rem;">@${esc(m[1])}</span>`;
+    last = m.index + m[0].length;
+  }
+  out += esc(text.slice(last));
+  return out;
+}
+
+// Autocomplete menu while typing in the chat box.
+function _chatOnInput(ta){ _chatUpdateChars(ta); _chatCheckMention(ta); }
+function _closeMentionMenu(){ _mentionMenu.open=false; const el=document.getElementById('chat-mention-menu'); if(el){ el.style.display='none'; el.innerHTML=''; } }
+function _chatCheckMention(ta){
+  const caret = ta.selectionStart;
+  const before = ta.value.slice(0, caret);
+  const m = before.match(/@([\p{L}\p{N}_]{0,24})$/u);
+  if(!m){ _closeMentionMenu(); return; }
+  const at = caret - m[0].length;
+  if(at>0 && !/\s/.test(ta.value[at-1])){ _closeMentionMenu(); return; } // '@' must start a word
+  const q = m[1].toLowerCase();
+  const me = (S.name||'').toLowerCase();
+  const items = _chatNames().filter(n=>{
+    if(n.toLowerCase()===me) return false;
+    if(!q) return true;
+    const ln = n.toLowerCase();
+    return ln.startsWith(q) || ln.replace(/[^a-z0-9]/gi,'').startsWith(q) || ln.split(/\s+/).some(w=>w.startsWith(q));
+  }).slice(0,6);
+  if(!items.length){ _closeMentionMenu(); return; }
+  _mentionMenu = {open:true, items, idx:0, start:at};
+  _renderMentionMenu();
+}
+function _renderMentionMenu(){
+  const el = document.getElementById('chat-mention-menu'); if(!el) return;
+  if(!_mentionMenu.open){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML = _mentionMenu.items.map((n,i)=>{
+    const av = _chatAvatar(n);
+    return `<div onmousedown="event.preventDefault();_applyMentionByIdx(${i})"
+        style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.6rem;cursor:pointer;background:${i===_mentionMenu.idx?'var(--bg-tint)':'transparent'};">
+      <span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:var(--bg-tint);display:inline-flex;align-items:center;justify-content:center;font-size:0.6rem;flex-shrink:0;">${av?`<img src="${av}" style="width:100%;height:100%;object-fit:cover;">`:'🧑'}</span>
+      <span style="font-size:0.82rem;color:var(--text-strong);">${esc(n)}</span>
+    </div>`;
+  }).join('');
+}
+function _applyMentionByIdx(i){
+  const ta = document.getElementById('chat-input');
+  if(ta && _mentionMenu.items[i]) _applyMention(_mentionMenu.items[i], ta);
+}
+function _applyMention(name, ta){
+  const caret = ta.selectionStart;
+  const before = ta.value.slice(0, _mentionMenu.start);
+  const after = ta.value.slice(caret);
+  const ins = '@'+name+' ';
+  ta.value = before + ins + after;
+  const pos = before.length + ins.length;
+  _closeMentionMenu();
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+  _chatUpdateChars(ta);
+}
+function _chatKeydown(e, ta){
+  if(_mentionMenu.open){
+    const n = _mentionMenu.items.length;
+    if(e.key==='ArrowDown'){ e.preventDefault(); _mentionMenu.idx=(_mentionMenu.idx+1)%n; _renderMentionMenu(); return; }
+    if(e.key==='ArrowUp'){   e.preventDefault(); _mentionMenu.idx=(_mentionMenu.idx-1+n)%n; _renderMentionMenu(); return; }
+    if(e.key==='Enter' || e.key==='Tab'){ e.preventDefault(); _applyMentionByIdx(_mentionMenu.idx); return; }
+    if(e.key==='Escape'){ e.preventDefault(); _closeMentionMenu(); return; }
+  }
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); }
+}
+
+// Floating mention notifications for the mentioned user.
+function renderMentionToasts(){
+  const host = document.getElementById('mention-toasts'); if(!host) return;
+  if(!S.name){ host.innerHTML=''; return; }
+  const mine = (S.messages||[]).filter(m => m.name!==S.name && !_dismissedMentions.has(m.id) && _mentionsMe(m.text));
+  const show = mine.slice(-3);
+  host.innerHTML = show.map(m=>{
+    const av = _chatAvatar(m.name);
+    const avHTML = av
+      ? `<img src="${av}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">`
+      : `<span style="width:28px;height:28px;border-radius:50%;background:var(--bg-tint);display:inline-flex;align-items:center;justify-content:center;font-size:0.8rem;flex-shrink:0;">🧑</span>`;
+    const snippet = m.text.length>90 ? m.text.slice(0,90)+'…' : m.text;
+    return `<div style="display:flex;gap:0.55rem;align-items:flex-start;background:var(--bg-card);border:1px solid var(--border-strong);border-left:3px solid #fcd34d;border-radius:0.6rem;padding:0.55rem 0.6rem;box-shadow:0 6px 20px rgba(0,0,0,0.35);">
+      ${avHTML}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.72rem;color:var(--text-faint);margin-bottom:0.1rem;"><b style="color:var(--text-strong);">${esc(m.name)}</b> mentioned you</div>
+        <div style="font-size:0.82rem;color:var(--text);word-break:break-word;">${renderMentionText(snippet)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.25rem;flex-shrink:0;">
+        <button onclick="replyMention(${m.id})" title="Reply" style="background:none;border:none;cursor:pointer;color:#4ade80;font-size:0.95rem;line-height:1;padding:0.1rem;">↩</button>
+        <button onclick="dismissMention(${m.id})" title="Dismiss" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:0.95rem;line-height:1;padding:0.1rem;">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function dismissMention(id){ _dismissedMentions.add(id); _saveDismissedMentions(); renderMentionToasts(); }
+function replyMention(id){
+  const m = (S.messages||[]).find(x=>x.id===id); if(!m) return;
+  _dismissedMentions.add(id); _saveDismissedMentions(); renderMentionToasts();
+  if(!_chatOpen) toggleChat();
+  setTimeout(()=>{
+    const inp = document.getElementById('chat-input');
+    if(inp){ inp.value = `@${m.name} ` + inp.value; inp.focus(); _chatUpdateChars(inp); }
+  }, 60);
+}
+
 function toggleChat(){
   _chatOpen = !_chatOpen;
   const drawer = document.getElementById('chat-drawer');
@@ -2989,7 +3137,7 @@ function renderChatMessages(){
                    cursor:pointer;padding:0;margin-left:auto;opacity:0.5;line-height:1;"
             onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.5'">🗑</button>` : ''}
         </div>
-        <div style="font-size:0.875rem;color:var(--text);word-break:break-word;white-space:pre-wrap;">${esc(m.text)}</div>
+        <div style="font-size:0.875rem;color:var(--text);word-break:break-word;white-space:pre-wrap;">${renderMentionText(m.text)}</div>
       </div>
     </div>`;
   }).join('');
@@ -4134,7 +4282,7 @@ function renderResults(){
   const showGroupCol = groupsRepresented.size > 1;
 
   const TD = 'padding:0.35rem 0.5rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle;';
-  const TH = 'padding:0.5rem;color:#64748b;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;text-align:center;background:#0a1628;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;';
+  const TH = 'padding:0.5rem;color:#64748b;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;text-align:center;background:#0a1628;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:2;';
   // Single sticky info column (Group + Match + Score merged) — left:0, no offset guessing
   const TD_GAME = `${TD}position:sticky;left:0;z-index:1;background:#112a45;box-shadow:3px 0 6px rgba(0,0,0,0.3);white-space:nowrap;`;
   const TH_GAME = `${TH}position:sticky;left:0;z-index:3;text-align:left;box-shadow:3px 0 6px rgba(0,0,0,0.3);`;
@@ -4292,7 +4440,7 @@ function renderResults(){
   const koSection = enteredKo.length ? `
     <div style="margin-top:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.5rem;">🏆 Knockout results</h2>
-      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+      <div style="overflow:auto;max-height:calc(100vh - 5rem);background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
           <thead>${koHeaderRow}</thead>
           <tbody>${koBody}</tbody>
@@ -4309,7 +4457,7 @@ function renderResults(){
       <h1 style="font-size:1.5rem;font-weight:700;color:white;">Results</h1>
       <button onclick="fetchLiveScores()" class="btn-s" id="fetch-btn" style="font-size:0.8rem;padding:0.4rem 0.875rem;white-space:nowrap;">🔄 Refresh scores</button>
     </div>
-    <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+    <div style="overflow:auto;max-height:calc(100vh - 5rem);background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
       <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
         <thead>${headerRow}</thead>
         <tbody>${rows}</tbody>
@@ -4409,15 +4557,16 @@ function renderCompare(){
         const imp=S.otherUsers.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
         const isSelf=(e.name===S.name+' (you)');
         const avatarSrc=isSelf?S.avatar:(imp?.avatar||'');
+        // Leaderboard shows avatars only; the name appears on hover (title).
         const avatarHTML=avatarSrc
-          ?`<img src="${avatarSrc}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
-          :`<span style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.07);display:inline-flex;align-items:center;justify-content:center;font-size:0.75rem;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🧑</span>`;
+          ?`<img src="${avatarSrc}" title="${esc(e.name)}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
+          :`<span title="${esc(e.name)}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.09);display:inline-flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#cbd5e1;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.4);">${esc(abbrevName(e.name))}</span>`;
         return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
           <td style="padding:0.75rem 1rem;">${i<3?MEDALS[i]:i+1}</td>
           <td style="padding:0.75rem 1rem;">
-            <div style="display:flex;align-items:center;font-weight:500;color:white;">${avatarHTML}${esc(e.name)}</div>
-            ${maxPts>0?`<div style="margin-top:3px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;width:7rem;overflow:hidden;"><div style="height:100%;background:#16a34a;width:${(e.total/maxPts*100).toFixed(1)}%;"></div></div>`:''}
+            <div style="display:flex;align-items:center;" title="${esc(e.name)}">${avatarHTML}</div>
+            ${maxPts>0?`<div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;width:3rem;overflow:hidden;"><div style="height:100%;background:#16a34a;width:${(e.total/maxPts*100).toFixed(1)}%;"></div></div>`:''}
           </td>
           <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total}</td>
           ${koActive?`<td style="padding:0.75rem 1rem;text-align:right;color:#94a3b8;">${e.groupTotal}</td>`:''}
