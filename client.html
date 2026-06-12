@@ -3482,15 +3482,20 @@ function renderPredSection(){
     }
     const games=GROUP_GAMES.filter(x=>x.md===md);
     const byDate={};
-    for(const g of games){ (byDate[g.date]=byDate[g.date]||[]).push(g); }
-    const content = Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).map(([date,dGames])=>`
+    // Group by the viewer's local calendar day (from the exact kickoff instant),
+    // so a late-UTC game lands on the right local date in every timezone.
+    for(const g of games){ const iso=gameKickoff(g); const key=(iso&&localDateKey(iso))||g.date; (byDate[key]=byDate[key]||[]).push(g); }
+    const content = Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).map(([date,dGames])=>{
+      dGames.sort((x,y)=>(gameKickoff(x)||'').localeCompare(gameKickoff(y)||'') || x.id-y.id);
+      return `
       <div style="margin-bottom:1.25rem;">
         <div style="font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;padding-left:0.25rem;">
           ${formatDate(date)}${md===3?' — Simultaneous within group':''}
         </div>
         ${dGames.map(game=>renderGroupGameCard(game)).join('')}
-      </div>`).join('');
-    return mapToggle + content + nextTabBtn(tab);
+      </div>`;}).join('');
+    const tzNote = `<div style="font-size:0.68rem;color:#475569;margin-bottom:0.75rem;">🕒 Kick-off times shown in your local timezone (${esc(_localTzName())}).</div>`;
+    return mapToggle + tzNote + content + nextTabBtn(tab);
   }
   if(tab==='tables') return renderGroupTables() + nextTabBtn('tables');
   if(tab==='r32') return renderKoSection('r32') + nextTabBtn('r32');
@@ -3699,7 +3704,7 @@ function renderGroupGameCard(game){
     <div class="game-card ${done?'predicted':''}" id="card-g-${game.id}" style="margin-bottom:0.5rem;">
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;flex-wrap:wrap;">
         <span style="font-size:0.7rem;background:rgba(255,255,255,0.06);color:#64748b;padding:0.1rem 0.4rem;border-radius:0.25rem;">Group ${game.g}</span>
-        <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
+        <span style="font-size:0.7rem;color:#475569;">${(()=>{const iso=gameKickoff(game);return iso?'🕒 '+esc(fmtKickoff(iso)):game.date;})()}</span>
         ${venueStr?`<span style="font-size:0.7rem;color:#475569;">${venueStr}${wxStr}</span>`:''}
         <div style="margin-left:auto;display:flex;align-items:center;gap:0.4rem;">
           ${dossierBtn(game.home, game.away)}
@@ -3928,7 +3933,7 @@ function renderKoCard(game, round){
     <div class="game-card ${done?'predicted':''} ${isDraw&&!penDone?'knockout-draw':''}" id="card-ko-${game.id}" style="margin-bottom:0.5rem;">
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
         <span style="font-size:0.7rem;background:rgba(255,255,255,0.06);color:#64748b;padding:0.1rem 0.4rem;border-radius:0.25rem;">${roundLabel}</span>
-        <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
+        <span style="font-size:0.7rem;color:#475569;">${(()=>{const iso=gameKickoff(game);return iso?'🕒 '+esc(fmtKickoff(iso)):game.date;})()}</span>
         ${(()=>{
           const city=KO_VENUES[game.id]; if(!city) return '';
           const c=CITY_COORDS[city];
@@ -5279,11 +5284,13 @@ function renderPicksKO(round){
   const fmtDate = d => d ? new Date(d+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
 
   for(const game of games){
-    if(game.date && game.date !== lastDate){
-      lastDate = game.date;
+    const _iso = gameKickoff(game);
+    const _dkey = (_iso && localDateKey(_iso)) || game.date;
+    if(_dkey && _dkey !== lastDate){
+      lastDate = _dkey;
       rows.push(`<tr>
         <td colspan="${participants.length+1}" style="padding:0.25rem 0.6rem;font-size:0.6rem;font-weight:700;color:#475569;background:#0d1f35;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(255,255,255,0.06);">
-          ${fmtDate(game.date)}
+          ${fmtDate(_dkey)}
         </td>
       </tr>`);
     }
@@ -5467,6 +5474,52 @@ async function fetchLiveScores(silent){
 function formatDate(d){
   const dt=new Date(d+'T12:00:00');
   return dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+}
+
+// ── Kick-off times (exact UTC instant per game) ─────────────
+// Group games keyed by numeric id (1-72); knockout games by slot id. Rendered
+// in each viewer's own timezone via fmtKickoff/fmtKickoffTime below.
+const KICKOFFS = {
+  1:"2026-06-11T19:00Z", 2:"2026-06-12T02:00Z", 3:"2026-06-12T19:00Z", 4:"2026-06-13T19:00Z", 5:"2026-06-13T22:00Z", 6:"2026-06-14T01:00Z",
+  7:"2026-06-13T01:00Z", 8:"2026-06-14T04:00Z", 9:"2026-06-14T17:00Z", 10:"2026-06-14T23:00Z", 11:"2026-06-14T20:00Z", 12:"2026-06-15T02:00Z",
+  13:"2026-06-15T19:00Z", 14:"2026-06-16T01:00Z", 15:"2026-06-15T16:00Z", 16:"2026-06-15T22:00Z", 17:"2026-06-16T19:00Z", 18:"2026-06-16T22:00Z",
+  19:"2026-06-17T01:00Z", 20:"2026-06-17T04:00Z", 21:"2026-06-17T17:00Z", 22:"2026-06-18T02:00Z", 23:"2026-06-17T20:00Z", 24:"2026-06-17T23:00Z",
+  25:"2026-06-19T01:00Z", 26:"2026-06-18T16:00Z", 27:"2026-06-18T22:00Z", 28:"2026-06-18T19:00Z", 29:"2026-06-19T22:00Z", 30:"2026-06-20T00:30Z",
+  31:"2026-06-19T19:00Z", 32:"2026-06-20T03:00Z", 33:"2026-06-20T20:00Z", 34:"2026-06-21T00:00Z", 35:"2026-06-20T17:00Z", 36:"2026-06-21T04:00Z",
+  37:"2026-06-21T19:00Z", 38:"2026-06-22T01:00Z", 39:"2026-06-21T16:00Z", 40:"2026-06-21T22:00Z", 41:"2026-06-22T21:00Z", 42:"2026-06-23T00:00Z",
+  43:"2026-06-22T17:00Z", 44:"2026-06-23T03:00Z", 45:"2026-06-23T17:00Z", 46:"2026-06-24T02:00Z", 47:"2026-06-23T20:00Z", 48:"2026-06-23T23:00Z",
+  49:"2026-06-25T01:00Z", 50:"2026-06-25T01:00Z", 51:"2026-06-24T19:00Z", 52:"2026-06-24T19:00Z", 53:"2026-06-24T22:00Z", 54:"2026-06-24T22:00Z",
+  55:"2026-06-26T02:00Z", 56:"2026-06-26T02:00Z", 57:"2026-06-25T20:00Z", 58:"2026-06-25T20:00Z", 59:"2026-06-25T23:00Z", 60:"2026-06-25T23:00Z",
+  61:"2026-06-27T03:00Z", 62:"2026-06-27T03:00Z", 63:"2026-06-27T00:00Z", 64:"2026-06-27T00:00Z", 65:"2026-06-26T19:00Z", 66:"2026-06-26T19:00Z",
+  67:"2026-06-28T02:00Z", 68:"2026-06-28T02:00Z", 69:"2026-06-27T23:30Z", 70:"2026-06-27T23:30Z", 71:"2026-06-27T21:00Z", 72:"2026-06-27T21:00Z",
+  "r32-1":"2026-06-28T19:00Z", "r32-2":"2026-06-29T17:00Z", "r32-3":"2026-06-30T01:00Z", "r32-4":"2026-07-03T18:00Z",
+  "r32-5":"2026-07-02T19:00Z", "r32-6":"2026-07-03T22:00Z", "r32-7":"2026-06-30T17:00Z", "r32-8":"2026-07-02T23:00Z",
+  "r32-9":"2026-07-01T01:00Z", "r32-10":"2026-07-03T03:00Z", "r32-11":"2026-07-02T00:00Z", "r32-12":"2026-06-29T20:30Z",
+  "r32-13":"2026-07-01T20:00Z", "r32-14":"2026-06-30T21:00Z", "r32-15":"2026-07-04T01:30Z", "r32-16":"2026-07-01T16:00Z",
+  "r16-1":"2026-07-04T21:00Z", "r16-2":"2026-07-04T17:00Z", "r16-3":"2026-07-05T20:00Z", "r16-4":"2026-07-06T00:00Z",
+  "r16-5":"2026-07-06T19:00Z", "r16-6":"2026-07-07T00:00Z", "r16-7":"2026-07-07T16:00Z", "r16-8":"2026-07-07T20:00Z",
+  "qf-1":"2026-07-09T20:00Z", "qf-2":"2026-07-11T21:00Z", "qf-3":"2026-07-10T19:00Z", "qf-4":"2026-07-12T01:00Z",
+  "sf-1":"2026-07-14T19:00Z", "sf-2":"2026-07-15T19:00Z", "3rd":"2026-07-18T21:00Z", "final":"2026-07-19T19:00Z",
+};
+function gameKickoff(game){ return game && game.id!=null ? (KICKOFFS[game.id] || null) : null; }
+function _koDate(iso){ const d=new Date(iso); return isNaN(d)?null:d; }
+// Full local date + time, e.g. "Thu 11 Jun, 12:00 PDT" — in the viewer's timezone.
+function fmtKickoff(iso){
+  const d=_koDate(iso); if(!d) return '';
+  return d.toLocaleString([], {weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+}
+// Local time only, e.g. "12:00 PDT".
+function fmtKickoffTime(iso){
+  const d=_koDate(iso); if(!d) return '';
+  return d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+}
+// Local calendar day (YYYY-MM-DD) for grouping games by the viewer's date.
+function localDateKey(iso){
+  const d=_koDate(iso); if(!d) return null;
+  return d.toLocaleDateString('en-CA');
+}
+function _localTzName(){
+  try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'; }catch(e){ return 'local time'; }
 }
 
 // ═══════════════════════════════════════════════════════════
