@@ -662,9 +662,12 @@ async function pollESPN() {
         changed = true;
       }
     }
-    // Replace the live snapshot; broadcast if it (or the DB) changed so clients
-    // see in-progress scores update without each hitting ESPN directly.
-    const liveChanged = JSON.stringify(_liveScores) !== JSON.stringify(nextLive);
+    // Replace the live snapshot. Broadcast only when a live SCORE (or the set of
+    // live games) changes — not on every clock tick — so clients don't do a full
+    // re-render every 30s just to advance the minute. The fresh clock still rides
+    // along on the next broadcast triggered by a goal or any other change.
+    const liveSig = o => Object.keys(o).sort().map(k => `${k}:${o[k].hs}-${o[k].as}`).join('|');
+    const liveChanged = liveSig(_liveScores) !== liveSig(nextLive);
     _liveScores = nextLive;
     if (changed || liveChanged) { invalidateStateCache(); scheduleBroadcast(); }
   } catch (err) {

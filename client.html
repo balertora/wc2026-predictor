@@ -2819,7 +2819,7 @@ function connectWS(){
       const msg = JSON.parse(ev.data);
       if(msg.type==='state'){
         _applyServerState(msg.data);
-        render();
+        scheduleRender();
       }
     }catch(e){}
   });
@@ -3257,7 +3257,7 @@ function _flagCode(t){
 function flag(t){
   const code=_flagCode(t);
   if(!code) return FLAGS[t]||'🏳️';   // placeholders (Winner of…, etc.) keep the emoji
-  return `<img class="flag" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" onerror="this.style.display='none'">`;
+  return `<img class="flag" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">`;
 }
 
 // ── Team tooltip ─────────────────────────────────────────────
@@ -3487,6 +3487,25 @@ function render(){
   if(S.view==='predict' && S.name && S.predMapView && /^md[123]$/.test(S.predTab)){
     setTimeout(() => initPredMap(parseInt(S.predTab[2])), 0);
   }
+}
+
+// Coalesced render for server-driven updates: batches a burst of broadcasts
+// into one repaint (rAF), and skips rebuilding #app while the user is typing in
+// a score/field there (a full innerHTML swap would steal focus mid-entry).
+// Live scores now broadcast every ~30s, so this keeps the app responsive.
+let _renderScheduled = false;
+function scheduleRender(){
+  if(_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(()=>{
+    _renderScheduled = false;
+    const ae = document.activeElement;
+    if(ae && (ae.tagName==='INPUT' || ae.tagName==='TEXTAREA') && typeof ae.closest==='function' && ae.closest('#app')){
+      // Mid-edit — defer; the user's next change re-renders with merged state.
+      return;
+    }
+    render();
+  });
 }
 
 function renderMain(){
@@ -4287,10 +4306,16 @@ function crowdOddsBar(cons){
     </div>`;
 }
 
+// True if a user has entered at least one prediction (group or knockout).
+// Used to hide players who haven't picked yet from the Results/Picks views.
+function _hasPicks(u){
+  return !!(u && ((u.gPreds && Object.keys(u.gPreds).length) || (u.kPreds && Object.keys(u.kPreds).length)));
+}
+
 function renderResults(){
   const participants=[];
   if(S.name&&Object.keys(S.gPreds).length>0) participants.push({name:S.name+' (you)',gPreds:S.gPreds});
-  participants.push(...S.otherUsers);
+  participants.push(...S.otherUsers.filter(_hasPicks));
 
   const liveIds = new Set(Object.keys(S.gLive).map(Number));
   const doneIds = new Set(Object.keys(S.gResults).map(Number));
@@ -4306,8 +4331,8 @@ function renderResults(){
   const groupsRepresented = new Set(GROUP_GAMES.map(g=>g.g));
   const showGroupCol = groupsRepresented.size > 1;
 
-  const TD = 'padding:0.35rem 0.5rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle;';
-  const TH = 'padding:0.5rem;color:#64748b;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;text-align:center;background:#0a1628;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:2;';
+  const TD = 'padding:0.3rem 0.35rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle;';
+  const TH = 'padding:0.4rem 0.35rem;color:#64748b;font-size:0.66rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;text-align:center;background:#0a1628;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:2;';
   // Single sticky info column (Group + Match + Score merged) — left:0, no offset guessing
   const TD_GAME = `${TD}position:sticky;left:0;z-index:1;background:#112a45;box-shadow:3px 0 6px rgba(0,0,0,0.3);white-space:nowrap;`;
   const TH_GAME = `${TH}position:sticky;left:0;z-index:3;text-align:left;box-shadow:3px 0 6px rgba(0,0,0,0.3);`;
@@ -4329,14 +4354,13 @@ function renderResults(){
       titleTxt = `${dist.toFixed(1)} goals from the crowd avg (${cons.avgH.toFixed(1)}–${cons.avgA.toFixed(1)})`;
       if(norm>0.02) devBar = `<div style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:72%;width:${(norm*100).toFixed(0)}%;background:#a78bfa;opacity:0.20;border-radius:0 3px 3px 0;pointer-events:none;"></div>`;
     }
-    // Compact display: exact → bullseye only; wrong → colour only (no digits, so
-    // the actual pick is on hover); correct-result / not-yet-scored → show score.
+    // Compact display: exact → just the bullseye (pick on hover); wrong → the
+    // score in red; correct-result / not-yet-scored → the score.
     let content;
     if(p_pts===3){ content='🎯'; titleTxt=`${ph}–${pa} · exact${titleTxt?' · '+titleTxt:''}`; }
-    else if(p_pts===0){ content=''; titleTxt=`${ph}–${pa} · wrong${titleTxt?' · '+titleTxt:''}`; }
     else { content=`${ph}–${pa}`; }
     const titleAttr = titleTxt?` title="${esc(titleTxt)}"`:'';
-    return `<td${titleAttr} style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;text-align:center;white-space:nowrap;position:relative;">${devBar}<span style="position:relative;">${content}</span></td>`;
+    return `<td${titleAttr} style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;position:relative;">${devBar}<span style="position:relative;">${content}</span></td>`;
   }
 
   function gameRow(game, mode){
@@ -4353,8 +4377,16 @@ function renderResults(){
       scoreStr = `<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${r.hs}–${r.as}</span>`
                + `<span style="color:#475569;font-size:0.6rem;margin-left:0.2rem;">FT</span>`;
     } else {
-      const d = new Date(game.date+'T12:00:00');
-      scoreStr = `<span style="color:#475569;font-size:0.7rem;">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>`;
+      const iso = gameKickoff(game);
+      if(iso){
+        const dd = new Date(iso);
+        const ds = dd.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        const ts = dd.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+        scoreStr = `<span style="color:#475569;font-size:0.7rem;">${ds} · ${ts}</span>`;
+      } else {
+        const d = new Date(game.date+'T12:00:00');
+        scoreStr = `<span style="color:#475569;font-size:0.7rem;">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>`;
+      }
     }
 
     // Group badge (only when multiple groups in view)
@@ -4398,7 +4430,7 @@ function renderResults(){
   // Mirror the group participant columns, but read KO predictions.
   const koParticipants=[];
   if(S.name && Object.keys(S.gPreds).length>0) koParticipants.push({name:S.name+' (you)', kPreds:S.kPreds||{}});
-  koParticipants.push(...S.otherUsers.map(u=>({name:u.name, kPreds:u.kPreds||{}})));
+  koParticipants.push(...S.otherUsers.filter(_hasPicks).map(u=>({name:u.name, kPreds:u.kPreds||{}})));
 
   const koRoundLabel = id =>
     id.startsWith('r32') ? 'Round of 32' :
@@ -4609,7 +4641,6 @@ function renderCompare(){
         ${koActive?thSort('matchups', 'Match', 'Knockout matchups called right (0.5 per correct team)'):''}
         ${thSort('exact',   'Exact',   'Group exact scores predicted')}
         ${thSort('correct', 'Result✓', 'Group games where W/D/L result was correct')}
-        ${thSort('scored',  'Scored',  'Number of group games predicted')}
         ${thSort('bad',     'Points↓', 'Total group goal error vs actual scores — lower is better')}
       </tr></thead>
       <tbody>${lb.map((e,i)=>{
@@ -4633,7 +4664,6 @@ function renderCompare(){
           ${koActive?`<td style="padding:0.75rem 1rem;text-align:right;color:#22d3ee;">${e.matchups}</td>`:''}
           <td style="padding:0.75rem 1rem;text-align:right;color:#4ade80;">${e.exact}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#facc15;">${e.correct}</td>
-          <td style="padding:0.75rem 1rem;text-align:right;color:#64748b;">${e.scored}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#f87171;font-weight:600;">${e.scored>0?e.bad:'–'}</td>
         </tr>`;}).join('')}
       </tbody></table></div>`;
@@ -5199,7 +5229,7 @@ function renderGroupsTab(){
   const grpKeys=Object.keys(GROUPS);
   const participants=[];
   if(S.name&&Object.keys(S.gPreds).length>0) participants.push({name:S.name,gPreds:S.gPreds});
-  participants.push(...S.otherUsers);
+  participants.push(...S.otherUsers.filter(_hasPicks));
 
   // Picker map for group-winner predictions + uniform team column width across all 12 groups
   _gwPickerMap = _buildGWPickerMap();
@@ -5402,9 +5432,10 @@ function computeTitleOdds(participants){
   return { rows, total, bracketsWithFinal };
 }
 function renderTitleOdds(){
+  // Only count people who actually made knockout picks.
   const participants = [];
-  if(S.name) participants.push({ name:S.name, kPreds:S.kPreds||{} });
-  for(const u of S.otherUsers||[]) participants.push({ name:u.name, kPreds:u.kPreds||{} });
+  if(S.name && Object.keys(S.kPreds||{}).length) participants.push({ name:S.name, kPreds:S.kPreds });
+  for(const u of S.otherUsers||[]) if(u.kPreds && Object.keys(u.kPreds).length) participants.push({ name:u.name, kPreds:u.kPreds });
   const { rows, total, bracketsWithFinal } = computeTitleOdds(participants);
 
   if(!total) return `<div style="padding:2.5rem 1rem;text-align:center;color:#64748b;font-size:0.9rem;">
@@ -5468,10 +5499,10 @@ function renderPicksTab(){
 }
 
 function renderPicksKO(round){
-  // Gather all participants
+  // Gather participants who have actually made picks
   const participants = [];
-  if(S.name) participants.push({name:S.name, avatar:S.avatar||'', kPreds:S.kPreds||{}});
-  for(const u of S.otherUsers||[]) participants.push({name:u.name||'', avatar:u.avatar||'', kPreds:u.kPreds||{}});
+  if(S.name && _hasPicks({gPreds:S.gPreds, kPreds:S.kPreds})) participants.push({name:S.name, avatar:S.avatar||'', kPreds:S.kPreds||{}});
+  for(const u of S.otherUsers||[]) if(_hasPicks(u)) participants.push({name:u.name||'', avatar:u.avatar||'', kPreds:u.kPreds||{}});
 
   if(!participants.length){
     return `<div style="padding:2rem;text-align:center;color:#475569;font-size:0.875rem;">
