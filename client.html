@@ -4631,7 +4631,9 @@ function _actualKoTeams(){
 function todaysGamesPanel(parts){
   const todayKey = localDateKey(new Date().toISOString());
   const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
-  const rowHTML=(homeT,awayT,mid,dist)=>`<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;">
+  const pickCell=(txt,color)=>`<span title="Your pick" style="flex-shrink:0;width:2.9rem;text-align:left;font-family:monospace;font-size:0.74rem;font-weight:700;color:${color};">${txt}</span>`;
+  const rowHTML=(pick,homeT,awayT,mid,dist)=>`<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;">
+      ${pick}
       <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
       <span style="flex-shrink:0;min-width:5.5rem;text-align:center;">${mid}</span>
       <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${flag(awayT)} ${esc(shortTeamName(awayT))}</span>
@@ -4648,13 +4650,16 @@ function todaysGamesPanel(parts){
   const rows = entries.map(e=>{
     if(e.kind==='group'){
       const g=e.g, live=S.gLive[g.id], done=S.gResults[g.id];
-      let mid='', actual=null;
-      if(live){ mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
-      else if(done){ mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done[0]}–${done[1]}</span> <span style="color:#475569;font-size:0.56rem;">FT</span>`; actual=done[0]>done[1]?'h':done[0]<done[1]?'a':'d'; }
+      let mid='', actual=null, aH=null, aA=null;
+      if(live){ aH=live.hs; aA=live.as; mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
+      else if(done){ aH=done[0]; aA=done[1]; mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done[0]}–${done[1]}</span> <span style="color:#475569;font-size:0.56rem;">FT</span>`; actual=done[0]>done[1]?'h':done[0]<done[1]?'a':'d'; }
       else { mid=`<span style="color:#475569;font-size:0.72rem;">${esc(fmtKickoffTime(e.iso))}</span>`; }
+      const myp=S.gPreds[g.id];
+      let pickTxt='–', pickCol='#475569';
+      if(myp){ pickTxt=`${myp[0]}–${myp[1]}`; if(aH!=null){ const p2=pts(myp[0],myp[1],aH,aA); pickCol=p2===3?'#4ade80':p2===1?'#facc15':'#f87171'; } else pickCol='#94a3b8'; }
       const d=_pickDist(g.id, parts);
       const dist=`${seg(d.h,'#60a5fa',actual==='h')}·${seg(d.d,'#94a3b8',actual==='d')}·${seg(d.a,'#fb923c',actual==='a')}`;
-      return rowHTML(g.home, g.away, mid, dist);
+      return rowHTML(pickCell(pickTxt,pickCol), g.home, g.away, mid, dist);
     }
     const slot=e.slot, live=S.gLive[slot], done=S.kResults[slot];
     let homeT, awayT, mid='', advSide=null;
@@ -4666,9 +4671,16 @@ function todaysGamesPanel(parts){
       const adv=koAdvancer(done.home,done.away,done.homeScore,done.awayScore,done.penWinner);
       advSide = adv===homeT?'h':adv===awayT?'a':null;
     } else { const t=e.actualKo[slot]||{}; homeT=t.home||'TBD'; awayT=t.away||'TBD'; mid=`<span style="color:#475569;font-size:0.72rem;">${esc(fmtKickoffTime(e.iso))}</span>`; }
+    const mykp=S.kPreds[slot];
+    let pickTxt='–', pickCol='#475569';
+    if(mykp && mykp.homeScore!=null){
+      pickTxt=`${mykp.homeScore}–${mykp.awayScore}`;
+      if(done && done.homeScore!=null){ const c=koCompare(mykp, done); pickCol = c.exact?'#4ade80':c.advOk?'#facc15':(c.kind==='nopick'?'#475569':'#f87171'); }
+      else pickCol='#94a3b8';
+    }
     const d=_koPickDist(slot, homeT, awayT, parts);
     const dist=`${seg(d.h,'#60a5fa',advSide==='h')}·${seg(d.a,'#fb923c',advSide==='a')}`;
-    return rowHTML(homeT, awayT, mid, dist);
+    return rowHTML(pickCell(pickTxt,pickCol), homeT, awayT, mid, dist);
   });
 
   return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.6rem 1rem 0.4rem;margin-bottom:1.25rem;">
