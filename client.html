@@ -4594,41 +4594,89 @@ function _entryAvatar(name){
 function _loadTitleLeaders(key){ try{ return JSON.parse(localStorage.getItem(key||'wc26_title_leaders')||'null'); }catch(e){ return null; } }
 function _saveTitleLeaders(map,key){ try{ localStorage.setItem(key||'wc26_title_leaders', JSON.stringify(map)); }catch(e){} }
 
+// Surprise odds-weight is capped so one lucky lone call can't dwarf everything.
+const ODDS_WEIGHT_CAP = 5;
+
 // Count how the crowd picked a group game: home wins / draws / away wins.
 function _pickDist(gameId, parts){
   let h=0,d=0,a=0;
   for(const p of parts){ const pr=p.gPreds&&p.gPreds[gameId]; if(!pr) continue; if(pr[0]>pr[1])h++; else if(pr[0]<pr[1])a++; else d++; }
   return {h,d,a,total:h+d+a};
 }
-// Compact "today's games" strip for the leaderboard: live/final/upcoming score
-// plus the high-level pick split (home · draw · away), highlighting the result.
+// A participant's predicted advancing team for a KO slot (decisive score, else pen winner).
+function _predAdvancer(kp){
+  if(!kp || kp.homeScore==null || kp.awayScore==null) return null;
+  if(kp.homeScore>kp.awayScore) return kp.home;
+  if(kp.awayScore>kp.homeScore) return kp.away;
+  return kp.penWinner || null;
+}
+// How the crowd picked a KO slot: home-team-advances / away-team-advances.
+function _koPickDist(slot, homeT, awayT, parts){
+  let h=0,a=0;
+  for(const p of parts){ const adv=_predAdvancer(p.kPreds&&p.kPreds[slot]); if(!adv) continue; if(adv===homeT)h++; else if(adv===awayT)a++; }
+  return {h,a,total:h+a};
+}
+// Actual KO matchup teams, resolved from real results (R32 from real qualifiers;
+// later rounds from real KO results, falling back to your bracket if a feeder
+// result isn't in yet).
+function _actualKoTeams(){
+  const { q, r16, qf, sf, fin } = buildAllRounds();
+  const map={};
+  R32_FIXED.forEach(m=>{ map[m.id]={home:resolvePos(m.posA,q),away:resolvePos(m.posB,q)}; });
+  [...r16,...qf,...sf,...fin].forEach(g=>{ map[g.id]={home:g.home,away:g.away}; });
+  return map;
+}
+// Compact "today's games" strip for the leaderboard (group + knockout): the
+// live/final/upcoming score plus the high-level pick split, result underlined.
 function todaysGamesPanel(parts){
   const todayKey = localDateKey(new Date().toISOString());
-  const games = GROUP_GAMES.filter(g=>{ const iso=gameKickoff(g); return iso && localDateKey(iso)===todayKey; })
-    .sort((x,y)=>(gameKickoff(x)||'').localeCompare(gameKickoff(y)||''));
-  if(!games.length) return '';
-  const rowFor = g => {
-    const live=S.gLive[g.id], done=S.gResults[g.id];
-    let mid='', actual=null;
-    if(live){ mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
-    else if(done){ mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done[0]}–${done[1]}</span> <span style="color:#475569;font-size:0.56rem;">FT</span>`; actual=done[0]>done[1]?'h':done[0]<done[1]?'a':'d'; }
-    else { const iso=gameKickoff(g); mid=`<span style="color:#475569;font-size:0.72rem;">${iso?esc(fmtKickoffTime(iso)):''}</span>`; }
-    const d=_pickDist(g.id, parts);
-    const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
-    const dist=`${seg(d.h,'#60a5fa',actual==='h')}·${seg(d.d,'#94a3b8',actual==='d')}·${seg(d.a,'#fb923c',actual==='a')}`;
-    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;">
-      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${esc(shortTeamName(g.home))} ${flag(g.home)}</span>
+  const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
+  const rowHTML=(homeT,awayT,mid,dist)=>`<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;">
+      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
       <span style="flex-shrink:0;min-width:5.5rem;text-align:center;">${mid}</span>
-      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${flag(g.away)} ${esc(shortTeamName(g.away))}</span>
-      <span title="How players picked — home win · draw · away win" style="flex-shrink:0;font-size:0.72rem;font-family:monospace;min-width:3.5rem;text-align:right;">${dist}</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${flag(awayT)} ${esc(shortTeamName(awayT))}</span>
+      <span title="How players picked — left team · (draw) · right team" style="flex-shrink:0;font-size:0.72rem;font-family:monospace;min-width:3.5rem;text-align:right;">${dist}</span>
     </div>`;
-  };
+
+  const entries=[];
+  for(const g of GROUP_GAMES){ const iso=gameKickoff(g); if(iso && localDateKey(iso)===todayKey) entries.push({iso, kind:'group', g}); }
+  const koToday = Object.keys(KO_VENUES).filter(slot=>{ const iso=KICKOFFS[slot]; return iso && localDateKey(iso)===todayKey; });
+  if(koToday.length){ const actualKo=_actualKoTeams(); for(const slot of koToday) entries.push({iso:KICKOFFS[slot], kind:'ko', slot, actualKo}); }
+  if(!entries.length) return '';
+  entries.sort((x,y)=>(x.iso||'').localeCompare(y.iso||''));
+
+  const rows = entries.map(e=>{
+    if(e.kind==='group'){
+      const g=e.g, live=S.gLive[g.id], done=S.gResults[g.id];
+      let mid='', actual=null;
+      if(live){ mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
+      else if(done){ mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done[0]}–${done[1]}</span> <span style="color:#475569;font-size:0.56rem;">FT</span>`; actual=done[0]>done[1]?'h':done[0]<done[1]?'a':'d'; }
+      else { mid=`<span style="color:#475569;font-size:0.72rem;">${esc(fmtKickoffTime(e.iso))}</span>`; }
+      const d=_pickDist(g.id, parts);
+      const dist=`${seg(d.h,'#60a5fa',actual==='h')}·${seg(d.d,'#94a3b8',actual==='d')}·${seg(d.a,'#fb923c',actual==='a')}`;
+      return rowHTML(g.home, g.away, mid, dist);
+    }
+    const slot=e.slot, live=S.gLive[slot], done=S.kResults[slot];
+    let homeT, awayT, mid='', advSide=null;
+    if(live && live.home){ homeT=live.home; awayT=live.away; mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; }
+    else if(done && done.home && done.homeScore!=null){
+      homeT=done.home; awayT=done.away;
+      const pen=(done.homeScore===done.awayScore && done.penWinner)?` <span style="color:#94a3b8;font-size:0.56rem;">pens ${esc(shortTeamName(done.penWinner))}</span>`:` <span style="color:#475569;font-size:0.56rem;">FT</span>`;
+      mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done.homeScore}–${done.awayScore}</span>${pen}`;
+      const adv=koAdvancer(done.home,done.away,done.homeScore,done.awayScore,done.penWinner);
+      advSide = adv===homeT?'h':adv===awayT?'a':null;
+    } else { const t=e.actualKo[slot]||{}; homeT=t.home||'TBD'; awayT=t.away||'TBD'; mid=`<span style="color:#475569;font-size:0.72rem;">${esc(fmtKickoffTime(e.iso))}</span>`; }
+    const d=_koPickDist(slot, homeT, awayT, parts);
+    const dist=`${seg(d.h,'#60a5fa',advSide==='h')}·${seg(d.a,'#fb923c',advSide==='a')}`;
+    return rowHTML(homeT, awayT, mid, dist);
+  });
+
   return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.6rem 1rem 0.4rem;margin-bottom:1.25rem;">
     <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
       <span>📅 Today's games</span>
-      <span style="text-transform:none;font-size:0.62rem;color:#475569;">picks: <span style="color:#60a5fa;">home</span>·<span style="color:#94a3b8;">draw</span>·<span style="color:#fb923c;">away</span></span>
+      <span style="text-transform:none;font-size:0.62rem;color:#475569;">picks: <span style="color:#60a5fa;">left</span>·<span style="color:#94a3b8;">draw</span>·<span style="color:#fb923c;">right</span></span>
     </div>
-    ${games.map(rowFor).join('')}
+    ${rows.join('')}
   </div>`;
 }
 
@@ -4651,7 +4699,16 @@ function renderCompare(){
     const actual = r[0]>r[1]?'h':r[0]<r[1]?'a':'d';
     const d=_pickDist(game.id, allPred);
     const cnt = actual==='h'?d.h:actual==='a'?d.a:d.d;
-    gameOddsWeight[game.id] = (d.total>0 && cnt>0) ? +(d.total/cnt).toFixed(2) : 1;
+    gameOddsWeight[game.id] = (d.total>0 && cnt>0) ? Math.min(ODDS_WEIGHT_CAP, +(d.total/cnt).toFixed(2)) : 1;
+  }
+  // Same odds idea for knockout games, by the team that actually advanced.
+  const koOddsWeight={};
+  for(const slot of Object.keys(KO_VENUES)){
+    const a=S.kResults[slot]; if(!a||!a.home||!a.away||a.homeScore==null) continue;
+    const adv=koAdvancer(a.home,a.away,a.homeScore,a.awayScore,a.penWinner); if(!adv) continue;
+    const d=_koPickDist(slot, a.home, a.away, allPred);
+    const cnt = adv===a.home?d.h:adv===a.away?d.a:0;
+    koOddsWeight[slot] = (d.total>0 && cnt>0) ? Math.min(ODDS_WEIGHT_CAP, +(d.total/cnt).toFixed(2)) : 1;
   }
 
   const W=getWeights();
@@ -4664,6 +4721,14 @@ function renderCompare(){
       groupTotal+=p2; if(p2===3)exact++; if(p2>=1)correct++;
       if(p2>0) surprise += p2 * (gameOddsWeight[gid]||1); // base points × crowd odds of the result
       bad+=Math.abs(pr[0]-r[0])+Math.abs(pr[1]-r[1]);
+    }
+    // KO surprise: correctly advancing a team few backed earns its result points
+    // (1 advancer / 3 exact) × the capped crowd odds of that advancer.
+    for(const slot of Object.keys(KO_VENUES)){
+      const a=S.kResults[slot]; if(!a||!a.home||!a.away||a.homeScore==null) continue;
+      const c=koCompare(p.kPreds?p.kPreds[slot]:undefined, a);
+      const resPts = c.kind==='full' ? (c.exact?3:c.advOk?1:0) : 0;
+      if(resPts>0) surprise += resPts * (koOddsWeight[slot]||1);
     }
     const ko=koScoreFor(p.kPreds);
     // Total = the weighted group formula (A×correct + B×exact − C×PAB) + weighted KO.
@@ -4709,7 +4774,7 @@ function renderCompare(){
         <th style="padding:0.75rem 1rem;text-align:left;width:2rem;">#</th>
         <th style="padding:0.75rem 1rem;text-align:left;">Name</th>
         ${thSort('total',   'Total',   'Weighted score (A×correct + B×exact − C×PAB) + weighted knockout points')}
-        ${thSort('surprise','Surprise','Odds-weighted: each correct group result earns its points × the crowd odds of that outcome — calling an upset everyone missed is worth more')}
+        ${thSort('surprise','Surprise','Odds-weighted: each correct result (group W/D/L or KO advancer) earns its points × the crowd odds of that outcome, capped at ×'+ODDS_WEIGHT_CAP+' — calling an upset few backed is worth more')}
         ${koActive?thSort('weighted','Group','Weighted group score: A×correct + B×exact − C×PAB'):''}
         ${koActive?thSort('koTotal',  'KO',    'Knockout points (matchup + result, weighted by round)'):''}
         ${koActive?thSort('matchups', 'Match', 'Knockout matchups called right (0.5 per correct team)'):''}
