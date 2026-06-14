@@ -4749,6 +4749,8 @@ function renderCompare(){
       if(p2>0) surprise += p2 * (gameOddsWeight[gid]||1); // base points × crowd odds of the result
       bad+=Math.abs(pr[0]-r[0])+Math.abs(pr[1]-r[1]);
     }
+    // Skipped a played game → treat as a wrong pick: +3 to Points-are-Bad.
+    for(const game of completed){ if(!p.gPreds[game.id]) bad += 3; }
     // KO surprise: correctly advancing a team few backed earns its result points
     // (1 advancer / 3 exact) × the capped crowd odds of that advancer.
     for(const slot of Object.keys(KO_VENUES)){
@@ -4780,6 +4782,7 @@ function renderCompare(){
     for(const game of sortedCompleted){
       const r=S.gResults[game.id], pr=p.gPreds[game.id];
       if(pr&&r){ const sc=pts(pr[0],pr[1],r[0],r[1]); if(sc>=1)cc++; cb+=Math.abs(pr[0]-r[0])+Math.abs(pr[1]-r[1]); }
+      else if(r){ cb += 3; } // skipped a played game → +3 PAB
       correctPts.push(cc); badPts.push(cb);
     }
     return {name:p.name,correctPts,badPts};
@@ -4807,7 +4810,7 @@ function renderCompare(){
         ${koActive?thSort('matchups', 'Match', 'Knockout matchups called right (0.5 per correct team)'):''}
         ${thSort('exact',   'Exact',   'Group exact scores predicted')}
         ${thSort('correct', 'Result✓', 'Group games where W/D/L result was correct')}
-        ${thSort('bad',     'Points↓', 'Total group goal error vs actual scores — lower is better')}
+        ${thSort('bad',     'Points↓', 'Total group goal error vs actual scores (a skipped game counts as +3) — lower is better')}
       </tr></thead>
       <tbody>${lb.map((e,i)=>{
         // Find avatar for this entry
