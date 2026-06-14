@@ -2387,16 +2387,25 @@ function koScoreFor(kPreds){
   return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
 }
 
+// The 31 knockout slots a complete Repicker bracket covers.
+const RE_SLOT_IDS = [
+  ...Array.from({length:16},(_,i)=>`r32-${i+1}`),
+  ...Array.from({length:8}, (_,i)=>`r16-${i+1}`),
+  ...Array.from({length:4}, (_,i)=>`qf-${i+1}`),
+  'sf-1','sf-2','final-1',
+];
+// True only if every one of the 31 KO slots has a decided score. Players with an
+// incomplete Repicker bracket are excluded from the Repicker leaderboard.
+function rePickComplete(picks){
+  if(!picks) return false;
+  return RE_SLOT_IDS.every(id=>{ const p=picks[id]; return p && p.homeScore!=null && p.awayScore!=null; });
+}
+
 // Same scoring engine for the Repicker (separate game). Maps the repicker's
 // 'final-1' slot to the actual 'final' result; no 3rd-place game.
 function koScoreForRepicker(rePicks){
   const w = reWeights();
-  const ids = [
-    ...Array.from({length:16},(_,i)=>`r32-${i+1}`),
-    ...Array.from({length:8}, (_,i)=>`r16-${i+1}`),
-    ...Array.from({length:4}, (_,i)=>`qf-${i+1}`),
-    'sf-1','sf-2','final-1',
-  ];
+  const ids = RE_SLOT_IDS;
   const rk = id => id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':'final';
   let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
   for(const id of ids){
@@ -3497,7 +3506,7 @@ function _fireGoalAnim(mid, side, delay){
 function render(){
   // Destroy any live Leaflet instance before replacing the DOM
   if(_predMap){ _predMap.remove(); _predMap = null; }
-  document.getElementById('app').innerHTML = renderMain();
+  document.getElementById('app').innerHTML = `<div id="repicker-cd">${repickerBannerHTML()}</div>` + renderMain();
   _updateNavUser(); // Keep nav avatar current whenever state changes
   _renderBotBar();  // Keep the auto-pick bar in sync (lives outside #app)
   if(_pendingGoalAnim){
@@ -4873,8 +4882,8 @@ function renderCompare(){
 
   // ── Repicker standings (separate game) — appears once KO results exist ──
   const reLbAll = Object.entries(S.allRePicks||{})
+    .filter(([name,picks])=> rePickComplete(picks)) // only players who picked the whole bracket
     .map(([name,picks])=>({ name, ...koScoreForRepicker(picks) }))
-    .filter(x=>x.scored>0)
     .sort((a,b)=>b.koTotal-a.koTotal||b.matchups-a.matchups||a.name.localeCompare(b.name));
   const reSectionHTML = (()=>{
     if(reLbAll.length===0) return '';
@@ -5971,6 +5980,63 @@ function _localTzName(){
   try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'; }catch(e){ return 'local time'; }
 }
 
+// ── Repicker countdown banner + explainer ──────────────────
+function _shortDur(ms){
+  if(ms<=0) return '';
+  const m=Math.floor(ms/60000), h=Math.floor(m/60), d=Math.floor(h/24);
+  if(d>0) return `${d}d ${h%24}h`;
+  if(h>0) return `${h}h ${m%60}m`;
+  return `${m}m`;
+}
+// Banner shown from 4 days before the group stage ends until the Round of 32
+// kicks off: counts down to the Repicker opening, then urges picks once open.
+function repickerBannerHTML(){
+  if(!S.name) return '';
+  let lastG=0;
+  for(let id=1; id<=72; id++){ const v=KICKOFFS[id]; if(v){ const t=new Date(v).getTime(); if(t>lastG) lastG=t; } }
+  if(!lastG) return '';
+  const opensAt = lastG + 2*3600*1000; // ~end of the last group game = repicker opens
+  let firstR32=Infinity;
+  for(const slot in KICKOFFS){ if(/^r32-/.test(slot)){ const t=new Date(KICKOFFS[slot]).getTime(); if(t<firstR32) firstR32=t; } }
+  const now=Date.now();
+  if(now >= firstR32) return ''; // knockouts under way — window closed
+  const open = S.settings?.repicker_open==='true';
+  let msg;
+  if(open){
+    const left=_shortDur(firstR32-now);
+    msg=`🔄 <b>Repicker is OPEN now</b> — re-pick the whole knockout bracket from the real draw${left?`, before the Round of 32 kicks off in ${left}`:''}. Tap to learn how →`;
+  } else if(now >= opensAt - 4*24*3600*1000){
+    const left=_shortDur(opensAt-now);
+    msg = left
+      ? `🔄 <b>Repicker opens in ${left}</b> — you'll get a short window to re-pick the knockouts. Tap to learn how →`
+      : `🔄 <b>Repicker opening shortly</b> — get ready to re-pick the knockouts. Tap to learn how →`;
+  } else return '';
+  return `<div onclick="showRepickerInfo()" style="cursor:pointer;background:linear-gradient(90deg,rgba(167,139,250,0.18),rgba(99,102,241,0.12));border:1px solid rgba(167,139,250,0.5);border-radius:0.75rem;padding:0.6rem 0.9rem;margin-bottom:1rem;color:#e9d5ff;font-size:0.85rem;line-height:1.45;">${msg}</div>`;
+}
+function showRepickerInfo(){
+  let el=document.getElementById('repicker-info-modal');
+  if(!el){ el=document.createElement('div'); el.id='repicker-info-modal'; document.body.appendChild(el); }
+  el.innerHTML=`<div onclick="closeRepickerInfo()" style="position:fixed;inset:0;z-index:210;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:1rem;">
+    <div onclick="event.stopPropagation()" style="max-width:30rem;width:100%;background:var(--bg-card);border:1px solid var(--border-strong);border-radius:1rem;padding:1.25rem 1.4rem;max-height:85vh;overflow:auto;color:var(--text);">
+      <h2 style="font-size:1.15rem;font-weight:700;color:var(--text-strong);margin:0 0 0.6rem;">🔄 The Repicker — a second-chance bracket</h2>
+      <p style="font-size:0.88rem;line-height:1.55;margin:0 0 0.7rem;">When the group stage finishes, the <b>real</b> Round of 32 is set. The Repicker gives you a short window to predict the <b>entire knockout bracket again — from the actual matchups</b>, not the ones your original picks implied.</p>
+      <div style="font-size:0.85rem;line-height:1.55;color:var(--text-muted);">
+        <p style="margin:0 0 0.5rem;"><b style="color:var(--text-strong);">How it works</b></p>
+        <ul style="margin:0 0 0.7rem;padding-left:1.1rem;">
+          <li>Predict the <b>score</b> of each knockout game, starting from the real Round of 32.</li>
+          <li>Your bracket advances from your own scores — round by round, all the way to the final.</li>
+          <li>It's scored separately on its <b>own leaderboard</b> (knockout points + matchups, weighted by round).</li>
+          <li><b>You must pick every knockout game</b> to appear on the Repicker leaderboard.</li>
+          <li>It <b>locks when the knockouts kick off</b>, so get your picks in during the window.</li>
+        </ul>
+        <p style="margin:0;">Find it under the <b>Repicker</b> tab once it opens.</p>
+      </div>
+      <button onclick="closeRepickerInfo()" class="btn-g" style="margin-top:1rem;padding:0.5rem 1.1rem;font-size:0.9rem;">Got it</button>
+    </div></div>`;
+  el.style.display='block';
+}
+function closeRepickerInfo(){ const el=document.getElementById('repicker-info-modal'); if(el) el.style.display='none'; }
+
 // ═══════════════════════════════════════════════════════════
 // EVENT HANDLERS
 // ═══════════════════════════════════════════════════════════
@@ -6546,8 +6612,8 @@ function renderRepicker(){
   // Leaderboard
   const allRP = S.allRePicks||{};
   const scored = Object.entries(allRP)
+    .filter(([name,picks])=> rePickComplete(picks)) // only players with a complete bracket
     .map(([name,picks])=>({ name, ...koScoreForRepicker(picks) }))
-    .filter(x=>x.scored>0 || Object.keys(allRP[x.name]||{}).length>0)
     .sort((a,b)=>b.koTotal-a.koTotal||b.matchups-a.matchups||a.name.localeCompare(b.name));
   const lbRows = scored.map((s,i)=>{
     const isSelf=s.name===S.name;
@@ -6821,6 +6887,9 @@ if(_token && S.name){
 
 // Fetch weather in background for all group games
 fetchWeatherForVisible();
+
+// Keep the repicker countdown banner fresh without a full re-render.
+setInterval(()=>{ const el=document.getElementById('repicker-cd'); if(el) el.innerHTML=repickerBannerHTML(); }, 60000);
 </script>
 </body>
 </html>
