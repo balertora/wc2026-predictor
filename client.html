@@ -4392,7 +4392,7 @@ function renderResults(){
     let scoreStr;
     if(mode==='live'){
       scoreStr = `<span style="color:#f87171;font-family:monospace;font-weight:800;">${r.hs}–${r.as}</span>`
-               + `<span style="color:#f87171;font-size:0.6rem;font-weight:700;margin-left:0.25rem;animation:pulse 1.2s infinite;">● ${esc(live.detail||'LIVE')}</span>`;
+               + _liveClock(gameKickoff(game), live.detail, false, '0.6rem');
     } else if(mode==='done'){
       scoreStr = `<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${r.hs}–${r.as}</span>`
                + `<span style="color:#475569;font-size:0.6rem;margin-left:0.2rem;">FT</span>`;
@@ -4597,6 +4597,20 @@ function _saveTitleLeaders(map,key){ try{ localStorage.setItem(key||'wc26_title_
 // Surprise odds-weight is capped so one lucky lone call can't dwarf everything.
 const ODDS_WEIGHT_CAP = 5;
 
+// ESPN sometimes leaves a finished match stuck in "in" with a runaway stoppage
+// clock (e.g. "90'+15'" and climbing). If a game has been live longer than it
+// physically could run, show a calm "FT?" instead of the ticking minute.
+// Group ≈140 min of real time; knockout ≈175 (extra time + penalties).
+function _liveStale(iso, isKo){
+  if(!iso) return false;
+  return (Date.now() - new Date(iso).getTime())/60000 > (isKo ? 175 : 140);
+}
+function _liveClock(iso, detail, isKo, fs){
+  fs = fs || '0.6rem';
+  if(_liveStale(iso, isKo)) return `<span style="color:#fbbf24;font-size:${fs};font-weight:700;margin-left:0.25rem;" title="ESPN still reports this as in-progress — likely finished; awaiting full-time">FT?</span>`;
+  return `<span style="color:#f87171;font-size:${fs};font-weight:700;margin-left:0.25rem;animation:pulse 1.2s infinite;">● ${esc(detail||'LIVE')}</span>`;
+}
+
 // Count how the crowd picked a group game: home wins / draws / away wins.
 function _pickDist(gameId, parts){
   let h=0,d=0,a=0;
@@ -4651,7 +4665,7 @@ function todaysGamesPanel(parts){
     if(e.kind==='group'){
       const g=e.g, live=S.gLive[g.id], done=S.gResults[g.id];
       let mid='', actual=null, aH=null, aA=null;
-      if(live){ aH=live.hs; aA=live.as; mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
+      if(live){ aH=live.hs; aA=live.as; mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span>${_liveClock(e.iso, live.detail, false, '0.56rem')}`; actual=live.hs>live.as?'h':live.hs<live.as?'a':'d'; }
       else if(done){ aH=done[0]; aA=done[1]; mid=`<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${done[0]}–${done[1]}</span> <span style="color:#475569;font-size:0.56rem;">FT</span>`; actual=done[0]>done[1]?'h':done[0]<done[1]?'a':'d'; }
       else { mid=`<span style="color:#475569;font-size:0.72rem;">${esc(fmtKickoffTime(e.iso))}</span>`; }
       const myp=S.gPreds[g.id];
@@ -4663,7 +4677,7 @@ function todaysGamesPanel(parts){
     }
     const slot=e.slot, live=S.gLive[slot], done=S.kResults[slot];
     let homeT, awayT, mid='', advSide=null;
-    if(live && live.home){ homeT=live.home; awayT=live.away; mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span> <span style="color:#f87171;font-size:0.56rem;font-weight:700;">● ${esc(live.detail||'LIVE')}</span>`; }
+    if(live && live.home){ homeT=live.home; awayT=live.away; mid=`<span style="color:#f87171;font-family:monospace;font-weight:800;">${live.hs}–${live.as}</span>${_liveClock(e.iso, live.detail, true, '0.56rem')}`; }
     else if(done && done.home && done.homeScore!=null){
       homeT=done.home; awayT=done.away;
       const pen=(done.homeScore===done.awayScore && done.penWinner)?` <span style="color:#94a3b8;font-size:0.56rem;">pens ${esc(shortTeamName(done.penWinner))}</span>`:` <span style="color:#475569;font-size:0.56rem;">FT</span>`;
