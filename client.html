@@ -4770,7 +4770,9 @@ function renderCompare(){
     }
     const ko=koScoreFor(p.kPreds);
     // Total = the weighted group formula (A×correct + B×exact − C×PAB) + weighted KO.
-    const weighted=scored>0?+(W.a*correct+W.b*exact-W.c*bad).toFixed(2):null;
+    // Once any group game is complete, everyone gets a weighted score — including
+    // skip penalties — so the table matches the chart (no-pickers drop, not hide).
+    const weighted=completed.length>0?+(W.a*correct+W.b*exact-W.c*bad).toFixed(2):null;
     const total=+(((weighted ?? 0)+ko.koTotal)).toFixed(2);
     return {name:p.name,total,groupTotal,koTotal:ko.koTotal,matchups:ko.matchups,
             exact,correct,scored,bad,weighted,surprise:+surprise.toFixed(1),predCount:Object.keys(p.gPreds).length};
@@ -4843,7 +4845,7 @@ function renderCompare(){
           ${koActive?`<td style="padding:0.75rem 1rem;text-align:right;color:#22d3ee;">${e.matchups}</td>`:''}
           <td style="padding:0.75rem 1rem;text-align:right;color:#4ade80;">${e.exact}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#facc15;">${e.correct}</td>
-          <td style="padding:0.75rem 1rem;text-align:right;color:#f87171;font-weight:600;">${e.scored>0?e.bad:'–'}</td>
+          <td style="padding:0.75rem 1rem;text-align:right;color:#f87171;font-weight:600;">${completed.length>0?e.bad:'–'}</td>
         </tr>`;}).join('')}
       </tbody></table></div>`;
 
@@ -5029,6 +5031,8 @@ function renderCompare(){
 
     ${todaysGamesPanel(allPred)}
 
+    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">${lbHTML}</div>
+
     ${completed.length>0&&chartSeries.length>0?`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
       <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.75rem;">
@@ -5043,8 +5047,6 @@ function renderCompare(){
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;padding:0 0.25rem;">
       ${chartSeries.map((s,i)=>`<span style="font-size:0.72rem;color:#94a3b8;white-space:nowrap;"><span style="color:${CHART_COLORS[i%CHART_COLORS.length]};">●</span> ${esc(s.name)}</span>`).join('')}
     </div>`:''}
-
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">${lbHTML}</div>
 
     ${reSectionHTML}
 
