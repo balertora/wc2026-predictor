@@ -750,8 +750,10 @@ app.post('/api/auth', asyncHandler(async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Wrong PIN' });
     // Clear rate limit on successful login
     _clearAuthRateLimit(ip);
-    // Delete any previous sessions for this user (one active session per user)
-    await dbRun('DELETE FROM sessions WHERE user_id = ?', [existing.id]);
+    // Keep other devices/tabs logged in (multi-device) — only prune very old
+    // sessions so the table doesn't grow unbounded. Logging in on a phone no
+    // longer kicks the laptop (which caused "session expired" on chat/picks).
+    await dbRun("DELETE FROM sessions WHERE user_id = ? AND created_at < datetime('now','-90 days')", [existing.id]);
     const token = genToken();
     await dbRun(
       'INSERT INTO sessions (token, user_id, name, is_admin) VALUES (?, ?, ?, ?)',

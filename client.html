@@ -3212,6 +3212,7 @@ async function sendChat(){
       method: 'POST', headers: _authHeaders(),
       body: JSON.stringify({text}),
     });
+    if(res.status===401){ _handleSessionExpired(); return; }
     const data = await res.json();
     if(!res.ok){ alert(data.error || 'Failed to send'); return; }
     input.value = '';
