@@ -169,6 +169,9 @@ async function initDB() {
     'ALTER TABLE re_picks ADD COLUMN pen_winner TEXT',
     'ALTER TABLE re_picks ADD COLUMN pen_home INTEGER',
     'ALTER TABLE re_picks ADD COLUMN pen_away INTEGER',
+    // Fair-play points per team (yellow 1, 2nd-yellow +2, straight red 4) from ESPN cards.
+    'ALTER TABLE group_results ADD COLUMN fp_home INTEGER',
+    'ALTER TABLE group_results ADD COLUMN fp_away INTEGER',
   ];
   for (const sql of migrations) {
     try { await db.execute(sql); }
@@ -449,7 +452,8 @@ async function buildStatePayload() {
 
   // results
   const gResults = {};
-  for (const row of gResRows) gResults[row.game_id] = [row.home_score, row.away_score];
+  // [homeScore, awayScore, fpHome, fpAway] — fp fields present once cards are known.
+  for (const row of gResRows) gResults[row.game_id] = [row.home_score, row.away_score, row.fp_home ?? 0, row.fp_away ?? 0];
 
   const kResults = {};
   for (const row of koResRows) {
@@ -547,6 +551,37 @@ let _espnPollTimer = null;
 // { id: { hs, as, clock, detail } }. Rebuilt every poll, broadcast to clients.
 let _liveScores = {};
 
+// Fair-play points per team from a competition's card events: a yellow = 1, a
+// second yellow to the same player = +2 (3 total), a straight red = 4. Returns
+// { home, away } by ESPN's home/away orientation.
+function computeFairPlay(comps) {
+  const details = comps?.details || [];
+  const competitors = comps?.competitors || [];
+  const idHome = competitors.find(c => c.homeAway === 'home')?.team?.id;
+  const idAway = competitors.find(c => c.homeAway === 'away')?.team?.id;
+  const fp = { home: 0, away: 0 };
+  const yel = {}, off = {};
+  for (const d of details) {
+    const isY = d.yellowCard === true, isR = d.redCard === true;
+    if (!isY && !isR) continue;
+    const tid = d.team?.id;
+    const side = tid === idHome ? 'home' : tid === idAway ? 'away' : null;
+    if (!side) continue;
+    const ath = d.athletesInvolved?.[0]?.id || ('x' + (d.clock?.value ?? Math.random()));
+    if (isY) {
+      yel[ath] = (yel[ath] || 0) + 1;
+      if (yel[ath] === 1) fp[side] += 1;
+      else if (yel[ath] === 2) { fp[side] += 2; off[ath] = true; }
+    } else {
+      if (off[ath]) continue;                  // 2nd yellow already counted
+      if ((yel[ath] || 0) >= 1) fp[side] += 2; // red following a yellow → 2nd-yellow dismissal
+      else fp[side] += 4;                       // straight red
+      off[ath] = true;
+    }
+  }
+  return fp;
+}
+
 async function pollESPN() {
   const now = new Date();
   if (now < TOURNAMENT_START || now > TOURNAMENT_END) {
@@ -611,21 +646,30 @@ async function pollESPN() {
 
       if (fixtureId) {
         // ── Group-stage fixture ──
-        const existing = await dbGet('SELECT home_score, away_score FROM group_results WHERE game_id = ?', [fixtureId]);
+        const existing = await dbGet('SELECT home_score, away_score, fp_home, fp_away FROM group_results WHERE game_id = ?', [fixtureId]);
         const dbHome = isFlipped ? awayScore : homeScore;
         const dbAway = isFlipped ? homeScore : awayScore;
+        const fpRaw  = computeFairPlay(comps);
+        const fpHome = isFlipped ? fpRaw.away : fpRaw.home;
+        const fpAway = isFlipped ? fpRaw.home : fpRaw.away;
         if (!existing || existing.home_score !== dbHome || existing.away_score !== dbAway) {
           await dbRun(
-            `INSERT INTO group_results (game_id, home_score, away_score, source, updated_at)
-             VALUES (?, ?, ?, ?, datetime('now'))
+            `INSERT INTO group_results (game_id, home_score, away_score, fp_home, fp_away, source, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
              ON CONFLICT(game_id) DO UPDATE SET
                home_score = excluded.home_score,
                away_score = excluded.away_score,
+               fp_home    = excluded.fp_home,
+               fp_away    = excluded.fp_away,
                source     = excluded.source,
                updated_at = excluded.updated_at`,
-            [fixtureId, dbHome, dbAway, 'espn']
+            [fixtureId, dbHome, dbAway, fpHome, fpAway, 'espn']
           );
-          console.log(`ESPN: Game ${fixtureId} (${homeName} v ${awayName}) → ${dbHome}–${dbAway}`);
+          console.log(`ESPN: Game ${fixtureId} (${homeName} v ${awayName}) → ${dbHome}–${dbAway}${(fpHome||fpAway)?` [FP ${fpHome}-${fpAway}]`:''}`);
+          changed = true;
+        } else if (existing && existing.fp_home == null && (fpHome || fpAway)) {
+          // Backfill fair-play onto an already-recorded result without touching the score.
+          await dbRun('UPDATE group_results SET fp_home = ?, fp_away = ? WHERE game_id = ?', [fpHome, fpAway, fixtureId]);
           changed = true;
         }
         continue;

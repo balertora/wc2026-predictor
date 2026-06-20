@@ -2077,7 +2077,7 @@ function effectiveGroupStandings(g){
 }
 
 function actualGroupStandings(g){
-  const teams=GROUPS[g].map(name=>({name,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
+  const teams=GROUPS[g].map(name=>({name,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0,fp:0}));
   const idx=t=>teams.findIndex(x=>x.name===t);
   for(const game of GROUP_GAMES.filter(x=>x.g===g)){
     const r=S.gResults[game.id]; if(!r) continue;
@@ -2086,11 +2086,13 @@ function actualGroupStandings(g){
     if(hi<0||ai<0) continue;
     teams[hi].gf+=h; teams[hi].ga+=a; teams[hi].gd+=h-a;
     teams[ai].gf+=a; teams[ai].ga+=h; teams[ai].gd+=a-h;
+    teams[hi].fp+=r[2]||0; teams[ai].fp+=r[3]||0; // fair-play points (lower is better)
     if(h>a){teams[hi].pts+=3;teams[hi].w++;teams[ai].l++;}
     else if(h===a){teams[hi].pts+=1;teams[hi].d++;teams[ai].pts+=1;teams[ai].d++;}
     else{teams[ai].pts+=3;teams[ai].w++;teams[hi].l++;}
   }
-  return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
+  // pts → goal diff → goals for → fair-play (fewer card pts) → name
+  return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.fp-b.fp||a.name.localeCompare(b.name));
 }
 
 // Confirmed qualification from REAL results (conservative — no false positives).
@@ -5473,6 +5475,46 @@ async function delKoResult(id){
 // ═══════════════════════════════════════════════════════════
 // GROUPS TAB
 // ═══════════════════════════════════════════════════════════
+// Live third-place ranking from real results: each group's current 3rd-placed
+// team, sorted by the qualification criteria, split at the top-8 cut line.
+function renderThirdPlaceTable(){
+  const thirds = Object.keys(GROUPS).map(g=>{
+    const st=actualGroupStandings(g); const t=st[2];
+    return { group:g, name:t.name, pts:t.pts, gd:t.gd, gf:t.gf, fp:t.fp, played:t.w+t.d+t.l };
+  }).sort((a,b)=> b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.fp-b.fp||a.name.localeCompare(b.name));
+  const cell=(v,style)=>`<td style="padding:0.3rem 0.5rem;text-align:center;font-size:0.75rem;${style||''}">${v}</td>`;
+  const body = thirds.map((t,i)=>{
+    const inTop8=i<8;
+    const div = i===8 ? `<tr><td colspan="8" style="padding:0.25rem 0.5rem;border-top:2px dashed rgba(251,191,36,0.6);text-align:center;font-size:0.62rem;color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em;">▲ best 8 qualify · below miss out ▼</td></tr>` : '';
+    return div + `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);${inTop8?'':'opacity:0.55;'}">
+      ${cell(i+1,'color:#475569;font-weight:700;')}
+      ${cell('Grp '+t.group,'color:#64748b;font-size:0.68rem;')}
+      <td style="padding:0.3rem 0.5rem;font-size:0.78rem;color:#e2e8f0;white-space:nowrap;">${flag(t.name)} ${esc(shortTeamName(t.name))}</td>
+      ${cell(t.played,'color:#64748b;')}
+      ${cell(t.pts,'font-weight:700;color:'+(inTop8?'#4ade80':'#94a3b8')+';')}
+      ${cell((t.gd>=0?'+':'')+t.gd,'color:#94a3b8;')}
+      ${cell(t.gf,'color:#64748b;')}
+      ${cell(t.fp,'color:#64748b;')}
+    </tr>`;
+  }).join('');
+  return `<div style="margin-top:1.25rem;background:#0d1f35;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;overflow:hidden;">
+    <div style="padding:0.6rem 0.85rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+      <span style="font-weight:700;color:white;font-size:0.92rem;">🥉 Third-place race</span>
+      <span style="font-size:0.68rem;color:#64748b;margin-left:0.4rem;">— the best 8 of 12 advance · changes as games are played</span>
+    </div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="font-size:0.62rem;color:#475569;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid rgba(255,255,255,0.08);">
+        <th style="padding:0.35rem 0.5rem;">#</th><th style="padding:0.35rem 0.5rem;">Grp</th>
+        <th style="padding:0.35rem 0.5rem;text-align:left;">Team</th>
+        <th style="padding:0.35rem 0.5rem;">P</th><th style="padding:0.35rem 0.5rem;">Pts</th>
+        <th style="padding:0.35rem 0.5rem;">GD</th><th style="padding:0.35rem 0.5rem;">GF</th>
+        <th style="padding:0.35rem 0.5rem;" title="Fair-play points — yellow 1, second yellow +2, straight red 4 (fewer is better)">FP</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>
+  </div>`;
+}
+
 function renderGroupsTab(){
   const grpKeys=Object.keys(GROUPS);
   const participants=[];
@@ -5517,15 +5559,24 @@ function renderGroupsTab(){
       const adv=i<2, third=i===2;
       const played=t.w+t.d+t.l;
       const pie=_pickerPie(g, t.name);
+      // Outline around the position number: gold = final group position locked,
+      // silver = confirmed through to the knockouts (position not yet locked).
+      const cf=confirm[t.name];
+      const ring = cf && cf.pos ? '#fbbf24' : cf && cf.advanced ? '#cbd5e1' : null;
+      const ringTip = !ring ? '' : cf.pos
+        ? `Confirmed ${cf.pos===1?'group winner — 1st':'runner-up — 2nd'} (through to the knockouts)`
+        : 'Confirmed through to the knockouts';
+      const numHTML = ring
+        ? `<span title="${ringTip}" style="display:inline-flex;align-items:center;justify-content:center;width:1.55em;height:1.55em;border-radius:50%;border:2px solid ${ring};box-shadow:0 0 4px ${ring}55;font-weight:800;color:${adv?'#4ade80':'#e2e8f0'};">${i+1}</span>`
+        : `${i+1}`;
       return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-        <td style="padding:${_rp};text-align:center;font-size:0.7rem;font-weight:700;color:${adv?'#4ade80':third?'#fbbf24':'#475569'};">${i+1}</td>
+        <td style="padding:${_rp};text-align:center;font-size:0.7rem;font-weight:700;color:${adv?'#4ade80':third?'#fbbf24':'#475569'};">${numHTML}</td>
         <td style="padding:${_rp};font-size:0.8rem;">
           <div style="display:flex;align-items:center;gap:0.22rem;overflow:hidden;">
             <span class="has-tip" data-team="${esc(t.name)}" onmouseenter="showTeamTip(event,this.dataset.team)" onmousemove="_posTeamTip(event)" onmouseleave="hideTeamTip()" style="display:flex;align-items:center;gap:0.22rem;overflow:hidden;min-width:0;flex:1;">
               <span style="flex-shrink:0;">${flag(t.name)}</span>
               <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${shortTeamName(t.name)}</span>
             </span>
-            ${_qualStar(confirm[t.name])}
             ${pie}
           </div>
         </td>
@@ -5627,11 +5678,13 @@ function renderGroupsTab(){
     <div style="margin-bottom:0.75rem;">
       <p style="color:#64748b;font-size:0.8rem;">
         <span style="color:#4ade80;">■</span> Advances · <span style="color:#fbbf24;">■</span> 3rd place pool ·
-        <span style="color:#fbbf24;">★</span> through to knockouts (<span style="color:#fbbf24;">★</span> with a number = confirmed group position)
+        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #cbd5e1;vertical-align:-0.1em;"></span> through to knockouts ·
+        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #fbbf24;vertical-align:-0.1em;"></span> position confirmed
         ${participants.length>0?' · <span style="color:#4ade80;">green</span> = best, <span style="color:#f87171;">red</span> = worst per group':''}
       </p>
     </div>
-    <div>${cards}</div>`;
+    <div>${cards}</div>
+    ${renderThirdPlaceTable()}`;
 }
 
 // ═══════════════════════════════════════════════════════════
