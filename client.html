@@ -2056,6 +2056,35 @@ function allGroupStandings(){
   return all;
 }
 
+// 2026 tiebreaker order: points → head-to-head (points, GD, goals among the tied
+// teams) → overall GD → overall goals → fair play → name. getScore(gameId) returns
+// [home,away] for a decided game (real / predicted / effective) or falsy if not.
+function _rankGroup(teams, g, getScore){
+  const overall=(a,b)=> b.gd-a.gd || b.gf-a.gf || (a.fp||0)-(b.fp||0) || a.name.localeCompare(b.name);
+  teams.sort((a,b)=> b.pts-a.pts || overall(a,b));
+  const games=GROUP_GAMES.filter(x=>x.g===g);
+  let i=0;
+  while(i<teams.length){
+    let j=i+1; while(j<teams.length && teams[j].pts===teams[i].pts) j++;
+    if(j-i>=2){ // resolve the equal-points block by a mini-league among just those teams
+      const tied=teams.slice(i,j); const inSet=new Set(tied.map(t=>t.name));
+      const h={}; tied.forEach(t=>h[t.name]={hp:0,hgd:0,hgf:0});
+      for(const game of games){
+        if(!inSet.has(game.home)||!inSet.has(game.away)) continue;
+        const r=getScore(game.id); if(!r) continue;
+        const [hs,as]=r;
+        h[game.home].hgf+=hs; h[game.home].hgd+=hs-as;
+        h[game.away].hgf+=as; h[game.away].hgd+=as-hs;
+        if(hs>as) h[game.home].hp+=3; else if(as>hs) h[game.away].hp+=3; else { h[game.home].hp++; h[game.away].hp++; }
+      }
+      tied.sort((a,b)=> h[b.name].hp-h[a.name].hp || h[b.name].hgd-h[a.name].hgd || h[b.name].hgf-h[a.name].hgf || overall(a,b));
+      for(let k=0;k<tied.length;k++) teams[i+k]=tied[k];
+    }
+    i=j;
+  }
+  return teams;
+}
+
 // Bracket-feeding standings: prefer actual results over predictions per game,
 // so the KO bracket auto-resolves as real results come in.
 function effectiveGroupStandings(g){
@@ -2073,7 +2102,7 @@ function effectiveGroupStandings(g){
     else if(h===a){ teams[hi].pts+=1; teams[hi].d++; teams[ai].pts+=1; teams[ai].d++; }
     else { teams[ai].pts+=3; teams[ai].w++; teams[hi].l++; }
   }
-  return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
+  return _rankGroup(teams, g, id => S.gResults[id] || S.gPreds[id]);
 }
 
 function actualGroupStandings(g){
@@ -2091,8 +2120,7 @@ function actualGroupStandings(g){
     else if(h===a){teams[hi].pts+=1;teams[hi].d++;teams[ai].pts+=1;teams[ai].d++;}
     else{teams[ai].pts+=3;teams[ai].w++;teams[hi].l++;}
   }
-  // pts → goal diff → goals for → fair-play (fewer card pts) → name
-  return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.fp-b.fp||a.name.localeCompare(b.name));
+  return _rankGroup(teams, g, id => S.gResults[id]);
 }
 
 // Confirmed qualification from REAL results (conservative — no false positives).
@@ -2119,29 +2147,45 @@ function groupConfirm(g){
   for(const game of games){ const r=S.gResults[game.id]; if(!r) continue; const [h,a]=r;
     if(h>a) base[game.home]+=3; else if(a>h) base[game.away]+=3; else { base[game.home]++; base[game.away]++; } }
 
-  // Brute-force every W/D/L combination of the remaining games (handles head-to-
-  // head: two chasers who must play each other can't both overtake). Points-only,
-  // so any points tie is treated as "could go either way" (goal diff is movable).
+  // Outcome (W/D/L points pair) of each already-played game, for head-to-head.
+  const playedOut={};
+  for(const game of games){ const r=S.gResults[game.id]; if(!r) continue; const [h,a]=r; playedOut[game.id]= h>a?[3,0]:a>h?[0,3]:[1,1]; }
+
+  // Brute-force every W/D/L combination of the remaining games. Within a points
+  // tie we resolve by head-to-head points (the 2026 first tiebreaker) — so a team
+  // that has beaten the only teams who can catch it is confirmed above them. Ties
+  // that are still level on H2H points fall to (movable) goal diff → treated as
+  // ambiguous, so we never over-confirm.
   const OUTS=[[3,0],[1,1],[0,3]]; const n=remaining.length;
-  const maxAboveEq={}, minStrictAbove={};
-  teams.forEach(t=>{ maxAboveEq[t]=0; minStrictAbove[t]=Infinity; });
+  const maxCouldAbove={}, minDefAbove={};
+  teams.forEach(t=>{ maxCouldAbove[t]=0; minDefAbove[t]=Infinity; });
   const total=Math.pow(3,n);
   for(let mask=0; mask<total; mask++){
-    const pts={...base}; let m=mask;
-    for(let i=0;i<n;i++){ const o=OUTS[m%3]; m=Math.floor(m/3); pts[remaining[i].home]+=o[0]; pts[remaining[i].away]+=o[1]; }
+    const out2={...playedOut}; const pts={...base}; let m=mask;
+    for(let i=0;i<n;i++){ const o=OUTS[m%3]; m=Math.floor(m/3); out2[remaining[i].id]=o; pts[remaining[i].home]+=o[0]; pts[remaining[i].away]+=o[1]; }
     for(const T of teams){
-      let aboveEq=0, strictAbove=0;
-      for(const o of teams){ if(o===T) continue; if(pts[o]>=pts[T]) aboveEq++; if(pts[o]>pts[T]) strictAbove++; }
-      if(aboveEq>maxAboveEq[T]) maxAboveEq[T]=aboveEq;
-      if(strictAbove<minStrictAbove[T]) minStrictAbove[T]=strictAbove;
+      const tied=teams.filter(o=>pts[o]===pts[T]);
+      let hp=null;
+      if(tied.length>=2){
+        hp={}; tied.forEach(nm=>hp[nm]=0); const inSet=new Set(tied);
+        for(const game of games){ if(!inSet.has(game.home)||!inSet.has(game.away)) continue; const o=out2[game.id]; if(!o) continue; hp[game.home]+=o[0]; hp[game.away]+=o[1]; }
+      }
+      let above=0, amb=0;
+      for(const o of teams){ if(o===T) continue;
+        if(pts[o]>pts[T]) above++;
+        else if(pts[o]===pts[T]){ if(hp){ if(hp[o]>hp[T]) above++; else if(hp[o]===hp[T]) amb++; } else amb++; }
+      }
+      const could=above+amb;
+      if(could>maxCouldAbove[T]) maxCouldAbove[T]=could;
+      if(above<minDefAbove[T]) minDefAbove[T]=above;
     }
   }
   for(const T of teams){
-    const advanced = maxAboveEq[T] <= 1; // at most one team can be ≥ me in every scenario → top 2
+    const advanced = maxCouldAbove[T] <= 1; // at most one team can finish ≥ me in any scenario → top 2
     let pos=null;
     if(advanced){
-      if(maxAboveEq[T]===0) pos=1;            // always strictly first
-      else if(minStrictAbove[T]>=1) pos=2;    // always someone strictly above → runner-up
+      if(maxCouldAbove[T]===0) pos=1;       // never anyone above (incl. H2H) → group winner
+      else if(minDefAbove[T]>=1) pos=2;     // always someone definitively above → runner-up
     }
     out[T]={advanced,pos};
   }
@@ -2174,7 +2218,7 @@ function predGroupStandings(g, gPreds){
     else if(h===a){teams[hi].pts+=1;teams[hi].d++;teams[ai].pts+=1;teams[ai].d++;}
     else{teams[ai].pts+=3;teams[ai].w++;teams[hi].l++;}
   }
-  return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
+  return _rankGroup(teams, g, id => gPreds[id]);
 }
 
 // Points each team in group g has accumulated from the user's predictions of
@@ -5586,6 +5630,7 @@ function renderGroupsTab(){
         <td style="padding:${_rp};text-align:center;font-size:0.75rem;color:#64748b;">${t.l}</td>
         <td style="padding:${_rp};text-align:center;font-size:0.75rem;color:#94a3b8;">${t.gd>=0?'+':''}${t.gd}</td>
         <td style="padding:${_rp};text-align:center;font-weight:700;font-size:0.85rem;color:${adv?'#4ade80':third?'#fbbf24':'#e2e8f0'};">${t.pts}</td>
+        <td style="padding:${_rp};text-align:center;font-size:0.72rem;color:#64748b;" title="Fair-play points">${t.fp||0}</td>
       </tr>`;
     }).join('');
     const standingsHTML=`<table style="border-collapse:collapse;table-layout:fixed;width:auto;">
@@ -5598,6 +5643,7 @@ function renderGroupsTab(){
         <th style="padding:${_rp};text-align:center;width:1.6rem;">L</th>
         <th style="padding:${_rp};text-align:center;width:2.4rem;">GD</th>
         <th style="padding:${_rp};text-align:center;width:2.4rem;">Pts</th>
+        <th style="padding:${_rp};text-align:center;width:2rem;" title="Fair-play points — yellow 1, second yellow +2, straight red 4 (fewer is better)">FP</th>
       </tr></thead>
       <tbody>${stRows}</tbody>
     </table>`;
