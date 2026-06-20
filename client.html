@@ -2093,6 +2093,71 @@ function actualGroupStandings(g){
   return teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
 }
 
+// Confirmed qualification from REAL results (conservative — no false positives).
+// Per team: advanced = mathematically guaranteed top 2 (through to the knockouts);
+// pos = guaranteed final group position (1 or 2) once locked, else null.
+// (A 3rd-place team that might sneak in as a best-third is NOT marked — that's a
+// cross-group call we don't try to confirm here.)
+function groupConfirm(g){
+  const teams = GROUPS[g];
+  const games = GROUP_GAMES.filter(x=>x.g===g);
+  const remaining = games.filter(x=>!S.gResults[x.id]);
+  const out = {}; teams.forEach(t=>out[t]={advanced:false,pos:null});
+
+  // Group finished → positions are final (use the displayed standings order).
+  if(remaining.length === 0){
+    const st = actualGroupStandings(g);
+    for(const T of teams){ const pos = st.findIndex(r=>r.name===T)+1; out[T] = { advanced: pos<=2, pos: pos<=2?pos:null }; }
+    return out;
+  }
+  if(remaining.length === games.length) return out; // nothing played yet
+
+  // Base points from played games.
+  const base = {}; teams.forEach(t=>base[t]=0);
+  for(const game of games){ const r=S.gResults[game.id]; if(!r) continue; const [h,a]=r;
+    if(h>a) base[game.home]+=3; else if(a>h) base[game.away]+=3; else { base[game.home]++; base[game.away]++; } }
+
+  // Brute-force every W/D/L combination of the remaining games (handles head-to-
+  // head: two chasers who must play each other can't both overtake). Points-only,
+  // so any points tie is treated as "could go either way" (goal diff is movable).
+  const OUTS=[[3,0],[1,1],[0,3]]; const n=remaining.length;
+  const maxAboveEq={}, minStrictAbove={};
+  teams.forEach(t=>{ maxAboveEq[t]=0; minStrictAbove[t]=Infinity; });
+  const total=Math.pow(3,n);
+  for(let mask=0; mask<total; mask++){
+    const pts={...base}; let m=mask;
+    for(let i=0;i<n;i++){ const o=OUTS[m%3]; m=Math.floor(m/3); pts[remaining[i].home]+=o[0]; pts[remaining[i].away]+=o[1]; }
+    for(const T of teams){
+      let aboveEq=0, strictAbove=0;
+      for(const o of teams){ if(o===T) continue; if(pts[o]>=pts[T]) aboveEq++; if(pts[o]>pts[T]) strictAbove++; }
+      if(aboveEq>maxAboveEq[T]) maxAboveEq[T]=aboveEq;
+      if(strictAbove<minStrictAbove[T]) minStrictAbove[T]=strictAbove;
+    }
+  }
+  for(const T of teams){
+    const advanced = maxAboveEq[T] <= 1; // at most one team can be ≥ me in every scenario → top 2
+    let pos=null;
+    if(advanced){
+      if(maxAboveEq[T]===0) pos=1;            // always strictly first
+      else if(minStrictAbove[T]>=1) pos=2;    // always someone strictly above → runner-up
+    }
+    out[T]={advanced,pos};
+  }
+  return out;
+}
+// Gold star = confirmed through to the knockouts; with a number = confirmed final
+// group position (1st / 2nd). Empty when not yet mathematically locked.
+function _qualStar(s){
+  if(!s || !s.advanced) return '';
+  const label = s.pos===1 ? 'Confirmed group winner (1st) — through to the knockouts'
+              : s.pos===2 ? 'Confirmed runner-up (2nd) — through to the knockouts'
+              : 'Confirmed through to the knockouts (position not yet locked)';
+  return `<span title="${label}" style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:1.2em;height:1.2em;flex-shrink:0;">
+    <span style="font-size:1.2em;line-height:1;color:#fbbf24;text-shadow:0 0 3px rgba(251,191,36,0.55);">★</span>
+    ${s.pos?`<span style="position:absolute;font-size:0.62em;font-weight:800;color:#0a1628;">${s.pos}</span>`:''}
+  </span>`;
+}
+
 function predGroupStandings(g, gPreds){
   const teams=GROUPS[g].map(name=>({name,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
   const idx=t=>teams.findIndex(x=>x.name===t);
@@ -5439,6 +5504,7 @@ function renderGroupsTab(){
     const completed=games.filter(x=>S.gResults[x.id]);
     const allDone=completed.length===games.length;
     const actualSt=actualGroupStandings(g);
+    const confirm=groupConfirm(g);
 
     const statusLabel=allDone
       ? `<span style="font-size:0.65rem;color:#4ade80;font-weight:600;">✓ Complete</span>`
@@ -5459,6 +5525,7 @@ function renderGroupsTab(){
               <span style="flex-shrink:0;">${flag(t.name)}</span>
               <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${shortTeamName(t.name)}</span>
             </span>
+            ${_qualStar(confirm[t.name])}
             ${pie}
           </div>
         </td>
@@ -5559,7 +5626,8 @@ function renderGroupsTab(){
   return `
     <div style="margin-bottom:0.75rem;">
       <p style="color:#64748b;font-size:0.8rem;">
-        <span style="color:#4ade80;">■</span> Advances · <span style="color:#fbbf24;">■</span> 3rd place pool
+        <span style="color:#4ade80;">■</span> Advances · <span style="color:#fbbf24;">■</span> 3rd place pool ·
+        <span style="color:#fbbf24;">★</span> through to knockouts (<span style="color:#fbbf24;">★</span> with a number = confirmed group position)
         ${participants.length>0?' · <span style="color:#4ade80;">green</span> = best, <span style="color:#f87171;">red</span> = worst per group':''}
       </p>
     </div>
