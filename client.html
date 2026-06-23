@@ -5149,10 +5149,10 @@ function renderCompare(){
         return {winners,val:best,tied:winners.length>1};
       };
       const boxes=[
-        {icon:'✓',  label:'Most correct',   accent:'#4ade80', r:leader(lb,'correct',false), fmt:v=>`${v}`},
-        {icon:'🎯', label:'Most exact',      accent:'#fcd34d', r:leader(lb,'exact',false),   fmt:v=>`${v}`},
-        {icon:'📋', label:'Most standings',  accent:'#94a3b8', r:leader(lb,'groupPosPts',false), fmt:v=>`${v}`},
-        {icon:'🏆', label:'Total score',     accent:'#38bdf8', r:leader(lb,'total',false),   fmt:v=>`${v}`},
+        {icon:'✓',  label:'Most correct',                                        accent:'#4ade80', r:leader(lb,'correct',false),                        fmt:v=>`${v}`},
+        {icon:'🎯', label:'Most exact',                                           accent:'#fcd34d', r:leader(lb,'exact',false),                          fmt:v=>`${v}`},
+        {icon:'📋', label:allGroupsDone?'Most standings':'Most ~standings',       accent:'#94a3b8', r:leader(lb,allGroupsDone?'groupPosPts':'projPosPts',false), fmt:v=>`${allGroupsDone?'':' ~'}${v}`},
+        {icon:'🏆', label:'Total score',                                          accent:'#38bdf8', r:leader(lb,'total',false),                          fmt:v=>`${v}`},
       ];
 
       // "New title" celebration: when YOU become a (co-)holder of a tile you
