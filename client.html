@@ -2430,23 +2430,45 @@ function koCompare(pred, actual){
   const predLabel = (pred.home||'?')+' v '+(pred.away||'?')
     + (pred.homeScore!=null&&pred.awayScore!=null ? ` ${pred.homeScore}–${pred.awayScore}` : '');
 
+  // No predicted team in actual matchup → no points possible
   if(inter.length===0) return {kind:'wrong', predLabel};
-  if(inter.length===1) return {kind:'half', got:inter[0], predLabel};
 
-  // Both teams correct → align predicted scores to actual orientation by team
+  // Align predicted scores to actual team orientation
   let ph, pa;
-  if(pred.home===aH && pred.away===aA){ ph=pred.homeScore; pa=pred.awayScore; }
-  else { ph=pred.awayScore; pa=pred.homeScore; }            // predicted with teams flipped
-  if(ph==null || pa==null) return {kind:'teams', predLabel};  // matchup right, no score
+  if(inter.length===2){
+    if(pred.home===aH && pred.away===aA){ ph=pred.homeScore; pa=pred.awayScore; }
+    else { ph=pred.awayScore; pa=pred.homeScore; }
+  } else {
+    // One team correct — align by whichever team matched
+    const matchedTeam = inter[0];
+    if(matchedTeam===aH){ ph=pred.home===aH?pred.homeScore:pred.awayScore; pa=pred.home===aH?pred.awayScore:pred.homeScore; }
+    else                 { pa=pred.home===aA?pred.homeScore:pred.awayScore; ph=pred.home===aA?pred.awayScore:pred.homeScore; }
+  }
+
+  if(ph==null || pa==null) return {kind:'teams', predLabel, inter:inter.length};
 
   const actualAdv = koAdvancer(aH,aA,aHS,aAS,actual.penWinner);
   const predAdv   = koAdvancer(aH,aA,ph,pa,pred.penWinner);
-  const homeOk = ph===aHS, awayOk = pa===aAS;
-  const isDraw = aHS===aAS;
-  const advOk  = !!actualAdv && actualAdv===predAdv;
-  const exact  = homeOk && awayOk && (!isDraw || advOk); // draw must also pick right pen winner
+  const isDraw    = aHS===aAS;
+  const advOk     = !!actualAdv && predAdv===actualAdv;
+  const homeOk    = ph===aHS, awayOk=pa===aAS;
+
+  // advOk is always the prerequisite — wrong advancing team → 0 pts
+  if(!advOk) return {kind:'wrong', predLabel};
+
+  // exact score only counts when match was not decided by penalties (5 pts)
+  // all other advOk cases get 3 pts
+  const scoreMatch = homeOk && awayOk && !actual.penWinner;
+
+  // pen bonus: +1 if match went to penalties and you predicted a draw (with right pen winner,
+  // already confirmed by advOk)
+  const penOk = !!actual.penWinner && outcome(ph,pa)==='D';
+
+  // legacy exact flag for UI colour badges
+  const exact = scoreMatch || (homeOk && awayOk && penOk);
   return {
     kind:'full', ph, pa, aHS, aAS, homeOk, awayOk, exact, advOk, isDraw,
+    scoreMatch, penOk, inter:inter.length,
     actualPen: actual.penWinner||'', predPen: pred.penWinner||'',
   };
 }
@@ -2475,25 +2497,27 @@ function koRoundKey(id){
 }
 
 // Score a participant's KO predictions against entered results.
-//   matchup: +0.5 per correct team in the slot (0/0.5/1)
-//   result (needs both teams right): exact score +3 (incl. pen winner on draws), else correct advancer +1
-//   whole match × round weight
+//   Prerequisite: correct advancing team (advOk). Wrong advancing team → 0 pts.
+//   Result points (× round weight):
+//     right advancing team, exact score (no penalties) → 5 pts
+//     right advancing team, all other cases            → 3 pts
+//   Pen bonus: +1 if match went to penalties and you predicted a draw (pen winner confirmed by advOk)
 // Returns weighted koTotal plus unweighted breakdown stats.
 function koScoreFor(kPreds){
   const w = koWeights();
   let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
   for(const id of Object.keys(KO_VENUES)){
     const actual = S.kResults[id];
-    if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue; // not yet played/entered
+    if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
     const c = koCompare(kPreds ? kPreds[id] : undefined, actual);
-    let teams=0, resultPts=0;
-    if(c.kind==='half')       teams=1;
-    else if(c.kind==='teams') teams=2;
-    else if(c.kind==='full'){ teams=2; resultPts = c.exact?3 : c.advOk?1 : 0; if(c.exact)exacts++; else if(c.advOk)advancers++; }
-    if(teams>0 || resultPts>0) scored++;
-    const matchupPts = 0.5*teams;
-    matchups += matchupPts;
-    koTotal  += (matchupPts + resultPts) * (w[koRoundKey(id)] || 1);
+    let resultPts=0, penPts=0;
+    if(c.kind==='full'){
+      if(c.scoreMatch){ resultPts=5; exacts++; }
+      else            { resultPts=3; advancers++; }
+      if(c.penOk)       penPts=1;
+    }
+    if(resultPts>0 || penPts>0) scored++;
+    koTotal += (resultPts + penPts) * (w[koRoundKey(id)] || 1);
   }
   return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
 }
@@ -2523,13 +2547,14 @@ function koScoreForRepicker(rePicks){
     const actual = S.kResults[id==='final-1'?'final':id];
     if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
     const c = koCompare(rePicks ? rePicks[id] : undefined, actual);
-    let teams=0, resultPts=0;
-    if(c.kind==='half')       teams=1;
-    else if(c.kind==='teams') teams=2;
-    else if(c.kind==='full'){ teams=2; resultPts = c.exact?3 : c.advOk?1 : 0; if(c.exact)exacts++; else if(c.advOk)advancers++; }
-    if(teams>0 || resultPts>0) scored++;
-    const mp=0.5*teams; matchups += mp;
-    koTotal += (mp+resultPts) * (w[rk(id)] || 1);
+    let resultPts=0, penPts=0;
+    if(c.kind==='full'){
+      if(c.scoreMatch){ resultPts=5; exacts++; }
+      else            { resultPts=3; advancers++; }
+      if(c.penOk)       penPts=1;
+    }
+    if(resultPts>0 || penPts>0) scored++;
+    koTotal += (resultPts + penPts) * (w[rk(id)] || 1);
   }
   return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
 }
@@ -4876,16 +4901,29 @@ function renderCompare(){
     for(const slot of Object.keys(KO_VENUES)){
       const a=S.kResults[slot]; if(!a||!a.home||!a.away||a.homeScore==null) continue;
       const c=koCompare(p.kPreds?p.kPreds[slot]:undefined, a);
-      const resPts = c.kind==='full' ? (c.exact?3:c.advOk?1:0) : 0;
+      const resPts = c.kind==='full' ? (c.scoreMatch?5:3) + (c.penOk?1:0) : 0;
       if(resPts>0) surprise += resPts * (koOddsWeight[slot]||1);
     }
     const ko=koScoreFor(p.kPreds);
-    // Total = the weighted group formula (A×correct + B×exact − C×PAB) + weighted KO.
+    // Group position bonus: 1 pt for each team in the correct finishing position.
+    // Only awarded for groups where all 6 games have results (standings are final).
+    let groupPosPts=0;
+    for(const g of Object.keys(GROUPS)){
+      const gGames = GROUP_GAMES.filter(x=>x.g===g);
+      if(!gGames.every(gm=>S.gResults[gm.id])) continue; // group not fully played yet
+      if(!gGames.some(gm=>p.gPreds[gm.id]!=null)) continue; // user made no picks in this group
+      const actualSt = actualGroupStandings(g);
+      const predSt   = predGroupStandings(g, p.gPreds);
+      for(let pos=0; pos<4; pos++){
+        if(actualSt[pos] && predSt[pos] && actualSt[pos].name===predSt[pos].name) groupPosPts+=1;
+      }
+    }
+    // Total = the weighted group formula (A×correct + B×exact − C×PAB) + weighted KO + group position bonus.
     // Once any group game is complete, everyone gets a weighted score — including
     // skip penalties — so the table matches the chart (no-pickers drop, not hide).
     const weighted=completed.length>0?+(W.a*correct+W.b*exact-W.c*bad).toFixed(2):null;
-    const total=+(((weighted ?? 0)+ko.koTotal)).toFixed(2);
-    return {name:p.name,total,groupTotal,koTotal:ko.koTotal,matchups:ko.matchups,
+    const total=+(((weighted ?? 0)+ko.koTotal+groupPosPts)).toFixed(2);
+    return {name:p.name,total,groupTotal:groupTotal+groupPosPts,koTotal:ko.koTotal,matchups:ko.matchups,
             exact,correct,scored,bad,weighted,surprise:+surprise.toFixed(1),predCount:Object.keys(p.gPreds).length};
   }).sort((a,b)=>{
     const key=S.lbSort, dir=S.lbSortDir;
@@ -5334,7 +5372,7 @@ function renderAdmin(){
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
       <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Knockout scoring</h2>
       <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.875rem;">
-        Each KO match scores <b>0.5 per correct team</b> in the matchup, plus <b>+1</b> for the right team advancing or <b>+3</b> for the exact score (incl. penalty winner), all multiplied by a per-round weight. The two games are weighted independently.</p>
+        Each KO match requires the correct advancing team as a prerequisite. If you got the winner right: <b>+5</b> for the exact score (match decided in 90 mins or ET), or <b>+3</b> for all other cases. If the match went to penalties and you predicted a draw with the correct pen winner, add <b>+1</b>. All multiplied by a per-round weight.</p>
       <div style="display:flex;gap:1rem;flex-wrap:wrap;">
         <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">
           Primary KO round-weight curve
@@ -5519,36 +5557,6 @@ async function delKoResult(id){
 // ═══════════════════════════════════════════════════════════
 // GROUPS TAB
 // ═══════════════════════════════════════════════════════════
-// Practically secured top 2: a team that finishes top-2 in EVERY win/draw/loss
-// outcome of the remaining games, assuming normal 1-goal margins (representative
-// scorelines). Drives the dashed "into the knockouts" marker — effectively
-// through, though not mathematically locked (a blowout could still flip a tiebreak).
-function groupSecuredTop2(g){
-  const teams=GROUPS[g]; const games=GROUP_GAMES.filter(x=>x.g===g);
-  const remaining=games.filter(x=>!S.gResults[x.id]);
-  const secured={}; teams.forEach(t=>secured[t]=false);
-  if(remaining.length===games.length) return secured;            // nothing played
-  if(remaining.length===0){ const st=actualGroupStandings(g); secured[st[0].name]=true; secured[st[1].name]=true; return secured; }
-  teams.forEach(t=>secured[t]=true);
-  const REP=[[1,0],[0,0],[0,1]]; const n=remaining.length; const total=Math.pow(3,n);
-  for(let mask=0; mask<total; mask++){
-    const extra={}; let m=mask;
-    for(let i=0;i<n;i++){ extra[remaining[i].id]=REP[m%3]; m=Math.floor(m/3); }
-    const score = id => S.gResults[id] || extra[id];
-    const tobj=teams.map(name=>({name,pts:0,gf:0,gd:0,fp:0}));
-    const byName={}; tobj.forEach(t=>byName[t.name]=t);
-    for(const game of games){ const r=score(game.id); if(!r) continue; const [h,a]=r;
-      byName[game.home].gf+=h; byName[game.home].gd+=h-a; byName[game.away].gf+=a; byName[game.away].gd+=a-h;
-      if(h>a) byName[game.home].pts+=3; else if(a>h) byName[game.away].pts+=3; else { byName[game.home].pts++; byName[game.away].pts++; }
-      const real=S.gResults[game.id]; if(real){ byName[game.home].fp+=(real[2]||0); byName[game.away].fp+=(real[3]||0); }
-    }
-    const ranked=_rankGroup(tobj, g, score);
-    const top2=new Set([ranked[0].name, ranked[1].name]);
-    for(const t of teams) if(!top2.has(t)) secured[t]=false;
-  }
-  return secured;
-}
-
 // Live third-place ranking from real results: each group's current 3rd-placed
 // team, sorted by the qualification criteria, split at the top-8 cut line.
 function renderThirdPlaceTable(){
@@ -5621,7 +5629,6 @@ function renderGroupsTab(){
     const allDone=completed.length===games.length;
     const actualSt=actualGroupStandings(g);
     const confirm=groupConfirm(g);
-    const secured=groupSecuredTop2(g);
 
     const statusLabel=allDone
       ? `<span style="font-size:0.65rem;color:#4ade80;font-weight:600;">✓ Complete</span>`
@@ -5636,15 +5643,13 @@ function renderGroupsTab(){
       const pie=_pickerPie(g, t.name);
       // Outline around the position number: gold = final group position locked,
       // silver = confirmed through to the knockouts (position not yet locked).
-      // Solid gold = position locked; solid silver = guaranteed top 2; dashed
-      // green = effectively into the knockouts (top 2 under normal results).
       const cf=confirm[t.name];
-      let ringColor=null, ringDash=false, ringTip='';
-      if(cf && cf.pos){ ringColor='#fbbf24'; ringTip=`Confirmed ${cf.pos===1?'group winner — 1st':'runner-up — 2nd'} (through to the knockouts)`; }
-      else if(cf && cf.advanced){ ringColor='#cbd5e1'; ringTip='Confirmed through to the knockouts'; }
-      else if(secured[t.name]){ ringColor='#4ade80'; ringDash=true; ringTip='Into the knockouts — top 2 under normal results (a heavy upset could still change it)'; }
-      const numHTML = ringColor
-        ? `<span title="${ringTip}" style="display:inline-flex;align-items:center;justify-content:center;width:1.55em;height:1.55em;border-radius:50%;border:2px ${ringDash?'dashed':'solid'} ${ringColor};${ringDash?'':'box-shadow:0 0 4px '+ringColor+'55;'}font-weight:800;color:${adv?'#4ade80':third?'#fbbf24':'#e2e8f0'};">${i+1}</span>`
+      const ring = cf && cf.pos ? '#fbbf24' : cf && cf.advanced ? '#cbd5e1' : null;
+      const ringTip = !ring ? '' : cf.pos
+        ? `Confirmed ${cf.pos===1?'group winner — 1st':'runner-up — 2nd'} (through to the knockouts)`
+        : 'Confirmed through to the knockouts';
+      const numHTML = ring
+        ? `<span title="${ringTip}" style="display:inline-flex;align-items:center;justify-content:center;width:1.55em;height:1.55em;border-radius:50%;border:2px solid ${ring};box-shadow:0 0 4px ${ring}55;font-weight:800;color:${adv?'#4ade80':'#e2e8f0'};">${i+1}</span>`
         : `${i+1}`;
       return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
         <td style="padding:${_rp};text-align:center;font-size:0.7rem;font-weight:700;color:${adv?'#4ade80':third?'#fbbf24':'#475569'};">${numHTML}</td>
@@ -5702,20 +5707,21 @@ function renderGroupsTab(){
           const predSt=predGroupStandings(g,p.gPreds);
           actualSt.forEach((team,i)=>{ if(predSt.findIndex(t=>t.name===team.name)===i) positions++; });
         }
-        return {name:p.name,correct,exact,bad,positions,gamesScored};
+        const points = allDone ? 3*correct + 2*exact + 1*(positions||0) : null;
+        return {name:p.name,correct,exact,bad,positions,points,gamesScored};
       });
 
       const metrics=[
-        {label:'Correct',   key:'correct',   lowerBetter:false, den:()=>completed.length, tip:'Games where result (W/D/L) was predicted correctly'},
-        {label:'Exact',     key:'exact',     lowerBetter:false, den:()=>completed.length, tip:'Games where exact score was predicted'},
-        {label:'Points↓',  key:'bad',       lowerBetter:true,  den:()=>null,              tip:'Total goal error vs actual scores — lower is better'},
-        {label:'Standings', key:'positions', lowerBetter:false, den:()=>allDone?4:null,   tip:'How many of the 4 final group positions each person predicted correctly (shown once all group games are played)'},
+        {label:'Correct',   key:'correct',   lowerBetter:false, den:()=>completed.length, tip:'Games where result (W/D/L) was predicted correctly (3 pts each)'},
+        {label:'Exact',     key:'exact',     lowerBetter:false, den:()=>completed.length, tip:'Games where exact score was predicted (5 pts each)'},
+        {label:'Standings', key:'positions', lowerBetter:false, den:()=>allDone?4:null,   tip:'How many of the 4 final group positions each person predicted correctly (1 pt each — shown once all group games are played)'},
+        {label:'Points',    key:'points',    lowerBetter:false, den:()=>null,              tip:'Total group points: 3 × correct results + 2 × exact bonus + 1 × correct standings positions (shown once all group games are played)'},
       ];
 
       const colHeaders=stats.map(s=>`<th style="padding:${_rp};text-align:center;font-size:0.7rem;color:#64748b;font-weight:500;max-width:5rem;" title="${esc(s.name)}">${esc(abbrevName(s.name))}</th>`).join('');
 
       const metricRows=metrics.map(m=>{
-        const vals=stats.map(s=>m.key==='positions'?s.positions:s[m.key]);
+        const vals=stats.map(s=>m.key==='positions'||m.key==='points'?s[m.key]:s[m.key]);
         const cells=stats.map((s,i)=>{
           const val=vals[i];
           if(val===null) return `<td style="padding:${_rp};text-align:center;font-size:0.8rem;color:#334155;">–</td>`;
@@ -5757,8 +5763,7 @@ function renderGroupsTab(){
     <div style="margin-bottom:0.75rem;">
       <p style="color:#64748b;font-size:0.8rem;">
         <span style="color:#4ade80;">■</span> Advances · <span style="color:#fbbf24;">■</span> 3rd place pool ·
-        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px dashed #4ade80;vertical-align:-0.1em;"></span> into knockouts ·
-        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #cbd5e1;vertical-align:-0.1em;"></span> guaranteed top 2 ·
+        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #cbd5e1;vertical-align:-0.1em;"></span> through to knockouts ·
         <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #fbbf24;vertical-align:-0.1em;"></span> position confirmed
         ${participants.length>0?' · <span style="color:#4ade80;">green</span> = best, <span style="color:#f87171;">red</span> = worst per group':''}
       </p>
