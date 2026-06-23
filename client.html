@@ -2343,6 +2343,9 @@ function getConfirmedQualifiers(){
   const slotAssignment = assign3rdToSlots(qualifyingGroups);
   return {firsts, seconds, thirds, best3, tiedGroups, slotAssignment};
 }
+
+// Resolve bracket position label → team name
+function resolvePos(pos, q){
   if(!q) return pos;
   const m1 = pos.match(/^1([A-L])$/); if(m1) return q.firsts[m1[1]]||pos;
   const m2 = pos.match(/^2([A-L])$/); if(m2) return q.seconds[m2[1]]||pos;
@@ -3697,7 +3700,7 @@ function renderMain(){
   if(S.view==='groups')   return renderPicksTab();
   if(S.view==='results')  return renderResults();
   if(S.view==='compare')  return renderCompare();
-  if(S.view==='repicker') return renderRepicker();
+  if(S.view==='repicker') { try { return renderRepicker(); } catch(e){ console.error('renderRepicker error:',e); return `<div style="text-align:center;padding:4rem 1rem;color:#64748b;">Repicker unavailable — ${e.message}</div>`; } }
   return renderAdmin();
 }
 
@@ -6840,7 +6843,9 @@ function renderRepicker(){
 
   // Preview mode: show read-only bracket with confirmed teams, countdown, and explanation
   if(!repickerOpen && !_isAdmin){
-    const preview = repickerPreviewBracket();
+    if(!S.name) return `<div style="text-align:center;padding:4rem 1rem;color:#64748b;">Log in to see the Repicker preview.</div>`;
+    let preview = {};
+    try { preview = repickerPreviewBracket(); } catch(e){ preview = {}; }
     const rounds=[
       {key:'r32', label:'Round of 32', ids: Array.from({length:16},(_,i)=>`r32-${i+1}`)},
       {key:'r16', label:'Round of 16', ids: Array.from({length:8}, (_,i)=>`r16-${i+1}`)},
