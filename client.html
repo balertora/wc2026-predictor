@@ -5182,7 +5182,7 @@ function renderCompare(){
         <div>
           <div style="font-size:0.75rem;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem;">Knockout Stage</div>
           <div style="font-size:0.8rem;color:#94a3b8;display:flex;flex-direction:column;gap:0.25rem;">
-            <div style="color:#64748b;font-style:italic;">Prerequisite: correct advancing team — wrong winner = 0 pts</div>
+            <div style="color:#64748b;font-style:italic;">You must get the winning team right to earn any points. The losing team doesn't matter.</div>
             <div><span style="color:#fcd34d;font-weight:700;">5 pts</span> — exact score</div>
             <div><span style="color:#facc15;font-weight:700;">3 pts</span> — correct advancing team, wrong score (includes predicting draw but it was a win, or predicting a win but it went to penalties)</div>
             <div><span style="color:#4ade80;font-weight:700;">+1 pt</span> — penalties bonus: match went to penalties, you predicted a draw with the correct pen winner</div>
@@ -6841,8 +6841,25 @@ function renderRepicker(){
   const repickerOpen = S.settings?.repicker_open==='true';
   const gDone = Object.keys(S.gResults||{}).length;
 
-  // Preview mode: show read-only bracket with confirmed teams, countdown, and explanation
-  if(!repickerOpen && !_isAdmin){
+  // Countdown to repicker opening (June 27 2026 9PM Pacific = June 28 2026 04:00 UTC)
+  const REPICKER_OPENS = new Date('2026-06-28T04:00:00Z').getTime();
+  function repickerCountdown(){
+    const now = Date.now();
+    const left = REPICKER_OPENS - now;
+    if(left <= 0) return '';
+    const totalMins = Math.floor(left/60000);
+    const d = Math.floor(totalMins/1440), h = Math.floor((totalMins%1440)/60), m = totalMins%60;
+    const parts = [];
+    if(d>0) parts.push(`${d}d`);
+    if(h>0) parts.push(`${h}h`);
+    parts.push(`${m}m`);
+    return `<div style="background:linear-gradient(90deg,rgba(167,139,250,0.18),rgba(99,102,241,0.12));border:1px solid rgba(167,139,250,0.5);border-radius:0.75rem;padding:0.6rem 0.9rem;margin-bottom:1rem;color:#e9d5ff;font-size:0.85rem;line-height:1.45;">
+      🔄 <b>Repicker opens in ${parts.join(' ')}</b> — June 27 at 9PM Pacific. You'll get a window to re-pick the full knockout bracket from the real draw.
+    </div>`;
+  }
+
+  // Preview mode: show read-only bracket with confirmed teams only — for everyone while not open
+  if(!repickerOpen){
     if(!S.name) return `<div style="text-align:center;padding:4rem 1rem;color:#64748b;">Log in to see the Repicker preview.</div>`;
     let preview = {};
     try { preview = repickerPreviewBracket(); } catch(e){ preview = {}; }
@@ -6876,7 +6893,7 @@ function renderRepicker(){
       </div>`;
     }).join('');
     return `<div style="max-width:640px;margin:0 auto;padding:0 0.5rem;">
-      <div id="repicker-preview-cd">${repickerBannerHTML()}</div>
+      <div id="repicker-preview-cd">${repickerCountdown()}</div>
       <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#c4b5fd;line-height:1.5;">
         👀 <b>Preview mode</b> — picks open after the group stage ends. Teams shown in <span style="color:white;font-weight:600;">white</span> have secured their position; <span style="color:#475569;font-style:italic;">greyed slots</span> are still to be decided. ${gDone}/72 group results in.
       </div>
@@ -7242,7 +7259,7 @@ if(_token && S.name){
 fetchWeatherForVisible();
 
 // Keep the repicker countdown banner fresh without a full re-render.
-setInterval(()=>{ const el=document.getElementById('repicker-cd'); if(el) el.innerHTML=repickerBannerHTML(); const re=document.getElementById('repicker-preview-cd'); if(re) re.innerHTML=repickerBannerHTML(); }, 60000);
+setInterval(()=>{ const el=document.getElementById('repicker-cd'); if(el) el.innerHTML=repickerBannerHTML(); const re=document.getElementById('repicker-preview-cd'); if(re) re.innerHTML=(typeof repickerCountdown==='function'?repickerCountdown():''); }, 60000);
 </script>
 </body>
 </html>
