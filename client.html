@@ -6723,9 +6723,10 @@ function reAdvancerOf(slotTeams, rp){
 // Preview bracket using only mathematically confirmed team positions.
 function repickerPreviewBracket(){
   const q = getConfirmedQualifiers();
+  const safeResolve = pos => pos.startsWith('3') ? pos : resolvePos(pos, q);
   const slots = {};
   for(const m of R32_FIXED){
-    slots[m.id]={ home: resolvePos(m.posA, q), away: resolvePos(m.posB, q) };
+    slots[m.id]={ home: safeResolve(m.posA), away: safeResolve(m.posB) };
   }
   return slots;
 }
@@ -6853,7 +6854,7 @@ function renderRepicker(){
     if(d>0) parts.push(`${d}d`);
     if(h>0) parts.push(`${h}h`);
     parts.push(`${m}m`);
-    return `<div style="background:linear-gradient(90deg,rgba(167,139,250,0.18),rgba(99,102,241,0.12));border:1px solid rgba(167,139,250,0.5);border-radius:0.75rem;padding:0.6rem 0.9rem;margin-bottom:1rem;color:#e9d5ff;font-size:0.85rem;line-height:1.45;">
+    return `<div style="background:linear-gradient(90deg,rgba(167,139,250,0.18),rgba(99,102,241,0.12));border:1px solid rgba(167,139,250,0.5);border-radius:0.75rem;padding:0.6rem 0.9rem;margin-bottom:1rem;color:#5b21b6;font-size:0.85rem;line-height:1.45;">
       🔄 <b>Repicker opens in ${parts.join(' ')}</b> — June 27 at 9PM Pacific. You'll get a window to re-pick the full knockout bracket from the real draw.
     </div>`;
   }
