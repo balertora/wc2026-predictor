@@ -6879,23 +6879,26 @@ function renderRepicker(){
     const matchesHtml = round.ids.map(id=>{
       const t = preview[id]||{};
       const home = t.home||'TBD', away = t.away||'TBD';
-      const homeKnown = repickerTeamKnown(home), awayKnown = repickerTeamKnown(away);
+      // Only show a team as confirmed if it's a real team name AND not a 3rd-place slot
+      // (3rd place qualification can't be confirmed until all groups are done)
+      const isConfirmed = name => repickerTeamKnown(name) && !name.includes('3rd');
+      const homeKnown = isConfirmed(home), awayKnown = isConfirmed(away);
       const homeStr = homeKnown
-        ? `<span style="font-weight:600;color:white;">${flag(home)} ${esc(shortTeamName(home))}</span>`
-        : `<span style="color:#475569;font-style:italic;font-size:0.8rem;">${esc(home)}</span>`;
-      const awayStr = homeKnown && awayKnown
-        ? `<span style="font-weight:600;color:white;">${flag(away)} ${esc(shortTeamName(away))}</span>`
-        : `<span style="color:#475569;font-style:italic;font-size:0.8rem;">${esc(away)}</span>`;
-      return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
+        ? `<span style="font-weight:600;color:var(--text-strong);">${flag(home)} ${esc(shortTeamName(home))}</span>`
+        : `<span style="color:var(--text-faint);font-style:italic;font-size:0.8rem;">${esc(home)}</span>`;
+      const awayStr = awayKnown
+        ? `<span style="font-weight:600;color:var(--text-strong);">${flag(away)} ${esc(shortTeamName(away))}</span>`
+        : `<span style="color:var(--text-faint);font-style:italic;font-size:0.8rem;">${esc(away)}</span>`;
+      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
         <div style="flex:1;text-align:right;">${homeStr}</div>
-        <div style="color:#475569;font-size:0.8rem;padding:0 0.5rem;">vs</div>
+        <div style="color:var(--text-faint);font-size:0.8rem;padding:0 0.5rem;">vs</div>
         <div style="flex:1;">${awayStr}</div>
       </div>`;
     }).join('');
     return `<div style="max-width:640px;margin:0 auto;padding:0 0.5rem;">
       <div id="repicker-preview-cd">${repickerCountdown()}</div>
-      <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#c4b5fd;line-height:1.5;">
-        👀 <b>Preview mode</b> — picks open after the group stage ends. Teams shown in <span style="color:white;font-weight:600;">white</span> have secured their position; <span style="color:#475569;font-style:italic;">greyed slots</span> are still to be decided. ${gDone}/72 group results in.
+      <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#7c3aed;line-height:1.5;">
+        👀 <b>Preview mode</b> — picks open after the group stage ends. Teams in <b>bold</b> have secured their position; <i>italic slots</i> are still to be decided. ${gDone}/72 group results in.
       </div>
       <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">${tabsHtml}</div>
       ${matchesHtml}
