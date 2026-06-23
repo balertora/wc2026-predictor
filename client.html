@@ -3959,7 +3959,10 @@ function hideGWT(){ const t=document.getElementById('gwt'); if(t) t.style.displa
 
 function renderGroupTables(){
   _gwPickerMap = _buildGWPickerMap(); // rebuild each render so hovers are fresh
-  const standings = allGroupStandings();
+  // Build standings purely from the user's own predictions — do NOT mix in actual
+  // results, so this table always reflects what the user picked, not what happened.
+  const standings = {};
+  for(const g of Object.keys(GROUPS)) standings[g] = predGroupStandings(g, S.gPreds);
   const groups = Object.keys(GROUPS);
   const md3done = GROUP_GAMES.filter(x=>x.md===3).every(g=>S.gPreds[g.id]);
   const predCount = Object.keys(S.gPreds).length;
@@ -3969,9 +3972,12 @@ function renderGroupTables(){
         ⚡ Based on ${predCount}/${GROUP_GAMES.length} predictions entered so far. Fill in all three matchdays for complete tables.
       </div>` : '';
 
-  // Work out which 8 third-place teams qualify
-  const {thirds} = ranked3rds();
-  const qualifyingThirds = new Set(thirds.slice(0,8).map(t=>t.name));
+  // Work out which 8 third-place teams qualify based purely on predictions
+  const predThirds = Object.entries(standings).map(([g,st])=>({
+    group:g, name:st[2]?.name||`3rd ${g}`,
+    pts:st[2]?.pts||0, gd:st[2]?.gd||0, gf:st[2]?.gf||0,
+  })).sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
+  const qualifyingThirds = new Set(predThirds.slice(0,8).map(t=>t.name));
 
   // Compute uniform Team column width from the longest name across all groups
   // (flag ~1.2rem + space + ~0.44rem/char at 0.76rem font-size + badge headroom)
