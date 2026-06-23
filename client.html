@@ -4860,6 +4860,7 @@ function renderCompare(){
   allPred.push(...S.otherUsers.map(u=>({name:u.name,gPreds:u.gPreds||{},kPreds:u.kPreds||{}})));
 
   const koActive = Object.keys(KO_VENUES).some(id=>{ const r=S.kResults[id]; return r&&r.home&&r.away&&r.homeScore!=null; });
+  const allGroupsDone = GROUP_GAMES.every(g=>S.gResults[g.id]);
 
   // Crowd-odds weight per completed game: the actual result's "decimal odds"
   // from how people guessed (total picks / picks for the actual outcome). The
@@ -4910,24 +4911,37 @@ function renderCompare(){
     exact   += ko.exacts;
     correct += ko.advancers;
     // Group position bonus: 1 pt per correct final standing position
-    let groupPosPts=0;
-    const anyGroupDone = Object.keys(GROUPS).some(g=>GROUP_GAMES.filter(x=>x.g===g).every(gm=>S.gResults[gm.id]));
+    let groupPosPts=0, projPosPts=0;
+    const anyGroupDone    = Object.keys(GROUPS).some(g=>GROUP_GAMES.filter(x=>x.g===g).every(gm=>S.gResults[gm.id]));
+    const anyGroupStarted = Object.keys(GROUPS).some(g=>GROUP_GAMES.filter(x=>x.g===g).some(gm=>S.gResults[gm.id]));
     for(const g of Object.keys(GROUPS)){
       const gGames = GROUP_GAMES.filter(x=>x.g===g);
-      if(!gGames.every(gm=>S.gResults[gm.id])) continue;
+      const gDone  = gGames.every(gm=>S.gResults[gm.id]);
+      const gStarted = gGames.some(gm=>S.gResults[gm.id]);
+      if(!gStarted) continue;
       if(!gGames.some(gm=>p.gPreds[gm.id]!=null)) continue;
       const actualSt = actualGroupStandings(g);
       const predSt   = predGroupStandings(g, p.gPreds);
+      let gPos=0;
       for(let pos=0; pos<4; pos++){
-        if(actualSt[pos] && predSt[pos] && actualSt[pos].name===predSt[pos].name) groupPosPts+=1;
+        if(actualSt[pos] && predSt[pos] && actualSt[pos].name===predSt[pos].name) gPos+=1;
       }
+      if(gDone) groupPosPts += gPos;
+      projPosPts += gPos; // running projection across all started groups
     }
+    // Predicted champion: advancing team from the user's Final slot prediction
+    const finalPred = p.kPreds?.['final'];
+    const champion = finalPred
+      ? koAdvancer(finalPred.home, finalPred.away, finalPred.homeScore, finalPred.awayScore, finalPred.penWinner) || finalPred.home || null
+      : null;
     // Total = raw group points + KO points + standing position bonus
     const total=+(groupTotal + ko.koTotal + groupPosPts).toFixed(2);
     const weighted=completed.length>0?+(W.a*correct+W.b*exact-W.c*bad).toFixed(2):null;
     return {name:p.name,total,groupTotal,koTotal:ko.koTotal,matchups:ko.matchups,
             exact,correct,scored,bad,weighted,surprise:+surprise.toFixed(1),
-            groupPosPts: anyGroupDone ? groupPosPts : null,
+            groupPosPts: anyGroupDone    ? groupPosPts : null,
+            projPosPts:  anyGroupStarted ? projPosPts  : null,
+            champion,
             predCount:Object.keys(p.gPreds).length};
   }).sort((a,b)=>{
     const key=S.lbSort, dir=S.lbSortDir;
@@ -4967,10 +4981,11 @@ function renderCompare(){
       <thead><tr style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid rgba(255,255,255,0.08);">
         <th style="padding:0.75rem 1rem;text-align:left;width:2rem;">#</th>
         <th style="padding:0.75rem 1rem;text-align:left;">Name</th>
-        ${thSort('total',      'Total',     'Group game points (3 correct / 5 exact) + KO points + group standing position bonus')}
-        ${thSort('exact',      'Exact',     'Exact scores predicted across group and KO games — first tiebreaker')}
-        ${thSort('correct',    'Result✓',   'Correct results (W/D/L) across group and KO games — second tiebreaker')}
-        ${thSort('groupPosPts','Standings', 'Points earned for correctly predicting final group standing positions (1 pt each) — shown once at least one group is complete')}
+        ${thSort('total',      'Total',        'Group game points (3 correct / 5 exact) + KO points + group standing position bonus')}
+        ${thSort('exact',      'Exact',        'Exact scores predicted across group and KO games — first tiebreaker')}
+        ${thSort('correct',    'Result✓',      'Correct results (W/D/L) across group and KO games — second tiebreaker')}
+        ${!allGroupsDone?thSort('projPosPts', '~Standings', 'Projected standing position bonus points on track across all started groups (1 pt per correct position) — estimate, updates as games are played'):''}
+        ${thSort('groupPosPts','Standings',    'Points earned for correctly predicting final group standing positions (1 pt each) — shown once at least one group is complete')}
       </tr></thead>
       <tbody>${lb.map((e,i)=>{
         const imp=S.otherUsers.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
@@ -4979,16 +4994,18 @@ function renderCompare(){
         const avatarHTML=avatarSrc
           ?`<img src="${avatarSrc}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
           :`<span style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.07);display:inline-flex;align-items:center;justify-content:center;font-size:0.75rem;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🧑</span>`;
+        const champFlag = e.champion ? `<span title="${esc(e.champion)}" style="font-size:1rem;margin-right:0.35rem;flex-shrink:0;">${flag(e.champion)}</span>` : '';
         return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
           <td style="padding:0.75rem 1rem;">${i<3?MEDALS[i]:i+1}</td>
           <td style="padding:0.75rem 1rem;">
-            <div style="display:flex;align-items:center;font-weight:500;color:white;">${avatarHTML}${esc(e.name)}</div>
+            <div style="display:flex;align-items:center;font-weight:500;color:white;">${champFlag}${avatarHTML}${esc(e.name)}</div>
             ${maxPts>0?`<div style="margin-top:3px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;width:7rem;overflow:hidden;"><div style="height:100%;background:#16a34a;width:${Math.max(0,Math.min(100,e.total/maxPts*100)).toFixed(1)}%;"></div></div>`:''}
           </td>
           <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#4ade80;">${e.exact}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#facc15;">${e.correct}</td>
+          ${!allGroupsDone?`<td style="padding:0.75rem 1rem;text-align:right;font-style:italic;color:#64748b;">${e.projPosPts!==null?'~'+e.projPosPts:'–'}</td>`:''}
           <td style="padding:0.75rem 1rem;text-align:right;color:#94a3b8;">${e.groupPosPts!==null?e.groupPosPts:'–'}</td>
         </tr>`;}). join('')}
       </tbody></table></div>`;
