@@ -5519,6 +5519,36 @@ async function delKoResult(id){
 // ═══════════════════════════════════════════════════════════
 // GROUPS TAB
 // ═══════════════════════════════════════════════════════════
+// Practically secured top 2: a team that finishes top-2 in EVERY win/draw/loss
+// outcome of the remaining games, assuming normal 1-goal margins (representative
+// scorelines). Drives the dashed "into the knockouts" marker — effectively
+// through, though not mathematically locked (a blowout could still flip a tiebreak).
+function groupSecuredTop2(g){
+  const teams=GROUPS[g]; const games=GROUP_GAMES.filter(x=>x.g===g);
+  const remaining=games.filter(x=>!S.gResults[x.id]);
+  const secured={}; teams.forEach(t=>secured[t]=false);
+  if(remaining.length===games.length) return secured;            // nothing played
+  if(remaining.length===0){ const st=actualGroupStandings(g); secured[st[0].name]=true; secured[st[1].name]=true; return secured; }
+  teams.forEach(t=>secured[t]=true);
+  const REP=[[1,0],[0,0],[0,1]]; const n=remaining.length; const total=Math.pow(3,n);
+  for(let mask=0; mask<total; mask++){
+    const extra={}; let m=mask;
+    for(let i=0;i<n;i++){ extra[remaining[i].id]=REP[m%3]; m=Math.floor(m/3); }
+    const score = id => S.gResults[id] || extra[id];
+    const tobj=teams.map(name=>({name,pts:0,gf:0,gd:0,fp:0}));
+    const byName={}; tobj.forEach(t=>byName[t.name]=t);
+    for(const game of games){ const r=score(game.id); if(!r) continue; const [h,a]=r;
+      byName[game.home].gf+=h; byName[game.home].gd+=h-a; byName[game.away].gf+=a; byName[game.away].gd+=a-h;
+      if(h>a) byName[game.home].pts+=3; else if(a>h) byName[game.away].pts+=3; else { byName[game.home].pts++; byName[game.away].pts++; }
+      const real=S.gResults[game.id]; if(real){ byName[game.home].fp+=(real[2]||0); byName[game.away].fp+=(real[3]||0); }
+    }
+    const ranked=_rankGroup(tobj, g, score);
+    const top2=new Set([ranked[0].name, ranked[1].name]);
+    for(const t of teams) if(!top2.has(t)) secured[t]=false;
+  }
+  return secured;
+}
+
 // Live third-place ranking from real results: each group's current 3rd-placed
 // team, sorted by the qualification criteria, split at the top-8 cut line.
 function renderThirdPlaceTable(){
@@ -5591,6 +5621,7 @@ function renderGroupsTab(){
     const allDone=completed.length===games.length;
     const actualSt=actualGroupStandings(g);
     const confirm=groupConfirm(g);
+    const secured=groupSecuredTop2(g);
 
     const statusLabel=allDone
       ? `<span style="font-size:0.65rem;color:#4ade80;font-weight:600;">✓ Complete</span>`
@@ -5605,13 +5636,15 @@ function renderGroupsTab(){
       const pie=_pickerPie(g, t.name);
       // Outline around the position number: gold = final group position locked,
       // silver = confirmed through to the knockouts (position not yet locked).
+      // Solid gold = position locked; solid silver = guaranteed top 2; dashed
+      // green = effectively into the knockouts (top 2 under normal results).
       const cf=confirm[t.name];
-      const ring = cf && cf.pos ? '#fbbf24' : cf && cf.advanced ? '#cbd5e1' : null;
-      const ringTip = !ring ? '' : cf.pos
-        ? `Confirmed ${cf.pos===1?'group winner — 1st':'runner-up — 2nd'} (through to the knockouts)`
-        : 'Confirmed through to the knockouts';
-      const numHTML = ring
-        ? `<span title="${ringTip}" style="display:inline-flex;align-items:center;justify-content:center;width:1.55em;height:1.55em;border-radius:50%;border:2px solid ${ring};box-shadow:0 0 4px ${ring}55;font-weight:800;color:${adv?'#4ade80':'#e2e8f0'};">${i+1}</span>`
+      let ringColor=null, ringDash=false, ringTip='';
+      if(cf && cf.pos){ ringColor='#fbbf24'; ringTip=`Confirmed ${cf.pos===1?'group winner — 1st':'runner-up — 2nd'} (through to the knockouts)`; }
+      else if(cf && cf.advanced){ ringColor='#cbd5e1'; ringTip='Confirmed through to the knockouts'; }
+      else if(secured[t.name]){ ringColor='#4ade80'; ringDash=true; ringTip='Into the knockouts — top 2 under normal results (a heavy upset could still change it)'; }
+      const numHTML = ringColor
+        ? `<span title="${ringTip}" style="display:inline-flex;align-items:center;justify-content:center;width:1.55em;height:1.55em;border-radius:50%;border:2px ${ringDash?'dashed':'solid'} ${ringColor};${ringDash?'':'box-shadow:0 0 4px '+ringColor+'55;'}font-weight:800;color:${adv?'#4ade80':third?'#fbbf24':'#e2e8f0'};">${i+1}</span>`
         : `${i+1}`;
       return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
         <td style="padding:${_rp};text-align:center;font-size:0.7rem;font-weight:700;color:${adv?'#4ade80':third?'#fbbf24':'#475569'};">${numHTML}</td>
@@ -5724,7 +5757,8 @@ function renderGroupsTab(){
     <div style="margin-bottom:0.75rem;">
       <p style="color:#64748b;font-size:0.8rem;">
         <span style="color:#4ade80;">■</span> Advances · <span style="color:#fbbf24;">■</span> 3rd place pool ·
-        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #cbd5e1;vertical-align:-0.1em;"></span> through to knockouts ·
+        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px dashed #4ade80;vertical-align:-0.1em;"></span> into knockouts ·
+        <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #cbd5e1;vertical-align:-0.1em;"></span> guaranteed top 2 ·
         <span style="display:inline-block;width:0.85em;height:0.85em;border-radius:50%;border:2px solid #fbbf24;vertical-align:-0.1em;"></span> position confirmed
         ${participants.length>0?' · <span style="color:#4ade80;">green</span> = best, <span style="color:#f87171;">red</span> = worst per group':''}
       </p>
