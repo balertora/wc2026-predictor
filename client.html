@@ -2323,8 +2323,26 @@ function getQualifiers(){
   return {firsts, seconds, thirds, best3, tiedGroups, slotAssignment};
 }
 
-// Resolve bracket position label → team name
-function resolvePos(pos, q){
+// Like getQualifiers but only resolves positions that are mathematically confirmed.
+// Unconfirmed slots stay as placeholder strings (e.g. "1st Group A").
+function getConfirmedQualifiers(){
+  const firsts={}, seconds={};
+  for(const g of Object.keys(GROUPS)){
+    const confirm = groupConfirm(g);
+    firsts[g]  = `1st Group ${g}`;
+    seconds[g] = `2nd Group ${g}`;
+    for(const [team, s] of Object.entries(confirm)){
+      if(s.pos===1) firsts[g]  = team;
+      if(s.pos===2) seconds[g] = team;
+    }
+  }
+  // For 3rd-place slots we can't confirm until groups are done — keep as placeholders
+  const {thirds, tiedGroups} = ranked3rds();
+  const best3 = thirds.slice(0,8);
+  const qualifyingGroups = best3.map(t=>t.group);
+  const slotAssignment = assign3rdToSlots(qualifyingGroups);
+  return {firsts, seconds, thirds, best3, tiedGroups, slotAssignment};
+}
   if(!q) return pos;
   const m1 = pos.match(/^1([A-L])$/); if(m1) return q.firsts[m1[1]]||pos;
   const m2 = pos.match(/^2([A-L])$/); if(m2) return q.seconds[m2[1]]||pos;
@@ -3385,7 +3403,7 @@ function _updateNavTabs(){
   if(adminTab) adminTab.style.display = _isAdmin ? '' : 'none';
   // Repicker tab: visible when admin has opened it, or to admin always
   const reTab = document.getElementById('tn-repicker');
-  if(reTab) reTab.style.display = (S.settings?.repicker_open==='true' || _isAdmin) ? '' : 'none';
+  if(reTab) reTab.style.display = '';
 }
 
 function _updateNavUser(){
@@ -5152,9 +5170,9 @@ function renderCompare(){
         <div>
           <div style="font-size:0.75rem;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem;">Group Stage</div>
           <div style="font-size:0.8rem;color:#94a3b8;display:flex;flex-direction:column;gap:0.25rem;">
-            <div><span style="color:#fcd34d;font-weight:700;">5 pts</span> — exact score predicted</div>
+            <div><span style="color:#fcd34d;font-weight:700;">5 pts</span> — exact score ⚽</div>
             <div><span style="color:#facc15;font-weight:700;">3 pts</span> — correct result (W/D/L), wrong score</div>
-            <div><span style="color:#4ade80;font-weight:700;">+1 pt</span> — per correct final group standing position (awarded once all 6 games in a group are played, max 4 per group)</div>
+            <div><span style="color:#4ade80;font-weight:700;">+1 pt</span> — per team correctly placed in the group standings (awarded when the group finishes)</div>
           </div>
         </div>
 
@@ -5162,9 +5180,9 @@ function renderCompare(){
           <div style="font-size:0.75rem;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem;">Knockout Stage</div>
           <div style="font-size:0.8rem;color:#94a3b8;display:flex;flex-direction:column;gap:0.25rem;">
             <div style="color:#64748b;font-style:italic;">Prerequisite: correct advancing team — wrong winner = 0 pts</div>
-            <div><span style="color:#fcd34d;font-weight:700;">5 pts</span> — exact score (match decided in 90 mins or ET)</div>
-            <div><span style="color:#facc15;font-weight:700;">3 pts</span> — correct advancing team, all other cases</div>
-            <div><span style="color:#4ade80;font-weight:700;">+1 pt</span> — pen bonus: match went to penalties, you predicted a draw with the correct pen winner</div>
+            <div><span style="color:#fcd34d;font-weight:700;">5 pts</span> — exact score</div>
+            <div><span style="color:#facc15;font-weight:700;">3 pts</span> — correct advancing team, wrong score (includes predicting draw but it was a win, or predicting a win but it went to penalties)</div>
+            <div><span style="color:#4ade80;font-weight:700;">+1 pt</span> — penalties bonus: match went to penalties, you predicted a draw with the correct pen winner</div>
             <div style="margin-top:0.35rem;color:#64748b;">All × round multiplier:</div>
             <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.15rem;">
               ${['R32','R16','QF','SF','Final','3rd'].map((r,i)=>{
@@ -6699,6 +6717,16 @@ function reAdvancerOf(slotTeams, rp){
   return (rp.penWinner===slotTeams.home||rp.penWinner===slotTeams.away) ? rp.penWinner : null;
 }
 
+// Preview bracket using only mathematically confirmed team positions.
+function repickerPreviewBracket(){
+  const q = getConfirmedQualifiers();
+  const slots = {};
+  for(const m of R32_FIXED){
+    slots[m.id]={ home: resolvePos(m.posA, q), away: resolvePos(m.posB, q) };
+  }
+  return slots;
+}
+
 // Build the user's repicker bracket (score-by-game). R32 teams come from actual
 // group results; each later round's teams come from the user's advancing picks.
 // Returns { matchId: {home,away} } (home/away may be null until upstream is decided).
@@ -6809,12 +6837,48 @@ async function saveReBracket(i){
 function renderRepicker(){
   const repickerOpen = S.settings?.repicker_open==='true';
   const gDone = Object.keys(S.gResults||{}).length;
-  if(!repickerOpen && !_isAdmin) return `
-    <div style="text-align:center;padding:4rem 1rem;">
-      <div style="font-size:2.5rem;margin-bottom:0.75rem;">⏳</div>
-      <p style="color:#e2e8f0;font-weight:600;margin-bottom:0.5rem;">Repicker opens after the group stage</p>
-      <p style="color:#64748b;font-size:0.875rem;">${gDone}/72 group results in. Opens automatically once all groups are done.</p>
+
+  // Preview mode: show read-only bracket with confirmed teams, countdown, and explanation
+  if(!repickerOpen && !_isAdmin){
+    const preview = repickerPreviewBracket();
+    const rounds=[
+      {key:'r32', label:'Round of 32', ids: Array.from({length:16},(_,i)=>`r32-${i+1}`)},
+      {key:'r16', label:'Round of 16', ids: Array.from({length:8}, (_,i)=>`r16-${i+1}`)},
+      {key:'qf',  label:'Quarters',    ids: Array.from({length:4}, (_,i)=>`qf-${i+1}`)},
+      {key:'sf',  label:'Semis',       ids: ['sf-1','sf-2']},
+      {key:'final',label:'Final',      ids: ['final-1']},
+    ];
+    const tab = S.rePickTab||'r32';
+    const round = rounds.find(r=>r.key===tab)||rounds[0];
+    const tabsHtml = rounds.map(r=>{
+      const cls = r.key===tab ? 'rnd-tab on' : 'rnd-tab';
+      return `<button class="${cls}" onclick="S.rePickTab='${r.key}';render()">${r.label}</button>`;
+    }).join('');
+    const matchesHtml = round.ids.map(id=>{
+      const t = preview[id]||{};
+      const home = t.home||'TBD', away = t.away||'TBD';
+      const homeKnown = repickerTeamKnown(home), awayKnown = repickerTeamKnown(away);
+      const homeStr = homeKnown
+        ? `<span style="font-weight:600;color:white;">${flag(home)} ${esc(shortTeamName(home))}</span>`
+        : `<span style="color:#475569;font-style:italic;font-size:0.8rem;">${esc(home)}</span>`;
+      const awayStr = homeKnown && awayKnown
+        ? `<span style="font-weight:600;color:white;">${flag(away)} ${esc(shortTeamName(away))}</span>`
+        : `<span style="color:#475569;font-style:italic;font-size:0.8rem;">${esc(away)}</span>`;
+      return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
+        <div style="flex:1;text-align:right;">${homeStr}</div>
+        <div style="color:#475569;font-size:0.8rem;padding:0 0.5rem;">vs</div>
+        <div style="flex:1;">${awayStr}</div>
+      </div>`;
+    }).join('');
+    return `<div style="max-width:640px;margin:0 auto;padding:0 0.5rem;">
+      <div id="repicker-preview-cd">${repickerBannerHTML()}</div>
+      <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#c4b5fd;line-height:1.5;">
+        👀 <b>Preview mode</b> — picks open after the group stage ends. Teams shown in <span style="color:white;font-weight:600;">white</span> have secured their position; <span style="color:#475569;font-style:italic;">greyed slots</span> are still to be decided. ${gDone}/72 group results in.
+      </div>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">${tabsHtml}</div>
+      ${matchesHtml}
     </div>`;
+  }
 
   const userBracket = repickerUserBracket(S.rePicks);
   const locked = !repickerOpen;                       // editable only while the Repicker is open
@@ -7173,7 +7237,7 @@ if(_token && S.name){
 fetchWeatherForVisible();
 
 // Keep the repicker countdown banner fresh without a full re-render.
-setInterval(()=>{ const el=document.getElementById('repicker-cd'); if(el) el.innerHTML=repickerBannerHTML(); }, 60000);
+setInterval(()=>{ const el=document.getElementById('repicker-cd'); if(el) el.innerHTML=repickerBannerHTML(); const re=document.getElementById('repicker-preview-cd'); if(re) re.innerHTML=repickerBannerHTML(); }, 60000);
 </script>
 </body>
 </html>
