@@ -6932,7 +6932,114 @@ function reScoreCell(matchId, side, val, locked, isPen){
   </div>`;
 }
 
-// ── Repicker score handlers (persist to /api/re-picks, debounced) ──
+// ── Repicker bracket view ────────────────────────────────────────────────
+// Renders the full 31-match KO bracket as a horizontal scrollable tree.
+// Uses the same userBracket data and reScoreCell inputs as the list view.
+function renderRepickerBracket(userBracket, locked){
+  const rounds = [
+    {key:'r32',  label:'R32',    ids: Array.from({length:16},(_,i)=>`r32-${i+1}`), pairs:[[0,1],[2,3],[4,5],[6,7],[8,9],[10,11],[12,13],[14,15]]},
+    {key:'r16',  label:'R16',    ids: Array.from({length:8}, (_,i)=>`r16-${i+1}`), pairs:[[0,1],[2,3],[4,5],[6,7]]},
+    {key:'qf',   label:'QF',     ids: Array.from({length:4}, (_,i)=>`qf-${i+1}`),  pairs:[[0,1],[2,3]]},
+    {key:'sf',   label:'SF',     ids: ['sf-1','sf-2'],                              pairs:[[0,1]]},
+    {key:'final',label:'Final',  ids: ['final-1'],                                  pairs:[]},
+  ];
+
+  // Compact card for bracket view — no date/city meta, just teams + score
+  function bracketCard(id){
+    const t = userBracket[id]||{};
+    const home = t.home, away = t.away;
+    if(!home && !away) return `<div class="bk-card bk-tbd">TBD</div>`;
+
+    const homeKnown = repickerTeamKnown(home);
+    const awayKnown = repickerTeamKnown(away);
+
+    if(id.startsWith('r32') && (!homeKnown || !awayKnown)){
+      const homeStr = homeKnown
+        ? `<span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>`
+        : `<span class="bk-ph">${esc(home||'TBD')}</span>`;
+      const awayStr = awayKnown
+        ? `<span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>`
+        : `<span class="bk-ph">${esc(away||'TBD')}</span>`;
+      return `<div class="bk-card bk-locked">
+        <div class="bk-row">${homeStr}<span class="bk-lock">🔒</span></div>
+        <div class="bk-row">${awayStr}</div>
+      </div>`;
+    }
+
+    if(!homeKnown || !awayKnown){
+      return `<div class="bk-card bk-tbd">
+        <div class="bk-ph" style="font-size:0.7rem;">${esc(home||'TBD')}</div>
+        <div class="bk-ph" style="font-size:0.7rem;">vs ${esc(away||'TBD')}</div>
+      </div>`;
+    }
+
+    let rp = S.rePicks[id];
+    if(!rp){ rp = S.rePicks[id] = {home,away,homeScore:undefined,awayScore:undefined,penWinner:'',penHome:undefined,penAway:undefined}; }
+    else if(rp.home!==home || rp.away!==away){
+      S.rePicks[id] = {home,away,homeScore:undefined,awayScore:undefined,penWinner:'',penHome:undefined,penAway:undefined};
+      rp = S.rePicks[id]; if(!locked) persistRe();
+    }
+
+    const hv = rp.homeScore!==undefined ? rp.homeScore : '';
+    const av = rp.awayScore!==undefined ? rp.awayScore : '';
+    const isDraw = hv!=='' && av!=='' && Number(hv)===Number(av);
+
+    const ar = S.kResults[id==='final-1'?'final':id];
+    const actualStr = (ar && ar.home && ar.homeScore!=null)
+      ? `<div class="bk-actual">${esc(shortTeamName(ar.home))} ${ar.homeScore}–${ar.awayScore} ${esc(shortTeamName(ar.away))}</div>`
+      : '';
+
+    const penWinnerStr = isDraw && rp.penWinner
+      ? `<div class="bk-pen">pens: ${esc(shortTeamName(rp.penWinner))}</div>`
+      : '';
+
+    return `<div class="bk-card${isDraw?' bk-draw':''}">
+      <div class="bk-row">
+        <span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>
+        ${reScoreCell(id,'h',hv,locked,false)}
+      </div>
+      <div class="bk-row">
+        <span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>
+        ${reScoreCell(id,'a',av,locked,false)}
+      </div>
+      ${penWinnerStr}${actualStr}
+    </div>`;
+  }
+
+  // Build columns
+  const cols = rounds.map(r=>{
+    const cards = r.ids.map(id=>`<div class="bk-match">${bracketCard(id)}</div>`).join('');
+    return `<div class="bk-col">
+      <div class="bk-col-label">${r.label}</div>
+      <div class="bk-matches">${cards}</div>
+    </div>`;
+  }).join('');
+
+  return `
+  <style>
+    .bk-wrap{overflow-x:auto;padding-bottom:1rem;}
+    .bk-grid{display:flex;gap:0;min-width:900px;align-items:stretch;}
+    .bk-col{display:flex;flex-direction:column;flex:1;min-width:160px;}
+    .bk-col-label{text-align:center;font-size:0.65rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:0.25rem 0 0.5rem;}
+    .bk-matches{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:0.25rem;padding:0 0.2rem;}
+    .bk-match{display:flex;align-items:center;}
+    .bk-card{background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.5rem;padding:0.35rem 0.4rem;width:100%;font-size:0.72rem;}
+    .bk-card.bk-locked{opacity:0.55;}
+    .bk-card.bk-tbd{opacity:0.4;text-align:center;color:#475569;padding:0.5rem 0.25rem;font-size:0.68rem;}
+    .bk-card.bk-draw{border-color:rgba(251,191,36,0.35);}
+    .bk-row{display:flex;align-items:center;justify-content:space-between;gap:0.2rem;margin-bottom:0.15rem;}
+    .bk-row:last-child{margin-bottom:0;}
+    .bk-team{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e2e8f0;}
+    .bk-ph{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475569;font-style:italic;}
+    .bk-lock{font-size:0.6rem;margin-left:0.15rem;}
+    .bk-actual{font-size:0.6rem;color:#475569;margin-top:0.15rem;text-align:center;}
+    .bk-pen{font-size:0.6rem;color:#fbbf24;text-align:center;margin-top:0.1rem;}
+    .bk-card .score-cell input{width:1.4rem!important;font-size:0.7rem!important;padding:0.05rem!important;}
+  </style>
+  <div class="bk-wrap"><div class="bk-grid">${cols}</div></div>`;
+}
+
+
 let _reSaveTimer=null;
 function persistRe(){ clearTimeout(_reSaveTimer); _reSaveTimer=setTimeout(_doPersistRe,600); }
 async function _doPersistRe(){
@@ -7095,7 +7202,11 @@ function renderRepicker(){
     return `<button class="${cls}" onclick="S.rePickTab='${r.key}';render()">${allDone&&r.key!==tab?'✓ ':''} ${r.label}</button>`;
   }).join('');
 
-  const matchesHtml = round.ids.map(id=>{
+  const matchesHtml = [...round.ids].sort((a,b)=>{
+    const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
+    const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
+    return ta - tb;
+  }).map(id=>{
     const t = userBracket[id]||{};
     const home=t.home, away=t.away;
     const homeKnown = repickerTeamKnown(home);
@@ -7218,16 +7329,23 @@ function renderRepicker(){
 
   return `
   <div style="padding-bottom:1.5rem;">
-    <div style="margin-bottom:1rem;">
-      <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
-      <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Predict the <b>score</b> of each knockout game, starting from the real Round-of-32 teams. Your bracket advances from your scores. 🔒 Slots unlock as group positions are confirmed. Locks when the knockouts kick off.</p>
+    <div style="margin-bottom:1rem;display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
+      <div>
+        <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
+        <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Predict the <b>score</b> of each knockout game, starting from the real Round-of-32 teams. Your bracket advances from your scores. 🔒 Slots unlock as group positions are confirmed. Locks when the knockouts kick off.</p>
+      </div>
+      <div style="display:flex;gap:0.25rem;flex-shrink:0;">
+        <button onclick="S.reViewMode='list';render()" style="padding:0.3rem 0.7rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:${(S.reViewMode||'list')==='list'?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)'};color:${(S.reViewMode||'list')==='list'?'#a5b4fc':'#94a3b8'};">☰ List</button>
+        <button onclick="S.reViewMode='bracket';render()" style="padding:0.3rem 0.7rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:${S.reViewMode==='bracket'?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)'};color:${S.reViewMode==='bracket'?'#a5b4fc':'#94a3b8'};">⬛ Bracket</button>
+      </div>
     </div>
 
     ${adminStatus}
 
-    <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>
-
-    ${matchesHtml}
+    ${S.reViewMode==='bracket'
+      ? renderRepickerBracket(userBracket, locked)
+      : `<div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>${matchesHtml}`
+    }
 
     ${scored.length ? `
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.5rem;">
