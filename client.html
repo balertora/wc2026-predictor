@@ -6734,8 +6734,8 @@ function repickerPreviewBracket(){
 // Build the user's repicker bracket (score-by-game). R32 teams come from actual
 // group results; each later round's teams come from the user's advancing picks.
 // Returns { matchId: {home,away} } (home/away may be null until upstream is decided).
-function repickerUserBracket(rePicks){
-  const slots = {...repickerR32Teams()};
+function repickerUserBracket(rePicks, confirmedR32){
+  const slots = {...(confirmedR32 || repickerR32Teams())};
   const adv = id => reAdvancerOf(slots[id], rePicks[id]);
   RE_R32_PAIRS.forEach(([ai,bi],i)=>{ slots[`r16-${i+1}`]={ home: adv(`r32-${ai}`), away: adv(`r32-${bi}`) }; });
   RE_R16_PAIRS.forEach(([ai,bi],i)=>{ slots[`qf-${i+1}`] ={ home: adv(`r16-${ai}`), away: adv(`r16-${bi}`) }; });
@@ -6905,9 +6905,11 @@ function renderRepicker(){
     </div>`;
   }
 
-  const userBracket = repickerUserBracket(S.rePicks);
-  const locked = !repickerOpen;                       // editable only while the Repicker is open
-  const reActualId = id => id==='final-1' ? 'final' : id; // map repicker final → results id
+  // Use confirmed qualifiers for R32 — locks unconfirmed slots until teams are mathematically secured
+  const confirmedR32 = repickerPreviewBracket();
+  const userBracket = repickerUserBracket(S.rePicks, confirmedR32);
+  const locked = !repickerOpen;
+  const reActualId = id => id==='final-1' ? 'final' : id;
 
   const rounds=[
     {key:'r32',  label:'Round of 32', ids: Array.from({length:16},(_,i)=>`r32-${i+1}`)},
@@ -6929,7 +6931,23 @@ function renderRepicker(){
   const matchesHtml = round.ids.map(id=>{
     const t = userBracket[id]||{};
     const home=t.home, away=t.away;
-    const homeKnown=repickerTeamKnown(home), awayKnown=repickerTeamKnown(away);
+    const homeKnown = repickerTeamKnown(home) && !String(home).includes('3rd');
+    const awayKnown = repickerTeamKnown(away) && !String(away).includes('3rd');
+
+    // R32 slot with at least one unconfirmed team — show locked card with known teams displayed
+    if(id.startsWith('r32') && (!homeKnown || !awayKnown)){
+      const homeStr = homeKnown
+        ? `<span style="font-weight:600;color:var(--text-strong);">${flag(home)} ${esc(shortTeamName(home))}</span>`
+        : `<span style="color:var(--text-faint);font-style:italic;font-size:0.8rem;">${esc(home||'TBD')}</span>`;
+      const awayStr = awayKnown
+        ? `<span style="font-weight:600;color:var(--text-strong);">${flag(away)} ${esc(shortTeamName(away))}</span>`
+        : `<span style="color:var(--text-faint);font-style:italic;font-size:0.8rem;">${esc(away||'TBD')}</span>`;
+      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;opacity:0.6;">
+        <div style="flex:1;text-align:right;">${homeStr}</div>
+        <div style="color:var(--text-faint);font-size:0.75rem;padding:0 0.5rem;text-align:center;">🔒<br/>vs</div>
+        <div style="flex:1;">${awayStr}</div>
+      </div>`;
+    }
 
     if(!home && !away){
       return `<div style="background:#0d1f35;border:1px solid rgba(255,255,255,0.06);border-radius:0.75rem;padding:0.875rem;margin-bottom:0.5rem;text-align:center;color:#475569;font-size:0.85rem;">— TBD · enter the previous round first —</div>`;
@@ -7022,7 +7040,7 @@ function renderRepicker(){
   <div style="padding-bottom:1.5rem;">
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
-      <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Predict the <b>score</b> of each knockout game, starting from the real Round-of-32 teams. Your bracket advances from your scores. Locks when the knockouts kick off.</p>
+      <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Predict the <b>score</b> of each knockout game, starting from the real Round-of-32 teams. Your bracket advances from your scores. 🔒 Slots unlock as group positions are confirmed. Locks when the knockouts kick off.</p>
     </div>
 
     ${adminStatus}
