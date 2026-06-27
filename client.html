@@ -2652,8 +2652,9 @@ function rePickComplete(picks){
 function koScoreForRepicker(rePicks){
   const w = reWeights();
   const ids = RE_SLOT_IDS;
-  const rk = id => id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':id==='third-1'?'third':'final';
+  const rk = id => id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':id==='third-1'?'3rd':'final';
   let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
+  const phases={r32:0,r16:0,qf:0,sf:0,'3rd':0,final:0};
   for(const id of ids){
     const actual = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
     if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
@@ -2665,9 +2666,11 @@ function koScoreForRepicker(rePicks){
       if(c.penOk)       penPts=1;
     }
     if(resultPts>0 || penPts>0) scored++;
-    koTotal += (resultPts + penPts) * (w[rk(id)] || 1);
+    const pts = (resultPts + penPts) * (w[rk(id)] || 1);
+    koTotal += pts;
+    phases[rk(id)] = (phases[rk(id)]||0) + pts;
   }
-  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
+  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored, phases };
 }
 
 // Build Round of 16 matchups from R32 winners
@@ -6938,8 +6941,7 @@ function renderRepickerBracket(userBracket, locked){
     {label:'R16',   ids: r16Order},
     {label:'QF',    ids: qfOrder},
     {label:'SF',    ids: sfOrder},
-    {label:'3rd',   ids: ['third-1']},
-    {label:'Final', ids: finalOrder},
+    {label:'Final / 3rd', ids: ['final-1','third-1'], labels:['🏆 Final','🥉 3rd Place']},
   ];
 
   // Get possible 3rd-place team names for a slot key like '1A'
@@ -7027,7 +7029,10 @@ function renderRepickerBracket(userBracket, locked){
   }
 
   const cols = rounds.map(r=>{
-    const cards = r.ids.map(id=>`<div class="bk-match">${bracketCard(id)}</div>`).join('');
+    const cards = r.ids.map((id,i)=>{
+      const sublabel = r.labels?.[i] ? `<div class="bk-sublabel">${r.labels[i]}</div>` : '';
+      return `<div class="bk-match">${sublabel}${bracketCard(id)}</div>`;
+    }).join('');
     return `<div class="bk-col"><div class="bk-col-label">${r.label}</div><div class="bk-matches">${cards}</div></div>`;
   }).join('');
 
@@ -7050,6 +7055,7 @@ function renderRepickerBracket(userBracket, locked){
     .bk-ph{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-faint);font-style:italic;font-size:0.75rem;}
     .bk-ph-sm{color:var(--text-faint);font-style:italic;font-size:0.75rem;text-align:center;}
     .bk-actual{font-size:0.67rem;color:var(--text-faint);margin-top:0.2rem;text-align:center;}
+    .bk-sublabel{font-size:0.65rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 0 0.2rem;text-align:center;}
     .bk-pen{font-size:0.7rem;color:#d97706;text-align:center;margin-top:0.15rem;}
     .bk-pen-label{font-size:0.68rem;color:#d97706;text-align:center;margin-top:0.25rem;margin-bottom:0.15rem;font-weight:600;}
     .bk-pen-btns{display:flex;gap:0.2rem;margin-top:0.3rem;}
@@ -7365,7 +7371,7 @@ function renderRepicker(){
 
   const pollaHeader = `
     <div style="margin-bottom:1rem;">
-      <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">🎱 Polla Corta</h1>
+      <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Corta</h1>
     </div>
     <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1.25rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border);">${pollaSubNav}</div>`;
 
@@ -7421,11 +7427,209 @@ function renderPollaResults(){
   </div>`;
 }
 function renderPollaLeaderboard(){
-  return `<div style="text-align:center;padding:3rem 1rem;color:var(--text-faint);">
-    <div style="font-size:2rem;margin-bottom:0.75rem;">🏆</div>
-    <p style="font-weight:600;color:var(--text);margin-bottom:0.5rem;">Coming soon</p>
-    <p style="font-size:0.875rem;">Polla Corta leaderboard — coming in the next update.</p>
-  </div>`;
+  const now = Date.now();
+  const allRP = S.allRePicks||{};
+  const w = reWeights();
+
+  // Phase kickoff times — column appears once this time has passed
+  const PHASE_FIRST = {
+    r32:   KICKOFFS['r32-1'],
+    r16:   KICKOFFS['r16-1'],
+    qf:    KICKOFFS['qf-1'],
+    sf:    KICKOFFS['sf-1'],
+    '3rd': KICKOFFS['3rd'],
+    final: KICKOFFS['final'],
+  };
+  const phaseStarted = k => PHASE_FIRST[k] && new Date(PHASE_FIRST[k]).getTime() <= now;
+  const PHASE_LABELS = {r32:'R32', r16:'R16', qf:'QF', sf:'SF', '3rd':'3rd', final:'F'};
+  const activePhases = ['r32','r16','qf','sf','3rd','final'].filter(phaseStarted);
+
+  // Total repicker games played
+  const reTotal = RE_SLOT_IDS.length; // 32
+  const rePlayed = RE_SLOT_IDS.filter(id=>{
+    const a = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
+    return a && a.homeScore!=null;
+  }).length;
+
+  // Build leaderboard data
+  const allPlayers = Object.keys(allRP);
+  const lb = allPlayers.map(name=>{
+    const picks = allRP[name];
+    const complete = rePickComplete(picks);
+    const score = complete ? koScoreForRepicker(picks) : null;
+    // Champion: winner of final-1 pick
+    const fp = picks?.['final-1'];
+    const champ = fp ? koAdvancer(fp.home,fp.away,fp.homeScore,fp.awayScore,fp.penWinner)||fp.home||null : null;
+    return { name, complete, score, champ,
+      total:    score?.koTotal  ?? null,
+      exact:    score?.exacts   ?? null,
+      correct:  score?.advancers ?? null,
+      phases:   score?.phases   ?? {},
+    };
+  }).sort((a,b)=>{
+    if(a.total===null && b.total===null) return a.name.localeCompare(b.name);
+    if(a.total===null) return 1;
+    if(b.total===null) return -1;
+    return b.total-a.total || b.exact-a.exact || b.correct-a.correct;
+  });
+
+  // Shared rank
+  const rankOf = e => lb.findIndex(x=>x.total===e.total && x.exact===e.exact && x.correct===e.correct);
+
+  // Most picked champion
+  const champCounts = {};
+  allPlayers.forEach(name=>{ const c=lb.find(x=>x.name===name)?.champ; if(c) champCounts[c]=(champCounts[c]||0)+1; });
+  const topChamp = Object.entries(champCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  // Stats leaders
+  const scored = lb.filter(e=>e.total!==null);
+  const leaderOf = (key,low=false) => {
+    if(!scored.length) return null;
+    const best = scored.reduce((a,b)=>(low?a[key]<b[key]:a[key]>b[key])?a:b);
+    const tied = scored.filter(x=>x[key]===best[key]);
+    return {val:best[key], names:tied.map(x=>x.name)};
+  };
+
+  const statsBoxes = [
+    {icon:'✓',  label:'Most correct', accent:'#4ade80', r:leaderOf('correct'),fmt:v=>`${v}`},
+    {icon:'🎯', label:'Most exact',   accent:'#fcd34d', r:leaderOf('exact'),  fmt:v=>`${v}`},
+    {icon:'⚽', label:'Top pick',     accent:'#38bdf8',
+      r: topChamp ? {val:topChamp[1], names:[topChamp[0]]} : null,
+      fmt:(v,names)=>`${flag(names[0])} ${esc(shortTeamName(names[0]))} · ${v} picks`},
+    {icon:'🏆', label:'Most points',  accent:'#f59e0b', r:leaderOf('total'),  fmt:v=>`${v}`},
+  ];
+
+  const statsHTML = statsBoxes.map(box=>{
+    if(!box.r) return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;opacity:0.4;"><div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">${box.label}</div><div style="font-size:1.2rem;color:var(--text-faint);">–</div></div>`;
+    const avatarNames = box.r.names.slice(0,2);
+    const avatars = avatarNames.map(n=>{ const u=S.otherUsers?.find(x=>x.name===n); const src=n===S.name?S.avatar:u?.avatar||''; return src?`<img src="${src}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid ${box.accent};" />`:`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;">🧑</span>`; }).join('');
+    const subLabel = box.r.names.length>1?`${box.r.names.length} tied`:esc(box.r.names[0]);
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;">
+      <div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">${box.label}</div>
+      <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.2rem;">${avatars}<span style="font-size:1.1rem;font-weight:700;color:${box.accent};">${box.fmt(box.r.val, box.r.names)}</span></div>
+      <div style="font-size:0.68rem;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${subLabel}</div>
+    </div>`;
+  }).join('');
+
+  // Today's Polla Corta games
+  const todayKey = new Date().toLocaleDateString('en-CA');
+  const todayGames = RE_SLOT_IDS.filter(id=>{
+    const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id] || KICKOFFS[id];
+    return iso && localDateKey(iso)===todayKey;
+  });
+  const todayHTML = todayGames.length ? `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.875rem 1rem;margin-bottom:1rem;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem;">📅 Today's Polla Corta games</div>
+      ${todayGames.map(id=>{
+        const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id] || KICKOFFS[id];
+        const actual = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
+        const t = actual?.home ? `${esc(shortTeamName(actual.home))} vs ${esc(shortTeamName(actual.away))}` : id.toUpperCase();
+        const time = iso ? fmtKickoffTime(iso) : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.25rem 0;font-size:0.82rem;color:var(--text);">
+          <span>${t}</span><span style="color:var(--text-faint);font-size:0.75rem;">${time}</span>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  // Phase columns header
+  const phaseColsHeader = activePhases.map(k=>`<th style="padding:0.5rem 0.6rem;text-align:right;white-space:nowrap;">${PHASE_LABELS[k]} <span style="font-size:0.6rem;color:var(--text-faint);">×${w[k]||1}</span></th>`).join('');
+
+  // Leaderboard table
+  const lbRows = lb.map((e,i)=>{
+    const rank = rankOf(e);
+    const medals = ['🥇','🥈','🥉'];
+    const rankDisplay = e.total!==null ? (rank<3?medals[rank]:rank+1) : '–';
+    const isSelf = e.name===S.name || e.name===S.name+' (you)';
+    const u = S.otherUsers?.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
+    const avatarSrc = isSelf?S.avatar:(u?.avatar||'');
+    const avatarHTML = avatarSrc
+      ?`<img src="${avatarSrc}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.35rem;" />`
+      :`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;margin-right:0.35rem;">🧑</span>`;
+    const champFlag = e.champ ? `<span title="${esc(e.champ)}" style="font-size:0.9rem;margin-right:0.3rem;">${flag(e.champ)}</span>` : '';
+    const phaseCells = activePhases.map(k=>`<td style="padding:0.5rem 0.6rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?e.phases[k].toFixed(1):'–'}</td>`).join('');
+    return `<tr style="border-bottom:1px solid var(--border-faint);${isSelf?'background:rgba(22,163,74,0.06);':''}">
+      <td style="padding:0.5rem 0.75rem;font-size:0.82rem;color:var(--text-faint);">${rankDisplay}</td>
+      <td style="padding:0.5rem 0.5rem;">
+        <div style="display:flex;align-items:center;">${champFlag}${avatarHTML}<span style="font-weight:500;color:var(--text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</span></div>
+      </td>
+      <td style="padding:0.5rem 0.75rem;text-align:right;font-weight:700;color:#fcd34d;font-size:0.95rem;">${e.total!==null?e.total:'–'}</td>
+      <td style="padding:0.5rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>
+      <td style="padding:0.5rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>
+      ${phaseCells}
+      <td style="padding:0.5rem 0.6rem;text-align:center;font-size:0.75rem;">${e.complete?'✓':'○'}</td>
+    </tr>`;
+  }).join('');
+
+  // Scoring rules panel
+  const scoringPanel = `
+    <details style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;margin-bottom:1.25rem;overflow:hidden;">
+      <summary style="padding:0.875rem 1rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.875rem;font-weight:600;color:var(--text-muted);list-style:none;user-select:none;">
+        <span>📋 How Polla Corta scoring works</span>
+        <span style="font-size:0.7rem;color:var(--text-faint);">tap to expand</span>
+      </summary>
+      <div style="padding:0 1rem 1rem;display:flex;flex-direction:column;gap:1rem;">
+        <div>
+          <div style="font-size:0.75rem;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem;">Scoring</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);display:flex;flex-direction:column;gap:0.25rem;">
+            <div>You must get the winning team right to earn any points. The losing team doesn't matter.</div>
+            <div><span style="color:#fcd34d;font-weight:700;">5 pts</span> — exact score (match decided in 90 mins or ET)</div>
+            <div><span style="color:#facc15;font-weight:700;">3 pts</span> — correct advancing team, all other cases</div>
+            <div><span style="color:#4ade80;font-weight:700;">+1 pt</span> — penalties bonus: match went to penalties, you predicted a draw with the correct pen winner</div>
+            <div style="margin-top:0.35rem;color:var(--text-faint);">All × round multiplier:</div>
+            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.15rem;">
+              ${['R32','R16','QF','SF','3rd','Final'].map((r,i)=>{
+                const key=['r32','r16','qf','sf','3rd','final'][i];
+                return `<span style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);border-radius:0.3rem;padding:0.15rem 0.45rem;font-size:0.75rem;color:#a78bfa;white-space:nowrap;">${r} ×${w[key]||1}</span>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.75rem;font-weight:700;color:#38bdf8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem;">Tiebreakers</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);display:flex;flex-direction:column;gap:0.2rem;">
+            <div>1. Total points</div><div>2. Most exact scores</div><div>3. Most correct results</div>
+            <div style="color:var(--text-faint);font-style:italic;">Still tied → shared rank</div>
+          </div>
+        </div>
+      </div>
+    </details>`;
+
+  return `
+    <!-- Progress bar -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.875rem 1rem;margin-bottom:1.25rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+        <span style="font-size:0.8rem;color:var(--text-muted);">Tournament progress</span>
+        <span style="font-size:0.8rem;color:var(--text-faint);">${rePlayed}/${reTotal}</span>
+      </div>
+      <div style="height:6px;background:var(--bg-input);border-radius:9999px;overflow:hidden;">
+        <div style="height:100%;background:#16a34a;width:${reTotal>0?(rePlayed/reTotal*100).toFixed(1):0}%;transition:width 0.4s;"></div>
+      </div>
+    </div>
+
+    ${scoringPanel}
+
+    <!-- Stats bar -->
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;">${statsHTML}</div>
+
+    ${todayHTML}
+
+    <!-- Leaderboard table -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+          <thead><tr style="color:var(--text-faint);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">
+            <th style="padding:0.5rem 0.75rem;text-align:left;width:2rem;">#</th>
+            <th style="padding:0.5rem 0.5rem;text-align:left;">Name</th>
+            <th style="padding:0.5rem 0.75rem;text-align:right;">Total</th>
+            <th style="padding:0.5rem 0.6rem;text-align:right;">Exact</th>
+            <th style="padding:0.5rem 0.6rem;text-align:right;">Result✓</th>
+            ${phaseColsHeader}
+            <th style="padding:0.5rem 0.6rem;text-align:center;" title="Submitted complete bracket">✓</th>
+          </tr></thead>
+          <tbody>${lbRows}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
