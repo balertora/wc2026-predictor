@@ -5011,7 +5011,6 @@ function renderCompare(){
         ${thSort('total',      'Total',        'Group game points (3 correct / 5 exact) + KO points + group standing position bonus')}
         ${thSort('exact',      'Exact',        'Exact scores predicted across group and KO games — first tiebreaker')}
         ${thSort('correct',    'Result✓',      'Correct results (W/D/L) across group and KO games — second tiebreaker')}
-        ${!allGroupsDone?thSort('projPosPts', '~Standings', 'Projected standing position bonus points on track across all started groups (1 pt per correct position) — estimate, updates as games are played'):''}
         ${thSort('groupPosPts','Standings',    'Points earned for correctly predicting final group standing positions (1 pt each) — shown once at least one group is complete')}
       </tr></thead>
       <tbody>${lb.map((e,i)=>{
@@ -5035,7 +5034,6 @@ function renderCompare(){
           <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#4ade80;">${e.exact}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#facc15;">${e.correct}</td>
-          ${!allGroupsDone?`<td style="padding:0.75rem 1rem;text-align:right;font-style:italic;color:#64748b;">${e.projPosPts!==null?'~'+e.projPosPts:'–'}</td>`:''}
           <td style="padding:0.75rem 1rem;text-align:right;color:#94a3b8;">${e.groupPosPts!==null?e.groupPosPts:'–'}</td>
         </tr>`;}). join('')}
       </tbody></table></div>`;
@@ -5228,7 +5226,7 @@ function renderCompare(){
       const boxes=[
         {icon:'✓',  label:'Most correct',                                        accent:'#4ade80', r:leader(lb,'correct',false),                        fmt:v=>`${v}`},
         {icon:'🎯', label:'Most exact',                                           accent:'#fcd34d', r:leader(lb,'exact',false),                          fmt:v=>`${v}`},
-        {icon:'📋', label:allGroupsDone?'Most standings':'Most ~standings',       accent:'#94a3b8', r:leader(lb,allGroupsDone?'groupPosPts':'projPosPts',false), fmt:v=>`${allGroupsDone?'':' ~'}${v}`},
+        {icon:'📋', label:'Most standings',  accent:'#94a3b8', r:leader(lb,'groupPosPts',false), fmt:v=>`${v}`},
         {icon:'🏆', label:'Total score',                                          accent:'#38bdf8', r:leader(lb,'total',false),                          fmt:v=>`${v}`},
       ];
 
@@ -5805,11 +5803,11 @@ function renderGroupsTab(){
       });
 
       const metrics=[
-        {label:'Correct',   key:'correct',   lowerBetter:false, den:()=>completed.length,  tip:'Games where result (W/D/L) was predicted correctly (3 pts each)'},
-        {label:'Exact',     key:'exact',     lowerBetter:false, den:()=>completed.length,  tip:'Games where exact score was predicted (5 pts each)'},
-        {label:'Projected', key:'projected', lowerBetter:false, den:()=>!allDone?4:null,   tip:'Positions on track based on current standings — updates as games are played. Disappears once the group is complete and final Standings are awarded.', prefix:'~'},
-        {label:'Standings', key:'positions', lowerBetter:false, den:()=>allDone?4:null,    tip:'How many of the 4 final group positions each person predicted correctly (1 pt each — shown once all group games are played)'},
-        {label:'Points',    key:'points',    lowerBetter:false, den:()=>null,              tip:'Total group points: 3 × correct results + 2 × exact bonus + 1 × correct standings positions (shown once all group games are played)'},
+        {label:'Correct',   key:'correct',   lowerBetter:false, den:()=>completed.length,           tip:'Games where result (W/D/L) was predicted correctly (3 pts each)'},
+        {label:'Exact',     key:'exact',     lowerBetter:false, den:()=>completed.length,           tip:'Games where exact score was predicted (5 pts each)'},
+        ...(!allDone && completed.length>0 ? [{label:'Projected', key:'projected', lowerBetter:false, den:()=>4, tip:'Positions on track based on current standings — updates as games are played.', prefix:'~'}] : []),
+        ...(allDone ? [{label:'Standings', key:'positions', lowerBetter:false, den:()=>4,           tip:'How many of the 4 final group positions each person predicted correctly (1 pt each)'}] : []),
+        ...(allDone ? [{label:'Points',    key:'points',    lowerBetter:false, den:()=>null,        tip:'Total group points: 3 × correct results + 2 × exact bonus + 1 × correct standings positions'}] : []),
       ];
 
       const colHeaders=stats.map(s=>`<th style="padding:${_rp};text-align:center;font-size:0.7rem;color:#64748b;font-weight:500;max-width:5rem;" title="${esc(s.name)}">${esc(abbrevName(s.name))}</th>`).join('');
@@ -6942,10 +6940,16 @@ function renderRepicker(){
       const awayStr = awayKnown
         ? `<span style="font-weight:600;color:var(--text-strong);">${flag(away)} ${esc(shortTeamName(away))}</span>`
         : `<span style="color:var(--text-faint);font-style:italic;font-size:0.8rem;">${esc(away||'TBD')}</span>`;
-      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;opacity:0.6;">
-        <div style="flex:1;text-align:right;">${homeStr}</div>
-        <div style="color:var(--text-faint);font-size:0.75rem;padding:0 0.5rem;text-align:center;">🔒<br/>vs</div>
-        <div style="flex:1;">${awayStr}</div>
+      const kickoff = KICKOFFS[id] ? localTimeStr(KICKOFFS[id]) : '';
+      const city = KO_VENUES[id] || '';
+      const dateStr = KICKOFFS[id] ? new Date(KICKOFFS[id]).toLocaleDateString([],{month:'short',day:'numeric'}) : '';
+      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.6rem 1rem;margin-bottom:0.5rem;opacity:0.65;">
+        ${dateStr||city?`<div style="font-size:0.68rem;color:var(--text-faint);margin-bottom:0.4rem;">📅 ${dateStr}${kickoff?' · ⏰ '+kickoff:''}${city?' · 📍 '+city:''}</div>`:''}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
+          <div style="flex:1;text-align:right;">${homeStr}</div>
+          <div style="color:var(--text-faint);font-size:0.75rem;padding:0 0.5rem;text-align:center;">🔒<br/>vs</div>
+          <div style="flex:1;">${awayStr}</div>
+        </div>
       </div>`;
     }
 
@@ -6987,7 +6991,13 @@ function renderRepicker(){
         </div>
       </div>` : '';
 
+    const kickoff = KICKOFFS[id] ? localTimeStr(KICKOFFS[id]) : '';
+    const city = KO_VENUES[id] || '';
+    const dateStr = KICKOFFS[id] ? new Date(KICKOFFS[id]).toLocaleDateString([],{month:'short',day:'numeric'}) : '';
+    const matchMeta = (dateStr||city) ? `<div style="font-size:0.68rem;color:#64748b;margin-bottom:0.5rem;">📅 ${dateStr}${kickoff?' · ⏰ '+kickoff:''}${city?' · 📍 '+city:''}</div>` : '';
+
     return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.75rem;margin-bottom:0.5rem;">
+      ${matchMeta}
       <div style="display:flex;align-items:center;gap:0.6rem;">
         <div style="flex:1;text-align:right;font-size:0.85rem;font-weight:500;">${teamSpan(home)}</div>
         ${reScoreCell(id,'h',hv,locked,false)}
