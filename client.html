@@ -2615,6 +2615,7 @@ function koRoundKey(id){
 function koScoreFor(kPreds){
   const w = koWeights();
   let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
+  const phases={r32:0,r16:0,qf:0,sf:0,'3rd':0,final:0};
   for(const id of Object.keys(KO_VENUES)){
     const actual = S.kResults[id];
     if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
@@ -2626,9 +2627,12 @@ function koScoreFor(kPreds){
       if(c.penOk)       penPts=1;
     }
     if(resultPts>0 || penPts>0) scored++;
-    koTotal += (resultPts + penPts) * (w[koRoundKey(id)] || 1);
+    const rk = koRoundKey(id);
+    const pts = (resultPts + penPts) * (w[rk] || 1);
+    koTotal += pts;
+    if(phases[rk]!==undefined) phases[rk] = (phases[rk]||0) + pts;
   }
-  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored };
+  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored, phases };
 }
 
 // The 31 knockout slots a complete Repicker bracket covers.
@@ -4852,8 +4856,8 @@ function renderResults(){
       const aliveCells = koParticipants.map(p=>{
         const cnt = aliveCount(p, roundSlots);
         const pct = aliveMax > 0 ? cnt/aliveMax : 0;
-        const col = pct===1?'#86efac':pct>=0.5?'#fde68a':'#fca5a5';
-        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.78rem;font-weight:500;color:${col};">${cnt}/${aliveMax}</td>`;
+        const col = pct===1?'#4ade80':pct>=0.5?'#fbbf24':'#f87171';
+        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
       }).join('');
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
       koBody += `<tr style="border-bottom:2px solid rgba(99,102,241,0.3);">
@@ -4957,7 +4961,9 @@ function renderResults(){
     </div>
     ${koSection}
     <div style="margin-top:1.75rem;">
-      <div style="overflow:auto;max-height:calc(100vh - 5rem);background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+      <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.75rem;">📊 Group Stage Results</h2>
+      ${liveOnly && liveGames.length===0 ? `<div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">No live games right now.</div>` : `
+      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
           <thead>${headerRow}</thead>
           <tbody>${rows}</tbody>
@@ -4966,7 +4972,7 @@ function renderResults(){
       <div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
         Under each fixture: <b>crowd odds</b> (<span style="color:#60a5fa;">H</span>/<span style="color:#94a3b8;">draw</span>/<span style="color:#fb923c;">A</span>) from everyone's picks, weighted by how firm each scoreline is ·
         the <span style="color:#a78bfa;">violet bar</span> behind a score shows how far that pick is from the crowd's average — wider = more contrarian.
-      </div>
+      </div>`}
     </div>
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
   </div>`;
@@ -5257,7 +5263,7 @@ function renderCompare(){
             exact,correct,scored,bad,weighted,surprise:+surprise.toFixed(1),
             groupPosPts: anyGroupDone    ? groupPosPts : null,
             projPosPts:  anyGroupStarted ? projPosPts  : null,
-            champion,
+            champion, ko,
             predCount:Object.keys(p.gPreds).length};
   }).sort((a,b)=>{
     const key=S.lbSort, dir=S.lbSortDir;
@@ -5290,6 +5296,21 @@ function renderCompare(){
       ${label}${sortInd(key)}</th>`;
   };
 
+  const koW = koWeights();
+  const KO_PHASE_KEYS = ['r32','r16','qf','sf','3rd','final'];
+  const KO_PHASE_LABELS = {r32:'R32',r16:'R16',qf:'QF',sf:'SF','3rd':'3rd',final:'F'};
+  const KO_PHASE_FIRST = {
+    r32:   KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity,
+    r16:   KICKOFFS['r16-1'] ? new Date(KICKOFFS['r16-1']).getTime() : Infinity,
+    qf:    KICKOFFS['qf-1']  ? new Date(KICKOFFS['qf-1']).getTime()  : Infinity,
+    sf:    KICKOFFS['sf-1']  ? new Date(KICKOFFS['sf-1']).getTime()  : Infinity,
+    '3rd': KICKOFFS['3rd']   ? new Date(KICKOFFS['3rd']).getTime()   : Infinity,
+    final: KICKOFFS['final'] ? new Date(KICKOFFS['final']).getTime() : Infinity,
+  };
+  const now2 = Date.now();
+  const activeKoPhases = KO_PHASE_KEYS.filter(k => KO_PHASE_FIRST[k] <= now2);
+  const anyGroupDone2 = GROUP_GAMES.some(g=>S.gResults[g.id]);
+
   const lbHTML=lb.length===0
     ?`<div style="text-align:center;padding:3rem 1rem;color:#64748b;">No predictions loaded. <button onclick="showView('predict')" style="background:none;border:none;color:#4ade80;cursor:pointer;">Make yours →</button></div>`
     :`<div style="overflow-x:auto;">
@@ -5297,13 +5318,14 @@ function renderCompare(){
       <thead><tr style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid rgba(255,255,255,0.08);">
         <th style="padding:0.75rem 1rem;text-align:left;width:2rem;">#</th>
         <th style="padding:0.75rem 1rem;text-align:left;">Name</th>
-        ${thSort('total',      'Total',        'Group game points (3 correct / 5 exact) + KO points + group standing position bonus')}
-        ${thSort('exact',      'Exact',        'Exact scores predicted across group and KO games — first tiebreaker')}
-        ${thSort('correct',    'Result✓',      'Correct results (W/D/L) across group and KO games — second tiebreaker')}
-        ${thSort('groupPosPts','Standings',    'Points earned for correctly predicting final group standing positions (1 pt each) — shown once at least one group is complete')}
+        ${thSort('total',      'Total',        'Group game points + KO points + standing position bonus')}
+        ${thSort('exact',      'Exact',        'Exact scores predicted — first tiebreaker')}
+        ${thSort('correct',    'Result✓',      'Correct results — second tiebreaker')}
+        ${anyGroupDone2 ? thSort('groupTotal', 'Group Stage', 'Points from group stage predictions (excl. standings)') : ''}
+        ${thSort('groupPosPts','Standings',    'Points for correctly predicting final group standing positions')}
+        ${activeKoPhases.map(k=>`<th style="padding:0.75rem 0.5rem;text-align:right;white-space:nowrap;color:#64748b;font-size:0.75rem;">${KO_PHASE_LABELS[k]}<span style="font-size:0.6rem;opacity:0.6;"> ×${koW[k]||1}</span></th>`).join('')}
       </tr></thead>
       <tbody>${lb.map((e,i)=>{
-        // Compute shared rank: find first player with same total+exact+correct
         const rank = lb.findIndex(x=>x.total===e.total && x.exact===e.exact && x.correct===e.correct);
         const rankDisplay = rank<3 ? MEDALS[rank] : rank+1;
         const imp=S.otherUsers.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
@@ -5313,6 +5335,7 @@ function renderCompare(){
           ?`<img src="${avatarSrc}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
           :`<span style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.07);display:inline-flex;align-items:center;justify-content:center;font-size:0.75rem;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🧑</span>`;
         const champFlag = e.champion ? `<span title="${esc(e.champion)}" style="font-size:1rem;margin-right:0.35rem;flex-shrink:0;">${flag(e.champion)}</span>` : '';
+        const phaseCells = activeKoPhases.map(k=>`<td style="padding:0.75rem 0.5rem;text-align:right;color:#94a3b8;font-size:0.8rem;">${e.ko?.phases?.[k]!=null?Math.round(e.ko.phases[k]):'–'}</td>`).join('');
         return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
           <td style="padding:0.75rem 1rem;">${rankDisplay}</td>
@@ -5320,10 +5343,12 @@ function renderCompare(){
             <div style="display:flex;align-items:center;font-weight:500;color:white;">${champFlag}${avatarHTML}${esc(e.name)}</div>
             ${maxPts>0?`<div style="margin-top:3px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;width:7rem;overflow:hidden;"><div style="height:100%;background:#16a34a;width:${Math.max(0,Math.min(100,e.total/maxPts*100)).toFixed(1)}%;"></div></div>`:''}
           </td>
-          <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total}</td>
+          <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${Math.round(e.total)}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#4ade80;">${e.exact}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#facc15;">${e.correct}</td>
+          ${anyGroupDone2 ? `<td style="padding:0.75rem 0.5rem;text-align:right;color:#94a3b8;">${Math.round(e.groupTotal)}</td>` : ''}
           <td style="padding:0.75rem 1rem;text-align:right;color:#94a3b8;">${e.groupPosPts!==null?e.groupPosPts:'–'}</td>
+          ${phaseCells}
         </tr>`;}). join('')}
       </tbody></table></div>`;
 
@@ -5557,7 +5582,17 @@ function renderCompare(){
 
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">${lbHTML}</div>
 
-    ${completed.length>0?`<h2 style="font-size:1.125rem;font-weight:700;color:white;margin-bottom:0.75rem;">Game breakdown</h2>${resultCards}`
+    ${completed.length>0?`
+    <details style="margin-bottom:0.75rem;">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:0.875rem 1rem;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
+        <span>📋 Game breakdown</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${completed.length} games · click to expand</span>
+      </summary>
+      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:0.75rem;background:#0d1f35;">
+        ${resultCards.replace(/<div style="background:#112a45;border:1px solid rgba\(255,255,255,0\.07\);border-radius:0\.75rem;overflow:hidden;margin-bottom:0\.625rem;">/g,
+          '<details style="margin-bottom:0.5rem;"><summary style="cursor:pointer;list-style:none;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;user-select:none;">').replace(/<\/div>\s*$/g,'</details>')}
+      </div>
+    </details>`
       :`<div style="text-align:center;padding:2.5rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">⏳ Game results appear here once entered in Admin.</div>`}
   `;
 }
@@ -7723,8 +7758,12 @@ function renderPollapicks(){
   }
   const viewing = S.pollaPicksView;
 
-  // Player selector buttons
+  // Player selector buttons — Real bracket first, then players
   const selectorBtns = [
+    ...(showReal ? [`<button onclick="S.pollaPicksView='real';render()" style="display:flex;flex-direction:column;align-items:center;gap:0.2rem;padding:0.4rem 0.6rem;border-radius:0.5rem;cursor:pointer;border:1px solid ${viewing==='real'?'rgba(251,191,36,0.6)':'var(--border)'};background:${viewing==='real'?'rgba(251,191,36,0.1)':'transparent'};">
+      <span style="font-size:1.1rem;">🏆</span>
+      <span style="font-size:0.6rem;color:${viewing==='real'?'#fbbf24':'var(--text-faint)'};white-space:nowrap;">Real</span>
+    </button>`] : []),
     ...playerNames.map(name=>{
       const isSelf = name===myName;
       const u = S.otherUsers?.find(x=>x.name===name);
@@ -7738,10 +7777,6 @@ function renderPollapicks(){
         <span style="font-size:0.6rem;color:${active?(isSelf?'#4ade80':'#a5b4fc'):'var(--text-faint)'};white-space:nowrap;max-width:3.5rem;overflow:hidden;text-overflow:ellipsis;">${isSelf?'You':esc(abbrevName(name))}</span>
       </button>`;
     }),
-    ...(showReal ? [`<button onclick="S.pollaPicksView='real';render()" style="display:flex;flex-direction:column;align-items:center;gap:0.2rem;padding:0.4rem 0.6rem;border-radius:0.5rem;cursor:pointer;border:1px solid ${viewing==='real'?'rgba(251,191,36,0.6)':'var(--border)'};background:${viewing==='real'?'rgba(251,191,36,0.1)':'transparent'};">
-      <span style="font-size:1.1rem;">🏆</span>
-      <span style="font-size:0.6rem;color:${viewing==='real'?'#fbbf24':'var(--text-faint)'};white-space:nowrap;">Real</span>
-    </button>`] : []),
   ].join('');
 
   const hiddenMsg = !r32Kicked ? `
@@ -7771,7 +7806,7 @@ function renderPollapicks(){
     if(S.kResults['third']?.home) realBracket['third-1'] = { home:S.kResults['third'].home, away:S.kResults['third'].away };
 
     return `${hiddenMsg}
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">${selectorBtns}</div>
+      <div style="position:sticky;top:6.5rem;z-index:9;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;flex-wrap:nowrap;overflow-x:auto;margin-bottom:0.75rem;">${selectorBtns}</div>
       <p style="font-size:0.8rem;color:var(--text-faint);margin-bottom:0.75rem;">Real bracket — actual results as they come in.</p>
       ${renderRepickerBracket(realBracket, true)}`;
   }
@@ -7939,7 +7974,7 @@ function renderPollapicks(){
   </div>` : '';
 
   return `${hiddenMsg}
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">${selectorBtns}</div>
+    <div style="position:sticky;top:6.5rem;z-index:9;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;flex-wrap:nowrap;overflow-x:auto;margin-bottom:0.75rem;">${selectorBtns}</div>
     <p style="font-size:0.8rem;color:var(--text-faint);margin-bottom:0.75rem;">${viewingName}</p>
     ${renderColoredBracket(viewBracket, picks)}
     ${colorLegend}`;
@@ -8079,6 +8114,15 @@ function renderPollaResults(){
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
 
+  const pcLiveOnly = !!S.pcResultsLiveOnly;
+
+  // Live score display for a slot
+  const getLiveScore = id => {
+    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const live = S.gLive?.[actualId];
+    return live && live.hs!=null ? live : null;
+  };
+
   const hiddenMsg = (!r32Kicked && !_isAdmin) ? `
     <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#7c3aed;line-height:1.5;">
       👀 Other players' picks will be revealed when R32 kicks off${KICKOFFS['r32-1']?' on '+_koDate(KICKOFFS['r32-1']).toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'}):'.'}.
@@ -8087,21 +8131,62 @@ function renderPollaResults(){
       👁 Admin view — showing all picks before R32 kicks off.
     </div>` : '';
 
+  // Filter to live only if toggled
+  const liveMatchIds = pcLiveOnly ? matchIds.filter(id=>getLiveScore(id)) : matchIds;
+
   const legend = `<div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
     Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct advancing team · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · <span style="color:#fbbf24;">P✓</span> = penalty winner correct</div>`;
+
+  const liveBtn = `<button onclick="S.pcResultsLiveOnly=!S.pcResultsLiveOnly;render()" style="padding:0.35rem 0.75rem;border-radius:0.4rem;font-size:0.78rem;cursor:pointer;border:1px solid ${pcLiveOnly?'rgba(239,68,68,0.6)':'rgba(255,255,255,0.15)'};background:${pcLiveOnly?'rgba(239,68,68,0.15)':'rgba(255,255,255,0.05)'};color:${pcLiveOnly?'#f87171':'#94a3b8'};">🔴 Live only</button>`;
 
   return `
     ${hiddenMsg}
     <div style="position:relative;left:50%;transform:translateX(-50%);width:96vw;max-width:96rem;box-sizing:border-box;">
-      <div style="overflow:auto;max-height:calc(100vh - 8rem);background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem;">${liveBtn}</div>
+      ${pcLiveOnly && liveMatchIds.length===0 ? `<div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">No live Polla Corta games right now.</div>` : `
+      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
           <thead><tr>
             <th style="${TH_GAME}">Match</th>
             ${players.map(playerHeader).join('')}
           </tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>${liveMatchIds.map(id=>{
+            const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+            const actual = S.kResults[actualId];
+            const live = getLiveScore(id);
+            const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
+            const phase = phaseOf(id);
+            const phaseSep = (() => { /* phase separator handled in original rows var */ return ''; })();
+            const realHome = actual?.home || (id.startsWith('r32') && repickerTeamKnown(r32Teams[id]?.home) ? r32Teams[id].home : null);
+            const realAway = actual?.away || (id.startsWith('r32') && repickerTeamKnown(r32Teams[id]?.away) ? r32Teams[id].away : null);
+            let scoreStr2='';
+            if(live){
+              scoreStr2 = '<span style="color:#f87171;font-family:monospace;font-weight:800;">'+live.hs+'–'+live.as+'</span><span style="color:#f87171;font-size:0.6rem;font-weight:700;margin-left:0.25rem;animation:pulse 1.2s infinite;">● LIVE</span>';
+            } else if(actual?.homeScore!=null){
+              scoreStr2 = '<span style="color:#fcd34d;font-family:monospace;font-weight:800;">'+actual.homeScore+'–'+actual.awayScore+'</span>';
+              scoreStr2 += (actual.homeScore===actual.awayScore&&actual.penWinner)?'<span style="color:#94a3b8;font-size:0.6rem;margin-left:0.25rem;">pens: '+esc(shortTeamName(actual.penWinner))+'</span>':'<span style="color:#475569;font-size:0.6rem;margin-left:0.2rem;">FT</span>';
+            } else if(iso){
+              const d2=_koDate(iso);
+              scoreStr2='<span style="color:#475569;font-size:0.7rem;">'+d2.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' · '+fmtKickoffTime(iso)+'</span>';
+            }
+            const gameCell2 = !realHome
+              ? `<td style="${TD_GAME}color:#475569;">?</td>`
+              : `<td style="${TD_GAME}font-size:0.82rem;"><span style="color:white;font-weight:500;">${teamSpan(realHome)}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span style="color:white;font-weight:500;">${teamSpan(realAway||'?',true)}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
+            const picks2 = players.map(p=>{
+              let playerSlotTeams;
+              if(id.startsWith('r32')){
+                playerSlotTeams = { home: realHome||'?', away: realAway||'?' };
+              } else {
+                const pBracket = repickerUserBracket(p.picks, r32Teams);
+                const pSlot = pBracket[id]||{};
+                playerSlotTeams = { home: actual?.home||(repickerTeamKnown(pSlot.home)?pSlot.home:null)||'?', away: actual?.away||(repickerTeamKnown(pSlot.away)?pSlot.away:null)||'?' };
+              }
+              return pickCell(p.picks[id], actual, playerSlotTeams);
+            }).join('');
+            return `<tr>${gameCell2}${picks2}</tr>`;
+          }).join('')}</tbody>
         </table>
-      </div>
+      </div>`}
       ${legend}
     </div>`;
 }
@@ -8157,10 +8242,11 @@ function renderPollaLeaderboard(){
   // Shared rank
   const rankOf = e => lb.findIndex(x=>x.total===e.total && x.exact===e.exact && x.correct===e.correct);
 
-  // Most picked champion
+  // Most picked champion — top 3 with medal tiers
   const champCounts = {};
   allPlayers.forEach(name=>{ const c=lb.find(x=>x.name===name)?.champ; if(c) champCounts[c]=(champCounts[c]||0)+1; });
-  const topChamp = Object.entries(champCounts).sort((a,b)=>b[1]-a[1])[0];
+  const topChamps = Object.entries(champCounts).sort((a,b)=>b[1]-a[1]);
+  const topChampDisplay = topChamps.slice(0,3).map(([team,cnt],i)=>`${'🥇🥈🥉'[i]} ${flag(team)} ${esc(shortTeamName(team))} · ${cnt}`).join('<br>') || '–';
 
   // Stats leaders
   const scored = lb.filter(e=>e.total!==null);
@@ -8175,8 +8261,8 @@ function renderPollaLeaderboard(){
     {icon:'✓',  label:'Most correct', accent:'#4ade80', r:leaderOf('correct'),fmt:v=>`${v}`},
     {icon:'🎯', label:'Most exact',   accent:'#fcd34d', r:leaderOf('exact'),  fmt:v=>`${v}`},
     {icon:'⚽', label:'Top pick',     accent:'#38bdf8',
-      r: topChamp ? {val:topChamp[1], names:[topChamp[0]]} : null,
-      fmt:(v,names)=>`${flag(names[0])} ${esc(shortTeamName(names[0]))} · ${v} picks`},
+      r: topChamps.length ? {val:topChamps[0][1], names:[topChamps[0][0]]} : null,
+      fmt:(v,names)=>topChampDisplay},
     {icon:'🏆', label:'Most points',  accent:'#f59e0b', r:leaderOf('total'),  fmt:v=>`${v}`},
   ];
 
@@ -8224,7 +8310,7 @@ function renderPollaLeaderboard(){
     const champFlag = (r32Kicked && e.champ) ? `<span title="${esc(e.champ)}" style="font-size:0.9rem;margin-right:0.3rem;">${flag(e.champ)}</span>` : '';
     const phaseCells = activePhases.map(k=>`<td style="padding:0.5rem 0.6rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?e.phases[k].toFixed(1):'–'}</td>`).join('');
     const scoringCells = r32Kicked
-      ? `<td style="padding:0.5rem 0.75rem;text-align:right;font-weight:700;color:#fcd34d;font-size:0.95rem;">${e.total!==null?e.total:'–'}</td>`
+      ? `<td style="padding:0.5rem 0.75rem;text-align:right;font-weight:700;color:#fcd34d;font-size:0.95rem;">${e.total!==null?Math.round(e.total):'–'}</td>`
         +`<td style="padding:0.5rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>`
         +`<td style="padding:0.5rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>`
         +phaseCells
@@ -8235,7 +8321,6 @@ function renderPollaLeaderboard(){
         <div style="display:flex;align-items:center;">${champFlag}${avatarHTML}<span style="font-weight:500;color:var(--text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</span></div>
       </td>
       ${scoringCells}
-      <td style="padding:0.5rem 0.6rem;text-align:center;font-size:0.75rem;">${e.complete?'✓':'○'}</td>
     </tr>`;
   }).join('');
 
@@ -8303,7 +8388,6 @@ function renderPollaLeaderboard(){
             <th style="padding:0.5rem 0.6rem;text-align:right;">Exact</th>
             <th style="padding:0.5rem 0.6rem;text-align:right;">Result✓</th>
             ${phaseColsHeader}` : ''}
-            <th style="padding:0.5rem 0.6rem;text-align:center;" title="Submitted complete bracket">✓</th>
           </tr></thead>
           <tbody>${lbRows}</tbody>
         </table>
