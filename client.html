@@ -5611,41 +5611,40 @@ function renderAdmin(){
       </div>`;
   }).join('');
 
+  const detailsStyle = 'margin-bottom:0.75rem;';
+  const summaryStyle = 'cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;';
+  const bodyStyle = 'border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;';
+
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
       <div>
-        <h1 style="font-size:1.5rem;font-weight:700;color:white;">Admin — Results</h1>
+        <h1 style="font-size:1.5rem;font-weight:700;color:white;">Admin</h1>
         <p style="color:#64748b;font-size:0.875rem;">${done}/${GROUP_GAMES.length} group results entered</p>
       </div>
       <button class="btn-s" onclick="copyResults()" style="font-size:0.875rem;padding:0.5rem 1rem;">📋 Export results</button>
     </div>
 
-    <!-- Hub connection -->
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-bottom:1rem;">
-      <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.625rem;">
-        <span style="font-size:1.2rem;">🖥️</span>
-        <div>
-          <h2 style="font-weight:600;color:white;margin-bottom:0.1rem;font-size:0.95rem;">Railway server</h2>
-          <p style="color:#64748b;font-size:0.78rem;margin:0;">Results auto-update via ESPN every 60s (30s during live games). State broadcasts to all clients via WebSocket.</p>
+    <!-- Server status -->
+    <details style="${detailsStyle}" open>
+      <summary style="${summaryStyle}">
+        <span>🖥️ Railway server</span>
+        <span style="font-size:0.72rem;color:#4ade80;font-weight:400;">⚡ Connected</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <div style="background:#0a1628;border:1px solid rgba(74,222,128,0.2);border-radius:0.5rem;padding:0.5rem 0.875rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+          <span style="font-family:monospace;font-size:0.75rem;color:#4ade80;">⚡ Connected · ${window.location.host}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
+          <div>
+            <p style="color:#64748b;font-size:0.78rem;margin:0;">Results auto-update via ESPN every 60s (30s during live games).</p>
+            ${(()=>{ const t=localStorage.getItem('wc26_espn_fetched'); return t?`<p style="font-size:0.72rem;color:#475569;margin-top:0.25rem;margin-bottom:0;">Last fetched: ${new Date(t).toLocaleString()}</p>`:''; })()}
+          </div>
+          <button class="btn-g" id="fetch-btn" onclick="fetchLiveScores()" style="font-size:0.875rem;padding:0.5rem 1rem;white-space:nowrap;">🔄 Fetch scores</button>
         </div>
       </div>
-      <div style="background:#0a1628;border:1px solid rgba(74,222,128,0.2);border-radius:0.5rem;padding:0.5rem 0.875rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-        <span style="font-family:monospace;font-size:0.75rem;color:#4ade80;">⚡ Connected · ${window.location.host}</span>
-      </div>
-    </div>
+    </details>
 
-    <!-- ESPN live scores (manual fetch still available for admin testing) -->
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-bottom:1rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
-        <div>
-          <h2 style="font-weight:600;color:white;margin-bottom:0.2rem;font-size:0.95rem;">📡 ESPN live scores</h2>
-          <p style="color:#64748b;font-size:0.78rem;margin:0;">Server polls ESPN automatically. Manual fetch here is for testing only.</p>
-        </div>
-        <button class="btn-g" id="fetch-btn" onclick="fetchLiveScores()" style="font-size:0.875rem;padding:0.5rem 1rem;white-space:nowrap;">🔄 Fetch scores</button>
-      </div>
-      ${(()=>{ const t=localStorage.getItem('wc26_espn_fetched'); return t?`<p style="font-size:0.72rem;color:#475569;margin-top:0.5rem;margin-bottom:0;">Last fetched: ${new Date(t).toLocaleString()}</p>`:''; })()}
-    </div>
-
+    <!-- Results -->
     ${(()=>{
       const enteredGames = GROUP_GAMES.filter(g=>S.gResults[g.id])
         .sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id);
@@ -5663,149 +5662,146 @@ function renderAdmin(){
         </div>`;
       }).join('');
       return `
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem;">
-        <h2 style="font-weight:600;color:white;font-size:0.95rem;margin:0;">Results</h2>
-        <span style="font-size:0.78rem;color:#64748b;">${enteredGames.length} of ${GROUP_GAMES.length} entered</span>
-      </div>
-      <div style="display:flex;gap:0.5rem;margin-bottom:${enteredGames.length>0?'1rem':'0'};">
-        <input class="text-in" type="text" id="rimport-in" placeholder="Paste export code to import results…" style="border-radius:0.5rem;" />
-        <button class="btn-g" onclick="doImportResults()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
-      </div>
-      ${enteredGames.length>0?`
-        <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:0.75rem;">
-          <p style="font-size:0.75rem;color:#475569;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em;">Entered results</p>
-          <div>${resultRows}</div>
-        </div>`:``}
-    </div>`;
-    })()}
-
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Participants</h2>
-      <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.5rem;">Remove a user and <b>all</b> of their picks. <span style="color:#f87171;">Permanent</span> and syncs to everyone. To protect real players, deleting anyone with picks requires typing their name to confirm.</p>
-      ${[{name:S.name,gPreds:S.gPreds,kPreds:S.kPreds,_self:true}, ...S.otherUsers].map(p=>{
-        const gC=Object.keys(p.gPreds||{}).length, kC=Object.keys(p.kPreds||{}).length;
-        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;font-size:0.875rem;background:#0a1628;padding:0.5rem 0.75rem;border-radius:0.5rem;margin-top:0.5rem;">
-          <span style="color:#cbd5e1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}${p._self?' <span style="color:#4ade80;">(you)</span>':''}
-            <span style="color:#64748b;font-size:0.75rem;">· ${gC} group · ${kC} KO</span></span>
-          ${p._self
-            ? `<span style="color:#475569;font-size:0.7rem;flex-shrink:0;">admin · protected</span>`
-            : `<button onclick="deleteUser('${_jss(p.name)}')" style="background:rgba(153,27,27,0.18);border:1px solid rgba(153,27,27,0.3);color:#f87171;cursor:pointer;font-size:0.72rem;border-radius:0.35rem;padding:0.25rem 0.6rem;flex-shrink:0;">Delete</button>`}
-        </div>`;
-      }).join('')}
-      <details style="margin-top:0.875rem;">
-        <summary style="cursor:pointer;font-size:0.78rem;color:#64748b;user-select:none;">Import a prediction code (advanced)</summary>
-        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-          <input class="text-in" type="text" id="import-in" placeholder="Paste prediction code…" style="border-radius:0.5rem;" />
-          <button class="btn-g" onclick="doImport()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
-        </div>
-      </details>
-    </div>
-
-    ${(()=>{const W=getWeights();return`
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Weighted score formula</h2>
-      <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.875rem;">Used in the leaderboard "Weighted score" leader box on Compare.</p>
-      <div style="font-size:0.875rem;color:#94a3b8;margin-bottom:0.75rem;font-family:monospace;background:#0a1628;padding:0.5rem 0.75rem;border-radius:0.5rem;">
-        A × correct + B × exact − C × PAB
-      </div>
-      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
-        <label style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.8rem;color:#64748b;">
-          A (correct)
-          <input id="w-a" type="number" min="0" step="0.5" value="${W.a}" class="score-in" style="width:5rem;text-align:center;" />
-        </label>
-        <label style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.8rem;color:#64748b;">
-          B (exact)
-          <input id="w-b" type="number" min="0" step="0.5" value="${W.b}" class="score-in" style="width:5rem;text-align:center;" />
-        </label>
-        <label style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.8rem;color:#64748b;">
-          C (PAB penalty)
-          <input id="w-c" type="number" min="0" step="0.5" value="${W.c}" class="score-in" style="width:5rem;text-align:center;" />
-        </label>
-        <button class="btn-g" onclick="saveWeights()" style="padding:0.5rem 1rem;font-size:0.875rem;">Save</button>
-      </div>
-    </div>`;})()}
-
-    ${(()=>{ const koCur=koCurveName(), reCur=reCurveName(); return `
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <h2 style="font-weight:600;color:white;margin-bottom:0.25rem;">Knockout scoring</h2>
-      <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.875rem;">
-        Each KO match requires the correct advancing team as a prerequisite. If you got the winner right: <b>+5</b> for the exact score (match decided in 90 mins or ET), or <b>+3</b> for all other cases. If the match went to penalties and you predicted a draw with the correct pen winner, add <b>+1</b>. All multiplied by a per-round weight.</p>
-      <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-        <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">
-          Primary KO round-weight curve
-          <select onchange="saveKoCurve(this.value)" style="font-size:0.85rem;">
-            ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===koCur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
-          </select>
-        </label>
-        <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">
-          Repicker round-weight curve
-          <select onchange="saveReCurve(this.value)" style="font-size:0.85rem;">
-            ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===reCur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-      <div style="font-size:0.72rem;color:#475569;margin-top:0.5rem;">R32 · R16 · QF · SF · Final multipliers (3rd-place game ×1). Primary KO folds into the leaderboard Total; the Repicker has its own separate leaderboard.</div>
-    </div>`; })()}
-
-    ${(()=>{
-      const repickerOpen   = S.settings?.repicker_open   === 'true';
-      const repickerAuto   = S.settings?.repicker_auto   === 'true';
-      const adminOpen      = S.settings?.repicker_admin_open    === 'true';
-      const forceClosed    = S.settings?.repicker_force_closed  === 'true';
-      const gDone = Object.keys(S.gResults||{}).length;
-      const statusLabel = repickerAuto ? '🟢 Auto-open (all groups done)' :
-                          adminOpen    ? '🟡 Force-open by admin' :
-                          forceClosed  ? '🔴 Force-closed by admin' :
-                                         `⏳ Waiting for groups (${gDone}/72 results in)`;
-      return `
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.25rem;">
-      <h2 style="font-weight:600;color:white;font-size:0.95rem;margin:0 0 0.5rem;">🔄 Repicker</h2>
-      <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.875rem;">
-        Auto-opens when all 72 group results are in. Auto-closes when the first Round of 32 result appears.
-        The R32 bracket populates from actual group standings — no manual entry needed.
-      </p>
-      <div style="background:#0a1628;border:1px solid rgba(255,255,255,0.07);border-radius:0.5rem;padding:0.5rem 0.75rem;margin-bottom:0.75rem;font-size:0.8rem;color:#94a3b8;">
-        Status: <strong style="color:${repickerOpen?'#4ade80':'#64748b'};">${repickerOpen?'OPEN':'CLOSED'}</strong>
-        &nbsp;·&nbsp; ${statusLabel}
-      </div>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-        <button onclick="setRepickerOverride('admin_open')" style="padding:0.4rem 0.875rem;font-size:0.78rem;${adminOpen?'background:#d97706;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">
-          ${adminOpen?'✓ Force-open (testing)':'Force-open for testing'}
-        </button>
-        <button onclick="setRepickerOverride('force_closed')" style="padding:0.4rem 0.875rem;font-size:0.78rem;${forceClosed?'background:#dc2626;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">
-          ${forceClosed?'✓ Force-closed':'Force-close (override)'}
-        </button>
-        ${(adminOpen||forceClosed)?`<button onclick="setRepickerOverride('auto')" style="padding:0.4rem 0.875rem;font-size:0.78rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;cursor:pointer;">Reset to auto</button>`:''}
-      </div>
-    </div>`;
-    })()}
-
-    <!-- ── Manual entry (fallbacks only — results normally auto-fill from ESPN) ── -->
-    <h2 style="font-size:1rem;font-weight:700;color:#94a3b8;margin:2rem 0 0.35rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:1.25rem;">⚙️ Manual entry (fallbacks)</h2>
-    <p style="font-size:0.78rem;color:#475569;margin-bottom:0.875rem;">Results normally auto-fill from ESPN. Use these only if ESPN is wrong or hasn't posted a result yet.</p>
-
-    <details style="margin-bottom:1rem;">
-      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
-        <span>✏️ Enter group scores manually</span>
-        <span style="font-size:0.75rem;color:#64748b;font-weight:400;">${done}/${GROUP_GAMES.length} entered · click to expand</span>
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>📊 Results</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${enteredGames.length}/${GROUP_GAMES.length} entered</span>
       </summary>
-      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
-        <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${grpTabs}</div>
-        <div>${gameRows}</div>
+      <div style="${bodyStyle}">
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+          <input class="text-in" type="text" id="rimport-in" placeholder="Paste export code to import results…" style="border-radius:0.5rem;" />
+          <button class="btn-g" onclick="doImportResults()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
+        </div>
+        ${enteredGames.length>0?`<p style="font-size:0.75rem;color:#475569;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em;">Entered results</p><div>${resultRows}</div>`:'<p style="color:#475569;font-size:0.8rem;">No results entered yet.</p>'}
+      </div>
+    </details>`;
+    })()}
+
+    <!-- Participants -->
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>👥 Participants</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${[S.name,...S.otherUsers.map(u=>u.name)].length} players</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.5rem;">Remove a user and <b>all</b> of their picks. <span style="color:#f87171;">Permanent</span> and syncs to everyone.</p>
+        ${[{name:S.name,gPreds:S.gPreds,kPreds:S.kPreds,_self:true}, ...S.otherUsers].map(p=>{
+          const gC=Object.keys(p.gPreds||{}).length, kC=Object.keys(p.kPreds||{}).length;
+          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;font-size:0.875rem;background:#0a1628;padding:0.5rem 0.75rem;border-radius:0.5rem;margin-top:0.5rem;">
+            <span style="color:#cbd5e1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}${p._self?' <span style="color:#4ade80;">(you)</span>':''}
+              <span style="color:#64748b;font-size:0.75rem;">· ${gC} group · ${kC} KO</span></span>
+            ${p._self
+              ? `<span style="color:#475569;font-size:0.7rem;flex-shrink:0;">admin · protected</span>`
+              : `<button onclick="deleteUser('${_jss(p.name)}')" style="background:rgba(153,27,27,0.18);border:1px solid rgba(153,27,27,0.3);color:#f87171;cursor:pointer;font-size:0.72rem;border-radius:0.35rem;padding:0.25rem 0.6rem;flex-shrink:0;">Delete</button>`}
+          </div>`;
+        }).join('')}
+        <details style="margin-top:0.875rem;">
+          <summary style="cursor:pointer;font-size:0.78rem;color:#64748b;user-select:none;">Import a prediction code (advanced)</summary>
+          <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+            <input class="text-in" type="text" id="import-in" placeholder="Paste prediction code…" style="border-radius:0.5rem;" />
+            <button class="btn-g" onclick="doImport()" style="border-radius:0.5rem;padding:0.5rem 1rem;white-space:nowrap;">Import</button>
+          </div>
+        </details>
       </div>
     </details>
 
-    ${renderAdminKoEntry()}
-
-    <!-- ── Polla Corta picks management ── -->
-    <details style="margin-top:1.5rem;">
-      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
-        <span>🎱 Polla Corta — Manage picks</span>
-        <span style="font-size:0.75rem;color:#64748b;font-weight:400;">click to expand</span>
+    <!-- Weighted score formula -->
+    ${(()=>{const W=getWeights();return`
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>⚖️ Weighted score formula</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">A×correct + B×exact − C×PAB</span>
       </summary>
-      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
-        <p style="font-size:0.78rem;color:#64748b;margin-bottom:1rem;">View and restore Polla Corta picks for any user. To restore picks, edit the JSON and click Save — this will overwrite that user's current picks.</p>
+      <div style="${bodyStyle}">
+        <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.875rem;">Used in the leaderboard "Weighted score" leader box on Compare.</p>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+          <label style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.8rem;color:#64748b;">A (correct)<input id="w-a" type="number" min="0" step="0.5" value="${W.a}" class="score-in" style="width:5rem;text-align:center;" /></label>
+          <label style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.8rem;color:#64748b;">B (exact)<input id="w-b" type="number" min="0" step="0.5" value="${W.b}" class="score-in" style="width:5rem;text-align:center;" /></label>
+          <label style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.8rem;color:#64748b;">C (PAB penalty)<input id="w-c" type="number" min="0" step="0.5" value="${W.c}" class="score-in" style="width:5rem;text-align:center;" /></label>
+          <button class="btn-g" onclick="saveWeights()" style="padding:0.5rem 1rem;font-size:0.875rem;">Save</button>
+        </div>
+      </div>
+    </details>`;})()}
+
+    <!-- KO Scoring -->
+    ${(()=>{ const koCur=koCurveName(), reCur=reCurveName(); return `
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>🏆 Knockout scoring</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">Round weight curves</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.875rem;">Correct advancing team required. +5 exact score, +3 correct result, +1 pen bonus. All × round weight.</p>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">Primary KO round-weight curve
+            <select onchange="saveKoCurve(this.value)" style="font-size:0.85rem;">
+              ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===koCur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.8rem;color:#64748b;flex:1;min-width:13rem;">Polla Corta round-weight curve
+            <select onchange="saveReCurve(this.value)" style="font-size:0.85rem;">
+              ${Object.keys(KO_ROUND_WEIGHTS).map(k=>`<option value="${k}"${k===reCur?' selected':''}>${esc(KO_CURVE_LABELS[k]||k)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+      </div>
+    </details>`; })()}
+
+    <!-- Polla Corta (Repicker) settings -->
+    ${(()=>{
+      const repickerOpen = S.settings?.repicker_open === 'true';
+      const repickerAuto = S.settings?.repicker_auto === 'true';
+      const adminOpen    = S.settings?.repicker_admin_open   === 'true';
+      const forceClosed  = S.settings?.repicker_force_closed === 'true';
+      const gDone = Object.keys(S.gResults||{}).length;
+      const statusLabel = repickerAuto ? '🟢 Auto-open' : adminOpen ? '🟡 Force-open' : forceClosed ? '🔴 Force-closed' : `⏳ Waiting (${gDone}/72)`;
+      return `
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>⚽ Polla Corta settings</span>
+        <span style="font-size:0.72rem;color:${repickerOpen?'#4ade80':'#64748b'};font-weight:400;">${repickerOpen?'OPEN':'CLOSED'} · ${statusLabel}</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.875rem;">Auto-opens when all 72 group results are in. Auto-closes when the first Round of 32 result appears.</p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button onclick="setRepickerOverride('admin_open')" style="padding:0.4rem 0.875rem;font-size:0.78rem;${adminOpen?'background:#d97706;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">${adminOpen?'✓ Force-open':'Force-open for testing'}</button>
+          <button onclick="setRepickerOverride('force_closed')" style="padding:0.4rem 0.875rem;font-size:0.78rem;${forceClosed?'background:#dc2626;color:white;border:none;':'background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);'}border-radius:0.5rem;cursor:pointer;font-weight:600;">${forceClosed?'✓ Force-closed':'Force-close (override)'}</button>
+          ${(adminOpen||forceClosed)?`<button onclick="setRepickerOverride('auto')" style="padding:0.4rem 0.875rem;font-size:0.78rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;cursor:pointer;">Reset to auto</button>`:''}
+        </div>
+      </div>
+    </details>`;
+    })()}
+
+    <!-- Manual entry -->
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>⚙️ Manual entry (fallbacks)</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${done}/${GROUP_GAMES.length} group · click to expand</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <p style="font-size:0.78rem;color:#475569;margin-bottom:0.875rem;">Results normally auto-fill from ESPN. Use these only if ESPN is wrong or hasn't posted a result yet.</p>
+        <details style="margin-bottom:1rem;">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
+            <span>✏️ Enter group scores manually</span>
+            <span style="font-size:0.75rem;color:#64748b;font-weight:400;">${done}/${GROUP_GAMES.length} entered</span>
+          </summary>
+          <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
+            <div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${grpTabs}</div>
+            <div>${gameRows}</div>
+          </div>
+        </details>
+        ${renderAdminKoEntry()}
+      </div>
+    </details>
+
+    <!-- Polla Corta picks management -->
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>🎱 Polla Corta — Manage picks</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">View / restore user picks</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <p style="font-size:0.78rem;color:#64748b;margin-bottom:1rem;">Edit picks JSON and save to restore a user's Polla Corta bracket.</p>
         <div style="display:flex;flex-direction:column;gap:0.75rem;">
           ${Object.entries(S.allRePicks||{}).sort(([a],[b])=>a.localeCompare(b)).map(([name, picks])=>{
             const complete = rePickComplete(picks);
@@ -5814,7 +5810,7 @@ function renderAdmin(){
             return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
                 <span style="font-weight:600;color:white;">${esc(name)}</span>
-                <span style="font-size:0.75rem;color:${complete?'#4ade80':'#f87171'};">${filledCount}/${total} picks · ${complete?'✓ Complete':'○ Incomplete'}</span>
+                <span style="font-size:0.75rem;color:${complete?'#4ade80':'#f87171'};">${filledCount}/${total} · ${complete?'✓ Complete':'○ Incomplete'}</span>
               </div>
               <textarea id="re-picks-${esc(name)}" style="width:100%;height:8rem;font-family:monospace;font-size:0.7rem;background:#0a1628;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;padding:0.5rem;box-sizing:border-box;resize:vertical;">${esc(JSON.stringify(picks, null, 2))}</textarea>
               <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
@@ -7483,7 +7479,7 @@ function renderRepicker(){
   const userBracket = repickerUserBracket(S.rePicks, confirmedR32);
   const r32KickoffTime = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
   const r32HasKickedOff = Date.now() >= r32KickoffTime;
-  const locked = !repickerOpen || r32HasKickedOff;
+  const locked = !repickerOpen || (r32HasKickedOff && !_isAdmin);
   const reActualId = id => id==='final-1' ? 'final' : id==='third-1' ? 'third' : id;
 
   const rounds=[
