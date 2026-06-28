@@ -4863,7 +4863,8 @@ function renderResults(){
       const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
       const wrongMatchup = predWinner && !inMatchup;
       if(!actual || actual.homeScore==null){
-        return '<td style="'+base+'color:#94a3b8;">'+wFlag+' '+scoreStr3+(wrongMatchup?' <span style="font-size:0.6rem;color:#64748b;" title="Predicted a different matchup">~</span>':'')+'</td>';
+        const style = wrongMatchup ? 'color:#475569;font-style:italic;opacity:0.6;' : 'color:#94a3b8;';
+        return '<td style="'+base+style+'">'+wFlag+' '+scoreStr3+'</td>';
       }
       // For scoring: if predicted winner is in matchup, use koCompare; if not, it's wrong
       let bg='', col='#94a3b8';
@@ -4874,13 +4875,11 @@ function renderResults(){
           else if(c.advOk){ bg='rgba(74,222,128,0.06)'; col='#4ade80'; }
           else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
         } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
-      } else {
-        bg='rgba(248,113,113,0.06)'; col='#f87171';
       }
       const c2 = !wrongMatchup ? koCompare(kp, actual) : {penOk:false};
       const penStr = (c2.penOk) ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
-      const suffix = wrongMatchup ? ' <span style="font-size:0.6rem;color:#64748b;" title="Different matchup predicted">~</span>' : '';
-      return '<td style="'+base+'background:'+bg+';color:'+col+';">'+wFlag+' '+scoreStr3+suffix+penStr+'</td>';
+      if(wrongMatchup) return '<td style="'+base+'color:#475569;font-style:italic;opacity:0.5;" title="Predicted a different matchup">'+wFlag+' '+scoreStr3+'</td>';
+      return '<td style="'+base+'background:'+bg+';color:'+col+';">'+wFlag+' '+scoreStr3+penStr+'</td>';
     }
 
     koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual)).join('')}</tr>`;
@@ -4907,7 +4906,7 @@ function renderResults(){
         </table>
       </div>
       <div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
-        Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct advancing team · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · P✓ = pen winner correct · ~ = different matchup predicted
+        Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct advancing team · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · P✓ = pen winner correct · <span style="color:#475569;font-style:italic;">greyed italic</span> = predicted different matchup
       </div>
     </div>` : '';
 
