@@ -4856,21 +4856,30 @@ function renderResults(){
       const base = TD+'text-align:center;font-family:monospace;font-weight:600;white-space:nowrap;';
       if(!kp || kp.homeScore==null) return '<td style="'+base+'color:#334155;">–</td>';
       const scoreStr3 = kp.homeScore+'–'+kp.awayScore;
-      const predWinner = _predAdvancer({...kp, home:homeT, away:awayT});
+      // Use user's own predicted teams to determine who they predicted to advance
+      const predWinner = _predAdvancer(kp); // kp already has home/away from user's bracket
       const wFlag = predWinner ? flag(predWinner) : '';
+      // Check if predicted winner is in the actual matchup
+      const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
+      const wrongMatchup = predWinner && !inMatchup;
       if(!actual || actual.homeScore==null){
-        return '<td style="'+base+'color:#94a3b8;">'+wFlag+' '+scoreStr3+'</td>';
+        return '<td style="'+base+'color:#94a3b8;">'+wFlag+' '+scoreStr3+(wrongMatchup?' <span style="font-size:0.6rem;color:#64748b;" title="Predicted a different matchup">~</span>':'')+'</td>';
       }
-      const c = koCompare(kp, actual);
+      // For scoring: if predicted winner is in matchup, use koCompare; if not, it's wrong
       let bg='', col='#94a3b8';
-      if(c.kind==='full'){
-        if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
-        else if(c.advOk){ bg='rgba(74,222,128,0.06)'; col='#4ade80'; }
-        else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
-      } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
-      const wrongMatchup = predWinner && predWinner!==homeT && predWinner!==awayT;
+      if(!wrongMatchup){
+        const c = koCompare(kp, actual);
+        if(c.kind==='full'){
+          if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
+          else if(c.advOk){ bg='rgba(74,222,128,0.06)'; col='#4ade80'; }
+          else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
+        } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
+      } else {
+        bg='rgba(248,113,113,0.06)'; col='#f87171';
+      }
+      const c2 = !wrongMatchup ? koCompare(kp, actual) : {penOk:false};
+      const penStr = (c2.penOk) ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
       const suffix = wrongMatchup ? ' <span style="font-size:0.6rem;color:#64748b;" title="Different matchup predicted">~</span>' : '';
-      const penStr = (c.kind==='full'&&c.penOk) ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
       return '<td style="'+base+'background:'+bg+';color:'+col+';">'+wFlag+' '+scoreStr3+suffix+penStr+'</td>';
     }
 
@@ -5514,8 +5523,6 @@ function renderCompare(){
     ${todaysGamesPanel(allPred)}
 
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">${lbHTML}</div>
-
-    ${reSectionHTML}
 
     ${completed.length>0?`<h2 style="font-size:1.125rem;font-weight:700;color:white;margin-bottom:0.75rem;">Game breakdown</h2>${resultCards}`
       :`<div style="text-align:center;padding:2.5rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">⏳ Game results appear here once entered in Admin.</div>`}
@@ -7857,8 +7864,9 @@ function renderPollaResults(){
   const allRP = S.allRePicks || {};
   const myName = S.name;
 
-  // Players — own picks always, others only after R32 kicks off
-  const allNames = r32Kicked
+  // Players — own picks always, others after R32 kicks off OR if admin
+  const canSeeAll = r32Kicked || _isAdmin;
+  const allNames = canSeeAll
     ? [myName, ...Object.keys(allRP).filter(n=>n!==myName).sort((a,b)=>a.localeCompare(b))]
     : [myName].filter(n=>allRP[n]);
   const players = allNames.map(name=>({ name, picks: allRP[name]||{} }));
@@ -7984,9 +7992,12 @@ function renderPollaResults(){
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
 
-  const hiddenMsg = !r32Kicked ? `
+  const hiddenMsg = (!r32Kicked && !_isAdmin) ? `
     <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#7c3aed;line-height:1.5;">
       👀 Other players' picks will be revealed when R32 kicks off${KICKOFFS['r32-1']?' on '+_koDate(KICKOFFS['r32-1']).toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'}):'.'}.
+    </div>` : _isAdmin && !r32Kicked ? `
+    <div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#d97706;line-height:1.5;">
+      👁 Admin view — showing all picks before R32 kicks off.
     </div>` : '';
 
   const legend = `<div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
