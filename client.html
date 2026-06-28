@@ -7203,8 +7203,8 @@ function renderRepickerBracket(userBracket, locked){
       rp = S.rePicks[id]; if(!locked) persistRe();
     }
 
-    const hv = rp.homeScore!==undefined ? rp.homeScore : '';
-    const av = rp.awayScore!==undefined ? rp.awayScore : '';
+    const hv = rp.homeScore!=null ? rp.homeScore : '';
+    const av = rp.awayScore!=null ? rp.awayScore : '';
     const isDraw = rp._homeSet && rp._awaySet && hv!=='' && av!=='' && Number(hv)===Number(av);
     const ar = S.kResults[id==='final-1'?'final':id];
     const actualStr = (ar && ar.home && ar.homeScore!=null)
@@ -7498,8 +7498,8 @@ function renderRepicker(){
       rp = S.rePicks[id]; if(!locked) persistRe();
     }
 
-    const hv=rp.homeScore!==undefined?rp.homeScore:'';
-    const av=rp.awayScore!==undefined?rp.awayScore:'';
+    const hv=rp.homeScore!=null?rp.homeScore:'';
+    const av=rp.awayScore!=null?rp.awayScore:'';
     const isDraw = rp._homeSet && rp._awaySet && hv!=='' && av!=='' && Number(hv)===Number(av);
 
     const ar = S.kResults[reActualId(id)];
@@ -7813,8 +7813,8 @@ function renderPollapicks(){
       }
 
       const rp = picks[id];
-      const hv = rp?.homeScore!==undefined ? rp.homeScore : '';
-      const av = rp?.awayScore!==undefined ? rp.awayScore : '';
+      const hv = rp?.homeScore!=null ? rp.homeScore : '';
+      const av = rp?.awayScore!=null ? rp.awayScore : '';
       const isDraw = rp?._homeSet && rp?._awaySet && hv!=='' && av!=='' && Number(hv)===Number(av);
       const ar = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
       const actualStr = (ar && ar.home && ar.homeScore!=null)
