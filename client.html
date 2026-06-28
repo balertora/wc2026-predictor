@@ -4846,8 +4846,16 @@ function renderResults(){
     slotsByRound[rl].push(id);
   }
 
+  // Live KO detection
+  const liveKoIds = new Set(Object.keys(KO_VENUES).filter(id => {
+    const live = S.gLive?.[id];
+    return live && live.hs != null;
+  }));
+
+  const visibleKoSlots = liveOnly ? allKoSlots.filter(id => liveKoIds.has(id)) : allKoSlots;
+
   let koBody='', lastRound='';
-  for(const id of allKoSlots){
+  for(const id of visibleKoSlots){
     const actual = S.kResults[id] || {};
     const rl=koRoundLabel(id);
     if(rl!==lastRound){
@@ -4861,18 +4869,21 @@ function renderResults(){
       }).join('');
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
       koBody += `<tr style="background:rgba(99,102,241,0.06);">
-        <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:#0c1a35;white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams</td>
+        <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:rgba(99,102,241,0.12);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams</td>
         ${aliveCells}
       </tr>`;
       lastRound=rl;
     }
     const hasResult = S.kResults[id]?.homeScore != null;
+    const liveKo = S.gLive?.[id];
     const actualOrConf = S.kResults[id] || confirmedR32[id] || {};
     const homeT = actualOrConf.home || '?';
     const awayT = actualOrConf.away || '?';
-    // Game cell — show date/time for upcoming games
+    // Game cell — live score, result, or date/time
     let scoreStr2 = '';
-    if(hasResult){
+    if(liveKo && liveKo.hs != null){
+      scoreStr2 = '<span style="color:#f87171;font-family:monospace;font-weight:800;">' + liveKo.hs + '–' + liveKo.as + '</span>' + _liveClock(KICKOFFS[id], liveKo.detail, true, '0.6rem');
+    } else if(hasResult){
       scoreStr2 = '<span style="color:#fcd34d;font-family:monospace;font-weight:800;">' + actual.homeScore + '–' + actual.awayScore + '</span>';
       scoreStr2 += (actual.homeScore===actual.awayScore && actual.penWinner)
         ? '<span style="color:#94a3b8;font-size:0.6rem;margin-left:0.25rem;">pens: ' + esc(shortTeamName(actual.penWinner)) + '</span>'
@@ -4910,14 +4921,15 @@ function renderResults(){
         const c = koCompare(kp, actual);
         if(c.kind==='full'){
           if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
-          else if(c.advOk){ bg='rgba(74,222,128,0.06)'; col='#4ade80'; }
+          else if(c.advOk){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
           else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
         } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
       }
-      const c2 = !wrongMatchup ? koCompare(kp, actual) : {penOk:false};
+      const c2 = !wrongMatchup ? koCompare(kp, actual) : {penOk:false, scoreMatch:false};
+      const exactBadge = c2.scoreMatch ? ' 🎯' : '';
       const penStr = (c2.penOk) ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
       if(wrongMatchup) return '<td style="'+base+'color:#475569;font-style:italic;opacity:0.5;" title="Predicted a different matchup">'+wFlag+' '+scoreStr3+'</td>';
-      return '<td style="'+base+'background:'+bg+';color:'+col+';">'+wFlag+' '+scoreStr3+penStr+'</td>';
+      return '<td style="'+base+'background:'+bg+';color:'+col+';">'+wFlag+' '+scoreStr3+exactBadge+penStr+'</td>';
     }
 
     koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual)).join('')}</tr>`;
@@ -4934,18 +4946,22 @@ function renderResults(){
     🎯 exact score · ✓ right teams (no score) · <span style="color:#fbbf24;">½</span> one team right ·
     ✗ different matchup · <b>P</b> = penalty-winner pick</div>`;
 
-  const koSection = allKoSlots.length ? `
+  const koSection = (liveOnly ? liveKoIds.size > 0 : allKoSlots.length) ? `
     <div style="margin-bottom:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.5rem;">🏆 Knockout results</h2>
-      <div style="overflow:auto;max-height:calc(100vh - 5rem);background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
           <thead>${koHeaderRow}</thead>
           <tbody>${koBody}</tbody>
         </table>
       </div>
       <div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
-        Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct advancing team · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · P✓ = pen winner correct · <span style="color:#475569;font-style:italic;">greyed italic</span> = predicted different matchup
+        Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct/advancing · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · P✓ = pen winner correct · <span style="color:#475569;font-style:italic;">greyed italic</span> = predicted different matchup
       </div>
+    </div>` : liveOnly ? `
+    <div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;margin-bottom:1.75rem;">
+      No live KO games right now.
+      <button onclick="S.resultsLiveOnly=false;render()" style="display:block;margin:0.75rem auto 0;padding:0.35rem 1rem;font-size:0.78rem;cursor:pointer;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.15);border-radius:0.4rem;">Show all games</button>
     </div>` : '';
 
   // Full-bleed: the results grid can be very wide, so break out of the centered
@@ -4960,13 +4976,8 @@ function renderResults(){
       </div>
     </div>
     ${koSection}
-    <div style="margin-top:1.75rem;">
+    ${liveOnly ? '' : `<div style="margin-top:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.75rem;">📊 Group Stage Results</h2>
-      ${liveOnly && liveGames.length===0 ? `
-      <div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">
-        No live group games right now.
-        <button onclick="S.resultsLiveOnly=false;render()" style="display:block;margin:0.75rem auto 0;padding:0.35rem 1rem;font-size:0.78rem;cursor:pointer;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.15);border-radius:0.4rem;">Show all games</button>
-      </div>` : `
       <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
           <thead>${headerRow}</thead>
@@ -4976,8 +4987,8 @@ function renderResults(){
       <div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
         Under each fixture: <b>crowd odds</b> (<span style="color:#60a5fa;">H</span>/<span style="color:#94a3b8;">draw</span>/<span style="color:#fb923c;">A</span>) from everyone's picks, weighted by how firm each scoreline is ·
         the <span style="color:#a78bfa;">violet bar</span> behind a score shows how far that pick is from the crowd's average — wider = more contrarian.
-      </div>`}
-    </div>
+      </div>
+    </div>`}
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
   </div>`;
 }
@@ -5070,12 +5081,12 @@ function todaysGamesPanel(parts){
   const todayKey = localDateKey(new Date().toISOString());
   const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
   const pickCell=(txt,color)=>`<span title="Your pick" style="flex-shrink:0;width:2.9rem;text-align:left;font-family:monospace;font-size:0.74rem;font-weight:700;color:${color};">${txt}</span>`;
-  const rowHTML=(pick,homeT,awayT,mid,dist)=>`<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;">
+  const rowHTML=(pick,homeT,awayT,mid,dist)=>`<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.88rem;">
       ${pick}
-      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
+      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
       <span style="flex-shrink:0;min-width:5.5rem;text-align:center;">${mid}</span>
-      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;">${flag(awayT)} ${esc(shortTeamName(awayT))}</span>
-      <span title="How players picked — left team · (draw) · right team" style="flex-shrink:0;font-size:0.72rem;font-family:monospace;min-width:3.5rem;text-align:right;">${dist}</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${flag(awayT)} ${esc(shortTeamName(awayT))}</span>
+      <span title="How players picked — left team · (draw) · right team" style="flex-shrink:0;font-size:0.75rem;font-family:monospace;min-width:3.5rem;text-align:right;">${dist}</span>
     </div>`;
 
   const entries=[];
@@ -5125,8 +5136,8 @@ function todaysGamesPanel(parts){
     return rowHTML(`<span style="flex-shrink:0;width:3.5rem;text-align:left;font-family:monospace;font-size:0.74rem;font-weight:700;color:${pickCol};${pickStyle}">${pickTxt}</span>`, homeT, awayT, mid, dist);
   });
 
-  return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.6rem 1rem 0.4rem;margin-bottom:1.25rem;">
-    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
+  return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.15);border-radius:0.75rem;padding:0.875rem 1rem 0.625rem;margin-bottom:1.25rem;">
+    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;margin-bottom:0.625rem;display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
       <span>📅 Today's games</span>
       <span style="text-transform:none;font-size:0.62rem;color:#475569;">picks: <span style="color:#60a5fa;">left</span>·<span style="color:#94a3b8;">draw</span>·<span style="color:#fb923c;">right</span></span>
     </div>
@@ -5361,14 +5372,65 @@ function renderCompare(){
       </tbody></table></div>`;
 
 
-  const resultCards=completed.map(game=>{
+
+  // KO game breakdown cards — only played games
+  const koCompletedSlots = Object.keys(KO_VENUES).filter(id=>{
+    const r = S.kResults[id];
+    return r && r.home && r.away && r.homeScore!=null;
+  }).sort((a,b)=>{
+    const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : 0;
+    const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : 0;
+    return ta - tb;
+  });
+  const koResultCards = koCompletedSlots.map(id=>{
+    const r = S.kResults[id];
+    const gamePreds = allPred.map(p=>{
+      const kp = p.kPreds?.[id]; if(!kp || kp.homeScore==null) return null;
+      const c = koCompare(kp, r);
+      const predWinner = _predAdvancer(kp);
+      const inMatchup = predWinner && (predWinner===r.home || predWinner===r.away);
+      let pts = 0, label='Wrong';
+      if(c.kind==='full'){ if(c.scoreMatch){pts=5*(koWeights()[koRoundKey(id)]||1);label='Exact';} else if(c.advOk){pts=3*(koWeights()[koRoundKey(id)]||1);label='Result✓';} }
+      return { name:p.name, predWinner, inMatchup, kp, pts, label };
+    }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
+    const rl = id.startsWith('r32')?'R32':id.startsWith('r16')?'R16':id.startsWith('qf')?'QF':id.startsWith('sf')?'SF':id==='3rd'?'3rd Place':'Final';
+    const iso = KICKOFFS[id];
+    const dateStr = iso ? _koDate(iso).toLocaleDateString([],{month:'short',day:'numeric'}) : '';
+    return `
+      <details style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:0.5rem;">
+        <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.75rem;padding:0.625rem 1rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(10,22,40,0.5);flex-wrap:wrap;user-select:none;">
+          <span style="font-size:0.7rem;color:#64748b;background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:0.25rem;white-space:nowrap;">${rl}</span>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.625rem;font-weight:600;flex-wrap:wrap;">
+            <span>${teamSpan(r.home)}</span>
+            <span style="font-size:1.25rem;font-weight:700;color:#fcd34d;">${r.homeScore}–${r.awayScore}</span>
+            <span>${teamSpan(r.away,true)}</span>
+          </div>
+          <span style="font-size:0.7rem;color:#475569;">${dateStr}</span>
+        </summary>
+        ${gamePreds.length===0?'<div style="padding:0.625rem 1rem;font-size:0.8rem;color:#64748b;">No predictions</div>':
+          gamePreds.map(p=>{
+            const wrongMatchup = !p.inMatchup && p.predWinner;
+            const wFlag = p.predWinner ? flag(p.predWinner) : '';
+            const scoreStr = `${p.kp.homeScore}–${p.kp.awayScore}`;
+            const col = p.pts>0?'#4ade80':'#334155';
+            return `<div style="display:flex;align-items:center;gap:0.625rem;padding:0.5rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.8rem;${wrongMatchup?'opacity:0.55;font-style:italic;':''}">
+              <span style="color:#cbd5e1;font-weight:500;width:8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</span>
+              <span style="color:#94a3b8;">${wFlag} ${scoreStr}</span>
+              <div style="margin-left:auto;font-weight:700;color:${col};">+${p.pts}</div>
+            </div>`;
+          }).join('')}
+      </details>`;
+  }).join('');
+
+  const resultCardsArr = completed.map(game=>{
     const [rh,ra]=S.gResults[game.id];
     const gamePreds=allPred.map(p=>{
       const pr=p.gPreds[game.id]; if(!pr) return null;
       const [ph,pa]=pr;
       return {name:p.name,ph,pa,p:pts(ph,pa,rh,ra),bad:Math.abs(ph-rh)+Math.abs(pa-ra)};
     }).filter(Boolean).sort((a,b)=>b.p-a.p);
-    return `
+    const iso = gameKickoff(game);
+    return { iso: iso ? new Date(iso).getTime() : new Date(game.date+'T12:00:00').getTime(), html:`
       <details style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:0.5rem;">
         <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.75rem;padding:0.625rem 1rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(10,22,40,0.5);flex-wrap:wrap;user-select:none;">
           <span style="font-size:0.7rem;color:#64748b;background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:0.25rem;white-space:nowrap;">Group ${game.g} MD${game.md}</span>
@@ -5387,13 +5449,52 @@ function renderCompare(){
               <div style="margin-left:auto;display:flex;align-items:center;gap:0.4rem;">
                 ${p.p===3?'<span class="pts-exact">Exact</span>':p.p===1?'<span class="pts-res">Result✓</span>':'<span class="pts-no">Wrong</span>'}
                 <span style="font-weight:700;${p.p===3?'color:#4ade80':p.p===1?'color:#facc15':'color:#334155'}">+${p.p}</span>
-                <span style="color:#f87171;font-size:0.7rem;font-weight:600;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem;" title="Total goal error vs actual scores — lower is better">Pts err ${p.bad}</span>
               </div>
             </div>`).join('')}
-      </details>`;
-  }).join('');
+      </details>`};
+  });
 
-  // ── Repicker standings (separate game) — appears once KO results exist ──
+  const koCardsArr = koCompletedSlots.map(id=>{
+    const r = S.kResults[id];
+    const w = koWeights();
+    const gamePreds = allPred.map(p=>{
+      const kp = p.kPreds?.[id]; if(!kp || kp.homeScore==null) return null;
+      const c = koCompare(kp, r);
+      const predWinner = _predAdvancer(kp);
+      const inMatchup = !predWinner || predWinner===r.home || predWinner===r.away;
+      let ptVal = 0;
+      if(c.kind==='full'){ ptVal = (c.scoreMatch?5:c.advOk?3:0) * (w[koRoundKey(id)]||1); }
+      return { name:p.name, predWinner, inMatchup, kp, pts:ptVal };
+    }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
+    const rl = id.startsWith('r32')?'R32':id.startsWith('r16')?'R16':id.startsWith('qf')?'QF':id.startsWith('sf')?'SF':id==='3rd'?'3rd Place':'Final';
+    const iso = KICKOFFS[id];
+    const dateStr = iso ? _koDate(iso).toLocaleDateString([],{month:'short',day:'numeric'}) : '';
+    return { iso: iso ? new Date(iso).getTime() : 0, html:`
+      <details style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:0.5rem;">
+        <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.75rem;padding:0.625rem 1rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(10,22,40,0.5);flex-wrap:wrap;user-select:none;">
+          <span style="font-size:0.7rem;color:#64748b;background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:0.25rem;white-space:nowrap;">${rl}</span>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.625rem;font-weight:600;flex-wrap:wrap;">
+            <span>${teamSpan(r.home)}</span>
+            <span style="font-size:1.25rem;font-weight:700;color:#fcd34d;">${r.homeScore}–${r.awayScore}</span>
+            <span>${teamSpan(r.away,true)}</span>
+          </div>
+          <span style="font-size:0.7rem;color:#475569;">${dateStr}</span>
+        </summary>
+        ${gamePreds.length===0?'<div style="padding:0.625rem 1rem;font-size:0.8rem;color:#64748b;">No predictions</div>':
+          gamePreds.map(p=>`
+            <div style="display:flex;align-items:center;gap:0.625rem;padding:0.5rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.8rem;${!p.inMatchup?'opacity:0.55;font-style:italic;':''}">
+              <span style="color:#cbd5e1;font-weight:500;width:8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</span>
+              <span style="color:#94a3b8;">${p.predWinner?flag(p.predWinner):''} ${p.kp.homeScore}–${p.kp.awayScore}</span>
+              <div style="margin-left:auto;font-weight:700;color:${p.pts>0?'#4ade80':'#334155'};">+${p.pts}</div>
+            </div>`).join('')}
+      </details>`};
+  });
+
+  // Combine group + KO cards, sorted by kickoff desc (newest first)
+  const allGameCards = [...resultCardsArr, ...koCardsArr]
+    .sort((a,b)=>b.iso-a.iso)
+    .map(e=>e.html).join('');
+  const totalBreakdownGames = completed.length + koCompletedSlots.length;
   const reLbAll = Object.entries(S.allRePicks||{})
     .filter(([name,picks])=> rePickComplete(picks)) // only players who picked the whole bracket
     .map(([name,picks])=>({ name, ...koScoreForRepicker(picks) }))
@@ -5590,14 +5691,14 @@ function renderCompare(){
 
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">${lbHTML}</div>
 
-    ${completed.length>0?`
+    ${totalBreakdownGames>0?`
     <details style="margin-bottom:0.75rem;">
       <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:0.875rem 1rem;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
         <span>📋 Game breakdown</span>
-        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${completed.length} games · click to expand</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${totalBreakdownGames} games · click to expand</span>
       </summary>
       <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:0.75rem;background:#0d1f35;">
-        ${resultCards}
+        ${allGameCards}
       </div>
     </details>`
       :`<div style="text-align:center;padding:2.5rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">⏳ Game results appear here once entered in Admin.</div>`}
