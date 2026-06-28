@@ -4852,8 +4852,8 @@ function renderResults(){
       const aliveCells = koParticipants.map(p=>{
         const cnt = aliveCount(p, roundSlots);
         const pct = aliveMax > 0 ? cnt/aliveMax : 0;
-        const col = pct===1?'#4ade80':pct>=0.5?'#facc15':'#f87171';
-        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:800;color:${col};">${cnt}/${aliveMax}</td>`;
+        const col = pct===1?'#86efac':pct>=0.5?'#fde68a':'#fca5a5';
+        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.78rem;font-weight:500;color:${col};">${cnt}/${aliveMax}</td>`;
       }).join('');
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
       koBody += `<tr style="border-bottom:2px solid rgba(99,102,241,0.3);">
