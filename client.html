@@ -7620,8 +7620,8 @@ function renderPollapicks(){
 
       return `<div class="bk-card${isDraw?' bk-draw':''}" style="${cardBorder}${cardBg}">
         ${meta}
-        <div class="bk-team-row"><span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>${hv!==''?`<span style="font-size:0.72rem;color:var(--text-faint);">${hv}</span>`:''}</div>
-        <div class="bk-team-row"><span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>${av!==''?`<span style="font-size:0.72rem;color:var(--text-faint);">${av}</span>`:''}</div>
+        <div class="bk-team-row"><span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>${hv!==''?`<span style="font-size:0.72rem;color:var(--text-faint);margin-left:0.25rem;">${hv}</span>`:''}</div>
+        <div class="bk-team-row"><span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>${av!==''?`<span style="font-size:0.72rem;color:var(--text-faint);margin-left:0.25rem;">${av}</span>`:''}</div>
         ${penWinnerStr}${actualStr}
       </div>`;
     }
@@ -7636,7 +7636,29 @@ function renderPollapicks(){
       return `<div class="bk-col"><div class="bk-col-label">${r.label}</div><div ${matchesStyle?`style="${matchesStyle}"`:'class="bk-matches"'}>${cards}</div></div>`;
     }).join('');
 
-    return `<div class="bk-wrap"><div class="bk-grid">${cols}</div></div>`;
+    return `
+    <style>
+      .bk-wrap{overflow-x:auto;padding-bottom:1rem;-webkit-overflow-scrolling:touch;}
+      .bk-grid{display:flex;gap:0.5rem;min-width:1100px;align-items:stretch;}
+      .bk-col{display:flex;flex-direction:column;flex:1;min-width:200px;}
+      .bk-col-label{text-align:center;font-size:0.72rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.06em;padding:0.25rem 0 0.5rem;}
+      .bk-matches{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:0.3rem;padding:0 0.15rem;}
+      .bk-match{display:flex;align-items:center;}
+      .bk-card{background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;padding:0.45rem 0.55rem;width:100%;font-size:0.85rem;color:var(--text);}
+      .bk-card.bk-locked{opacity:0.7;border-style:dashed;}
+      .bk-card.bk-tbd{opacity:0.4;border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:2.5rem;}
+      .bk-card.bk-draw{border-color:rgba(251,191,36,0.5);}
+      .bk-meta{font-size:0.7rem;color:var(--text-faint);margin-bottom:0.3rem;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .bk-team-row{display:flex;align-items:center;justify-content:space-between;gap:0.25rem;margin-bottom:0.2rem;}
+      .bk-team-row:last-of-type{margin-bottom:0;}
+      .bk-team{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-strong);font-weight:600;font-size:0.85rem;}
+      .bk-ph{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-faint);font-style:italic;font-size:0.75rem;}
+      .bk-ph-sm{color:var(--text-faint);font-style:italic;font-size:0.75rem;text-align:center;}
+      .bk-actual{font-size:0.67rem;color:var(--text-faint);margin-top:0.2rem;text-align:center;}
+      .bk-sublabel{font-size:0.65rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;padding:0.5rem 0 0.2rem;text-align:center;}
+      .bk-pen{font-size:0.7rem;color:#d97706;text-align:center;margin-top:0.15rem;}
+    </style>
+    <div class="bk-wrap"><div class="bk-grid">${cols}</div></div>`;
   }
 
   // Helper for possible 3rd names (needs locks from outer scope)
