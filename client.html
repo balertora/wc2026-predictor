@@ -7409,11 +7409,13 @@ function renderRepicker(){
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Corta</h1>
     </div>
-    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;margin-bottom:0.75rem;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${pollaSubNav}</div>`;
+    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${pollaSubNav}</div>
+    <div style="padding-top:0.75rem;">`;
+  const pollaFooter = `</div>`;
 
-  if(pollaSub === 'picks')      return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollapicks()}</div>`;
-  if(pollaSub === 'results')    return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaResults()}</div>`;
-  if(pollaSub === 'leaderboard') return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaLeaderboard()}</div>`;
+  if(pollaSub === 'picks')       return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollapicks()}${pollaFooter}</div>`;
+  if(pollaSub === 'results')     return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaResults()}${pollaFooter}</div>`;
+  if(pollaSub === 'leaderboard') return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaLeaderboard()}${pollaFooter}</div>`;
 
   // pollaSub === 'predict' — existing predict UI below
   return `
@@ -7442,7 +7444,7 @@ function renderRepicker(){
       <h2 style="font-weight:600;color:white;font-size:0.9rem;margin-bottom:0.625rem;">🏆 Polla Corta Leaderboard <span style="color:#64748b;font-weight:400;font-size:0.75rem;">(KO points)</span></h2>
       ${lbRows}
     </div>` : ''}
-  </div>`;
+  </div>${pollaFooter}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7468,7 +7470,8 @@ function renderPollaLarga(){
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Larga</h1>
     </div>
-    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;margin-bottom:0.75rem;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${subNav}</div>`;
+    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${subNav}</div>
+    <div style="padding-top:0.75rem;">`;
 
   let content;
   if(sub==='predict') content = S.name ? renderPredict() : renderNamePrompt();
@@ -7476,7 +7479,7 @@ function renderPollaLarga(){
   else if(sub==='results') content = renderResults();
   else                     content = renderCompare();
 
-  return `<div style="padding-bottom:1.5rem;">${header}${content}</div>`;
+  return `<div style="padding-bottom:1.5rem;">${header}${content}</div></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
