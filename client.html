@@ -7472,12 +7472,13 @@ function renderPollaResults(){
     return ta - tb;
   });
 
+  // Exact same style constants as main Results tab
   const TD = 'padding:0.3rem 0.35rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle;';
   const TH = 'padding:0.4rem 0.35rem;color:#64748b;font-size:0.66rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;text-align:center;background:#0a1628;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:2;';
   const TD_GAME = `${TD}position:sticky;left:0;z-index:1;background:#112a45;box-shadow:3px 0 6px rgba(0,0,0,0.3);white-space:nowrap;`;
   const TH_GAME = `${TH}position:sticky;left:0;z-index:3;text-align:left;box-shadow:3px 0 6px rgba(0,0,0,0.3);`;
 
-  // Avatar header cell
+  // Avatar header — exact same as main Results participantHeader
   function playerHeader(p){
     const isSelf = p.name===myName;
     const u = S.otherUsers?.find(x=>x.name===p.name);
@@ -7488,29 +7489,36 @@ function renderPollaResults(){
     return `<th style="${TH}"><div style="display:flex;flex-direction:column;align-items:center;gap:0.1rem;">${av}<span style="font-size:0.62rem;color:${isSelf?'#4ade80':'#64748b'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:3.5rem;">${isSelf?'YOU':esc(abbrevName(p.name))}</span></div></th>`;
   }
 
-  // Pick cell — color coded
-  function pickCell(rp, actual){
+  // Pick cell: flag of predicted winner + predicted score, color coded by result
+  function pickCell(rp, actual, slotTeams){
     if(!rp || rp.homeScore==null) return `<td style="${TD}color:#334155;text-align:center;font-family:monospace;">–</td>`;
+
+    // Predicted winner flag
+    const predWinner = reAdvancerOf(slotTeams, rp);
+    const winnerFlag = predWinner ? `${flag(predWinner)} ` : '';
     const scoreStr = `${rp.homeScore}–${rp.awayScore}`;
+
     if(!actual || actual.homeScore==null){
-      return `<td style="${TD}color:#94a3b8;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;">${scoreStr}</td>`;
+      // No result yet — show predicted winner flag + score, no coloring
+      return `<td style="${TD}color:#94a3b8;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
     }
+
     const c = koCompare(rp, actual);
     let bg='', col='#94a3b8', badge='';
     if(c.kind==='full'){
       if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; badge=' 🎯'; }
       else if(c.advOk){ bg='rgba(74,222,128,0.06)'; col='#4ade80'; }
       else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
-    } else if(c.kind!=='nopick'){ bg='rgba(248,113,113,0.06)'; col='#f87171'; }
+    } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
     const penStr = c.kind==='full' && c.penOk
       ? `<span style="font-size:0.58rem;color:#fbbf24;"> P✓</span>` : '';
-    return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${scoreStr}${badge}${penStr}</td>`;
+    return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}${badge}${penStr}</td>`;
   }
 
-  // Phase label
-  const phaseOf = id => id.startsWith('r32')?'R32':id.startsWith('r16')?'Round of 16':id.startsWith('qf')?'Quarter-finals':id.startsWith('sf')?'Semi-finals':id==='third-1'?'Third place':'Final';
+  // Phase label — same style as main Results KO phase separator
+  const phaseOf = id => id.startsWith('r32')?'Round of 32':id.startsWith('r16')?'Round of 16':id.startsWith('qf')?'Quarter-finals':id.startsWith('sf')?'Semi-finals':id==='third-1'?'Third place':'Final';
 
-  // Build rows
+  // Build rows with phase separators
   let lastPhase='';
   const rows = matchIds.map(id=>{
     const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
@@ -7518,12 +7526,13 @@ function renderPollaResults(){
     const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
     const phase = phaseOf(id);
 
+    // Phase separator — identical style to KO separator in main Results
     const phaseSep = phase!==lastPhase
-      ? `<tr><td colspan="${1+players.length}" style="padding:0.4rem 0.75rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${phase}</td></tr>`
+      ? `<tr><td colspan="${1+players.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${phase}</td></tr>`
       : '';
     lastPhase = phase;
 
-    // Game cell
+    // Game cell — exact same format as main Results TD_GAME
     let scoreStr='';
     if(actual?.homeScore!=null){
       scoreStr = `<span style="color:#fcd34d;font-family:monospace;font-weight:800;">${actual.homeScore}–${actual.awayScore}</span>`;
@@ -7532,18 +7541,21 @@ function renderPollaResults(){
         : `<span style="color:#475569;font-size:0.6rem;margin-left:0.2rem;">FT</span>`;
     } else if(iso){
       const d=_koDate(iso);
-      scoreStr=`<span style="color:#475569;font-size:0.7rem;">${d.toLocaleDateString([],{month:'short',day:'numeric'})} · ${fmtKickoffTime(iso)}</span>`;
+      const ds=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const ts=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+      scoreStr=`<span style="color:#475569;font-size:0.7rem;">${ds} · ${ts}</span>`;
     }
 
     const homeTeam = actual?.home || '?', awayTeam = actual?.away || '?';
+    const slotTeams = { home: homeTeam, away: awayTeam };
     const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">
-      <span style="color:white;font-weight:500;">${flag(homeTeam)} ${esc(shortTeamName(homeTeam))}</span>
+      <span style="color:white;font-weight:500;">${teamSpan(homeTeam)}</span>
       <span style="color:#475569;margin:0 0.3rem;">v</span>
-      <span style="color:white;font-weight:500;">${flag(awayTeam)} ${esc(shortTeamName(awayTeam))}</span>
+      <span style="color:white;font-weight:500;">${teamSpan(awayTeam, true)}</span>
       <span style="margin-left:0.55rem;">${scoreStr}</span>
     </td>`;
 
-    const picks = players.map(p=>pickCell(p.picks[id], actual)).join('');
+    const picks = players.map(p=>pickCell(p.picks[id], actual, slotTeams)).join('');
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
 
@@ -7553,7 +7565,7 @@ function renderPollaResults(){
     </div>` : '';
 
   const legend = `<div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
-    <span style="color:#4ade80;">green</span> = correct advancing team · 🎯 exact score · <span style="color:#f87171;">red</span> = wrong winner · <span style="color:#fbbf24;">P✓</span> = penalty winner correct</div>`;
+    Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct advancing team · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · <span style="color:#fbbf24;">P✓</span> = penalty winner correct</div>`;
 
   return `
     ${hiddenMsg}
