@@ -403,10 +403,7 @@
 <nav style="position:sticky;top:0;z-index:50;background:var(--bg-nav);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);">
   <div style="max-width:72rem;margin:0 auto;padding:0 1rem;display:flex;align-items:center;height:3.5rem;gap:0.25rem;">
     <span style="font-weight:700;color:#fcd34d;margin-right:0.75rem;white-space:nowrap;font-size:0.95rem;display:flex;align-items:center;gap:0.4rem;"><img src="/ball.png" style="width:1.4rem;height:1.4rem;border-radius:50%;object-fit:cover;vertical-align:middle;" /> La Polla Mundial</span>
-    <button class="tab" id="tn-predict"   onclick="showView('predict')">Predict</button>
-    <button class="tab" id="tn-groups"    onclick="showView('groups')">Picks</button>
-    <button class="tab" id="tn-results"   onclick="showView('results')">Results</button>
-    <button class="tab" id="tn-compare"   onclick="showView('compare')">Leaderboard</button>
+    <button class="tab" id="tn-polla-larga" onclick="showView('polla-larga')">Polla Larga</button>
     <button class="tab" id="tn-repicker"  onclick="showView('repicker')" style="display:none;">Polla Corta</button>
     <button class="tab" id="tn-admin"     onclick="showView('admin')" style="display:none;">Admin</button>
     <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode" style="margin-left:auto;">☀️</button>
@@ -3513,8 +3510,10 @@ function _updateNavUser(){
 
 function showView(v){
   S.view=v;
+  // Old view names that live inside Polla Larga map to that tab's button
+  const tabId = ['predict','groups','results','compare'].includes(v) ? 'tn-polla-larga' : 'tn-'+v;
   document.querySelectorAll('[id^="tn-"]').forEach(b=>{
-    b.classList.toggle('on', b.id==='tn-'+v);
+    b.classList.toggle('on', b.id===tabId);
   });
   _updateNavTabs();
   _updateNavUser();
@@ -3789,10 +3788,11 @@ function scheduleRender(){
 }
 
 function renderMain(){
-  if(S.view==='predict')  return S.name ? renderPredict() : renderNamePrompt();
-  if(S.view==='groups')   return renderPicksTab();
-  if(S.view==='results')  return renderResults();
-  if(S.view==='compare')  return renderCompare();
+  if(S.view==='polla-larga') return renderPollaLarga();
+  if(S.view==='predict')     return S.name ? renderPredict() : renderNamePrompt();
+  if(S.view==='groups')      return renderPicksTab();
+  if(S.view==='results')     return renderResults();
+  if(S.view==='compare')     return renderCompare();
   if(S.view==='repicker') { try { return renderRepicker(); } catch(e){ console.error('renderRepicker error:',e); return `<div style="text-align:center;padding:4rem 1rem;color:#64748b;">Repicker unavailable — ${e.message}</div>`; } }
   return renderAdmin();
 }
@@ -7446,7 +7446,40 @@ function renderRepicker(){
 }
 
 // ═══════════════════════════════════════════════════════════
-// POLLA CORTA SUB-TABS (Commits 2-4 will fill these in)
+// POLLA LARGA — wrapper with sub-navigation
+// ═══════════════════════════════════════════════════════════
+function renderPollaLarga(){
+  // Default sub-tab: leaderboard
+  if(!S.pollaLargaSub) S.pollaLargaSub = 'compare';
+
+  const sub = S.pollaLargaSub;
+  const subItems = [
+    {key:'predict', label:'🎯 Predict'},
+    {key:'groups',  label:'📋 Picks'},
+    {key:'results', label:'📊 Results'},
+    {key:'compare', label:'🏆 Leaderboard'},
+  ];
+
+  const subNav = subItems.map(({key,label})=>`
+    <button onclick="S.pollaLargaSub='${key}';render()" style="padding:0.4rem 0.9rem;border-radius:0.5rem;font-size:0.8rem;cursor:pointer;border:1px solid ${sub===key?'rgba(99,102,241,0.6)':'var(--border)'};background:${sub===key?'rgba(99,102,241,0.2)':'transparent'};color:${sub===key?'#a5b4fc':'var(--text-faint)'};font-weight:${sub===key?'600':'400'};">${label}</button>
+  `).join('');
+
+  const header = `
+    <div style="margin-bottom:1rem;">
+      <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Larga</h1>
+    </div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1.25rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border);">${subNav}</div>`;
+
+  let content;
+  if(sub==='predict') content = S.name ? renderPredict() : renderNamePrompt();
+  else if(sub==='groups')  content = renderPicksTab();
+  else if(sub==='results') content = renderResults();
+  else                     content = renderCompare();
+
+  return `<div style="padding-bottom:1.5rem;">${header}${content}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 function renderPollapicks(){
   const now = Date.now();
@@ -8254,12 +8287,17 @@ if(_isAdmin){ S.adminUnlocked=true; _updateNavTabs(); }
 // Server will immediately push the full state.
 // If no token, show the auth overlay.
 if(_token && S.name){
-  showView('compare'); // tournament has started — default to the leaderboard
+  // Default to Polla Larga leaderboard
+  S.pollaLargaSub = 'compare';
+  // Polla Corta default: predict until R32 kicks off, then leaderboard
+  const r32Starts = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
+  S.pollaSub = Date.now() >= r32Starts ? 'leaderboard' : 'predict';
+  showView('polla-larga');
   connectWS();
-  // Show app immediately with empty state; WS will fill it in <1 second
   render();
 } else {
-  showView('compare');
+  S.pollaLargaSub = 'compare';
+  showView('polla-larga');
   render();
   showAuthOverlay();
 }
