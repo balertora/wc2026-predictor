@@ -7277,11 +7277,14 @@ function renderRepicker(){
     return `<button class="${cls}" onclick="S.rePickTab='${r.key}';render()">${allDone&&r.key!==tab?'✓ ':''} ${r.label}</button>`;
   }).join('');
 
-  const matchesHtml = [...round.ids].sort((a,b)=>{
-    const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
-    const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
-    return ta - tb;
-  }).map(id=>{
+  const matchesHtml = (tab==='r32'
+    ? [...round.ids].sort((a,b)=>{
+        const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
+        const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
+        return ta - tb;
+      })
+    : round.ids
+  ).map(id=>{
     const t = userBracket[id]||{};
     const home=t.home, away=t.away;
     const homeKnown = repickerTeamKnown(home);
