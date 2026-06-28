@@ -6966,9 +6966,11 @@ function renderRepickerBracket(userBracket, locked){
   const r32Order = BRACKET_PAIRS.flat().map(n=>`r32-${n}`);
   // Each pair in BRACKET_PAIRS feeds into an R16 slot — use RE_R32_PAIRS index to find the right slot
   const r16Order = BRACKET_PAIRS.map(pair=>{ const i=RE_R32_PAIRS.findIndex(p=>p[0]===pair[0]&&p[1]===pair[1]); return `r16-${i+1}`; });
-  // QF: qf-1 = winner r16-1 vs r16-3, qf-2 = r16-2 vs r16-4, qf-3 = r16-5 vs r16-7, qf-4 = r16-6 vs r16-8
-  // In bracket view order: qf-1,qf-2 top half, qf-3,qf-4 bottom half
-  const qfOrder  = ['qf-1','qf-2','qf-3','qf-4'];
+  // QF order must match visual R16 pairing: top half QFs first, bottom half QFs second
+  // Visual R16 order: r16-1,r16-2,r16-5,r16-6 (top) | r16-3,r16-4,r16-7,r16-8 (bottom)
+  // QF-1=r16-1 vs r16-3, QF-2=r16-2 vs r16-4, QF-3=r16-5 vs r16-7, QF-4=r16-6 vs r16-8
+  // In visual order: QF-1, QF-3, QF-2, QF-4
+  const qfOrder  = ['qf-1','qf-3','qf-2','qf-4'];
   const sfOrder  = ['sf-1','sf-2'];
   const finalOrder = ['final-1'];
 
@@ -7599,7 +7601,7 @@ function renderPollapicks(){
     const BRACKET_PAIRS2 = [[12,14],[1,3],[8,5],[11,13],[2,7],[9,16],[6,4],[10,15]];
     const r32Order = BRACKET_PAIRS2.flat().map(n=>`r32-${n}`);
     const r16Order = BRACKET_PAIRS2.map(pair=>{ const i=RE_R32_PAIRS.findIndex(p=>p[0]===pair[0]&&p[1]===pair[1]); return `r16-${i+1}`; });
-    const qfOrder  = ['qf-1','qf-2','qf-3','qf-4'];
+    const qfOrder  = ['qf-1','qf-3','qf-2','qf-4'];
     const sfOrder  = ['sf-1','sf-2'];
     const rounds = [
       {label:'R32',   ids: r32Order},
@@ -8006,15 +8008,18 @@ function renderPollaLeaderboard(){
       :`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;margin-right:0.35rem;">🧑</span>`;
     const champFlag = (r32Kicked && e.champ) ? `<span title="${esc(e.champ)}" style="font-size:0.9rem;margin-right:0.3rem;">${flag(e.champ)}</span>` : '';
     const phaseCells = activePhases.map(k=>`<td style="padding:0.5rem 0.6rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?e.phases[k].toFixed(1):'–'}</td>`).join('');
+    const scoringCells = r32Kicked
+      ? `<td style="padding:0.5rem 0.75rem;text-align:right;font-weight:700;color:#fcd34d;font-size:0.95rem;">${e.total!==null?e.total:'–'}</td>`
+        +`<td style="padding:0.5rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>`
+        +`<td style="padding:0.5rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>`
+        +phaseCells
+      : '';
     return `<tr style="border-bottom:1px solid var(--border-faint);${isSelf?'background:rgba(22,163,74,0.06);':''}">
-      <td style="padding:0.5rem 0.75rem;font-size:0.82rem;color:var(--text-faint);">${rankDisplay}</td>
+      <td style="padding:0.5rem 0.75rem;font-size:0.82rem;color:var(--text-faint);">${r32Kicked ? rankDisplay : '–'}</td>
       <td style="padding:0.5rem 0.5rem;">
         <div style="display:flex;align-items:center;">${champFlag}${avatarHTML}<span style="font-weight:500;color:var(--text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</span></div>
       </td>
-      <td style="padding:0.5rem 0.75rem;text-align:right;font-weight:700;color:#fcd34d;font-size:0.95rem;">${e.total!==null?e.total:'–'}</td>
-      <td style="padding:0.5rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>
-      <td style="padding:0.5rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>
-      ${phaseCells}
+      ${scoringCells}
       <td style="padding:0.5rem 0.6rem;text-align:center;font-size:0.75rem;">${e.complete?'✓':'○'}</td>
     </tr>`;
   }).join('');
@@ -8067,32 +8072,28 @@ function renderPollaLeaderboard(){
 
     ${scoringPanel}
 
-    ${r32Kicked ? `
-    <!-- Stats bar -->
-    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;">${statsHTML}</div>
+    ${r32Kicked ? `<div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;">${statsHTML}</div>` : ''}
 
     ${todayHTML}
 
-    <!-- Leaderboard table -->
+    <!-- Leaderboard table — always show, but scoring columns only after R32 kicks off -->
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;overflow:hidden;margin-bottom:1.25rem;">
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
           <thead><tr style="color:var(--text-faint);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">
             <th style="padding:0.5rem 0.75rem;text-align:left;width:2rem;">#</th>
             <th style="padding:0.5rem 0.5rem;text-align:left;">Name</th>
+            ${r32Kicked ? `
             <th style="padding:0.5rem 0.75rem;text-align:right;">Total</th>
             <th style="padding:0.5rem 0.6rem;text-align:right;">Exact</th>
             <th style="padding:0.5rem 0.6rem;text-align:right;">Result✓</th>
-            ${phaseColsHeader}
+            ${phaseColsHeader}` : ''}
             <th style="padding:0.5rem 0.6rem;text-align:center;" title="Submitted complete bracket">✓</th>
           </tr></thead>
           <tbody>${lbRows}</tbody>
         </table>
       </div>
-    </div>` : `
-    <div style="text-align:center;padding:2rem 1rem;color:var(--text-faint);font-size:0.875rem;">
-      📊 Stats and leaderboard will appear once R32 games kick off.
-    </div>`}
+    </div>
   `;
 }
 
