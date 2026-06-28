@@ -4791,16 +4791,46 @@ function renderResults(){
     return `<td style="${base}background:${bg};">${dh}–${da}${badge}${pen}</td>`;
   }
 
+  const actualKoTeams = _actualKoTeams();
+  // Include all KO slots with known teams (played or upcoming), sorted by kickoff
+  const allKoSlots = Object.keys(KO_VENUES).sort((a,b)=>{
+    const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
+    const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
+    return ta - tb;
+  }).filter(id => {
+    const r = S.kResults[id];
+    if(r && r.home && r.away) return true; // played
+    const t = actualKoTeams[id];
+    return t && t.home && !t.home.startsWith('Winner') && !t.home.startsWith('1st') && !t.home.startsWith('2nd') && !t.home.startsWith('3rd');
+  });
   const enteredKo = Object.keys(KO_VENUES).filter(id => { const r=S.kResults[id]; return r && r.home && r.away; });
   let koBody='', lastRound='';
-  for(const id of enteredKo){
-    const actual=S.kResults[id];
+  for(const id of allKoSlots){
+    const actual = S.kResults[id] || actualKoTeams[id] || {};
     const rl=koRoundLabel(id);
     if(rl!==lastRound){
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
       lastRound=rl;
     }
-    koBody += `<tr>${koGameCell(actual)}${koParticipants.map(p=>koPredCell(p,id,actual)).join('')}</tr>`;
+    const hasResult = S.kResults[id]?.homeScore != null;
+    // Game cell — show date/time for upcoming games
+    let scoreStr2 = '';
+    if(hasResult){
+      scoreStr2 = '<span style="color:#fcd34d;font-family:monospace;font-weight:800;">' + actual.homeScore + '–' + actual.awayScore + '</span>';
+      scoreStr2 += (actual.homeScore===actual.awayScore && actual.penWinner)
+        ? '<span style="color:#94a3b8;font-size:0.6rem;margin-left:0.25rem;">pens: ' + esc(shortTeamName(actual.penWinner)) + '</span>'
+        : '<span style="color:#475569;font-size:0.6rem;margin-left:0.2rem;">FT</span>';
+    } else {
+      const iso2 = KICKOFFS[id];
+      if(iso2){
+        const d2 = _koDate(iso2);
+        scoreStr2 = '<span style="color:#475569;font-size:0.7rem;">' + d2.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' + fmtKickoffTime(iso2) + '</span>';
+      }
+    }
+    const gameCell = !actual.home
+      ? `<td style="${TD_GAME}color:#475569;">TBD</td>`
+      : `<td style="${TD_GAME}font-size:0.82rem;"><span style="color:white;font-weight:500;">${teamSpan(actual.home)}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span style="color:white;font-weight:500;">${teamSpan(actual.away,true)}</span>${hasResult?dossierBtn(actual.home,actual.away):''}<span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
+    koBody += `<tr>${gameCell}${koParticipants.map(p=>koPredCell(p,id,actual)).join('')}</tr>`;
   }
 
   const koHeaderRow = `
@@ -4814,7 +4844,7 @@ function renderResults(){
     🎯 exact score · ✓ right teams (no score) · <span style="color:#fbbf24;">½</span> one team right ·
     ✗ different matchup · <b>P</b> = penalty-winner pick</div>`;
 
-  const koSection = enteredKo.length ? `
+  const koSection = allKoSlots.length ? `
     <div style="margin-top:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.5rem;">🏆 Knockout results</h2>
       <div style="overflow:auto;max-height:calc(100vh - 5rem);background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
@@ -7419,7 +7449,7 @@ function renderRepicker(){
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Corta</h1>
     </div>
-    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${pollaSubNav}</div>
+    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;margin-left:-1rem;margin-right:-1rem;padding-left:1rem;padding-right:1rem;">${pollaSubNav}</div>
     <div style="padding-top:0.75rem;">`;
   const pollaFooter = `</div>`;
 
@@ -7474,7 +7504,7 @@ function renderPollaLarga(){
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Larga</h1>
     </div>
-    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${subNav}</div>
+    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;margin-left:-1rem;margin-right:-1rem;padding-left:1rem;padding-right:1rem;">${subNav}</div>
     <div style="padding-top:0.75rem;">`;
 
   let content;
@@ -7978,16 +8008,21 @@ function renderPollaLeaderboard(){
     const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id] || KICKOFFS[id];
     return iso && localDateKey(iso)===todayKey;
   });
+  const todayR32Teams = repickerR32Teams();
   const todayHTML = todayGames.length ? `
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.875rem 1rem;margin-bottom:1rem;">
       <div style="font-size:0.72rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem;">📅 Today's Polla Corta games</div>
       ${todayGames.map(id=>{
         const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id] || KICKOFFS[id];
         const actual = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
-        const t = actual?.home ? `${esc(shortTeamName(actual.home))} vs ${esc(shortTeamName(actual.away))}` : id.toUpperCase();
+        const slotT = todayR32Teams[id] || {};
+        const home = actual?.home || (repickerTeamKnown(slotT.home)?slotT.home:slotT.home||'?');
+        const away = actual?.away || (repickerTeamKnown(slotT.away)?slotT.away:slotT.away||'?');
+        const t = `${flag(home)} ${esc(shortTeamName(home))} vs ${flag(away)} ${esc(shortTeamName(away))}`;
         const time = iso ? fmtKickoffTime(iso) : '';
+        const score = actual?.homeScore!=null ? ` · ${actual.homeScore}–${actual.awayScore}` : '';
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.25rem 0;font-size:0.82rem;color:var(--text);">
-          <span>${t}</span><span style="color:var(--text-faint);font-size:0.75rem;">${time}</span>
+          <span>${t}${score}</span><span style="color:var(--text-faint);font-size:0.75rem;">${time}</span>
         </div>`;
       }).join('')}
     </div>` : '';
