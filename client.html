@@ -7401,7 +7401,7 @@ function renderRepicker(){
   // ── Polla Corta sub-navigation ──────────────────────────────────────────
   const pollaSub = S.pollaSub || 'predict';
   const pollaSubNav = ['predict','picks','results','leaderboard'].map(k=>{
-    const labels = {predict:'🎯 Predict', picks:'👀 Picks', results:'📊 Results', leaderboard:'🏆 Leaderboard'};
+    const labels = {predict:'🎯 Predict', picks:'📋 Picks', results:'📊 Results', leaderboard:'🏆 Leaderboard'};
     return `<button onclick="S.pollaSub='${k}';render()" style="padding:0.4rem 0.9rem;border-radius:0.5rem;font-size:0.8rem;cursor:pointer;border:1px solid ${pollaSub===k?'rgba(99,102,241,0.6)':'var(--border)'};background:${pollaSub===k?'rgba(99,102,241,0.2)':'transparent'};color:${pollaSub===k?'#a5b4fc':'var(--text-faint)'};font-weight:${pollaSub===k?'600':'400'};">${labels[k]}</button>`;
   }).join('');
 
@@ -7425,14 +7425,14 @@ function renderRepicker(){
         <p style="color:#64748b;font-size:0.8rem;margin-top:0.25rem;">Predict the <b>score</b> of each knockout game, starting from the real Round-of-32 teams. Your bracket advances from your scores. 🔒 Slots unlock as group positions are confirmed. Locks when the knockouts kick off.</p>
       </div>
       <div style="display:flex;gap:0.25rem;flex-shrink:0;">
-        <button onclick="S.reViewMode='list';render()" style="padding:0.3rem 0.7rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:${(S.reViewMode||'list')==='list'?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)'};color:${(S.reViewMode||'list')==='list'?'#a5b4fc':'#94a3b8'};">☰ List</button>
-        <button onclick="S.reViewMode='bracket';render()" style="padding:0.3rem 0.7rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:${S.reViewMode==='bracket'?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)'};color:${S.reViewMode==='bracket'?'#a5b4fc':'#94a3b8'};">⬛ Bracket</button>
+        <button onclick="S.reViewMode='list';render()" style="padding:0.3rem 0.7rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:${(S.reViewMode||'bracket')==='list'?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)'};color:${(S.reViewMode||'bracket')==='list'?'#a5b4fc':'#94a3b8'};">☰ List</button>
+        <button onclick="S.reViewMode='bracket';render()" style="padding:0.3rem 0.7rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:${(S.reViewMode||'bracket')==='bracket'?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)'};color:${(S.reViewMode||'bracket')==='bracket'?'#a5b4fc':'#94a3b8'};">⬛ Bracket</button>
       </div>
     </div>
 
     ${adminStatus}
 
-    ${S.reViewMode==='bracket'
+    ${(S.reViewMode||'bracket')==='bracket'
       ? renderRepickerBracket(userBracket, locked)
       : `<div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>${matchesHtml}`
     }
