@@ -7425,7 +7425,9 @@ function renderRepicker(){
   // Use confirmed qualifiers for R32 — locks unconfirmed slots until teams are mathematically secured
   const confirmedR32 = repickerPreviewBracket();
   const userBracket = repickerUserBracket(S.rePicks, confirmedR32);
-  const locked = !repickerOpen;
+  const r32KickoffTime = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
+  const r32HasKickedOff = Date.now() >= r32KickoffTime;
+  const locked = !repickerOpen || r32HasKickedOff;
   const reActualId = id => id==='final-1' ? 'final' : id==='third-1' ? 'third' : id;
 
   const rounds=[
