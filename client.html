@@ -4820,12 +4820,46 @@ function renderResults(){
     return false; // R16+ only show when actual results are in
   });
   const enteredKo = Object.keys(KO_VENUES).filter(id => { const r=S.kResults[id]; return r && r.home && r.away; });
+  // Pre-compute per-round alive team counts per participant
+  // A slot counts as "alive" if the predicted winner is in the actual matchup
+  function aliveCount(p, slotIds){
+    return slotIds.filter(id=>{
+      const kp = p.kPreds[id];
+      if(!kp || kp.homeScore==null) return false;
+      const conf = S.kResults[id] || confirmedR32[id] || {};
+      const homeT = conf.home, awayT = conf.away;
+      if(!homeT || !awayT) return false;
+      const predWinner = _predAdvancer(kp);
+      return predWinner && (predWinner===homeT || predWinner===awayT);
+    }).length;
+  }
+
+  // Group allKoSlots by round label
+  const slotsByRound = {};
+  for(const id of allKoSlots){
+    const rl = koRoundLabel(id);
+    if(!slotsByRound[rl]) slotsByRound[rl]=[];
+    slotsByRound[rl].push(id);
+  }
+
   let koBody='', lastRound='';
   for(const id of allKoSlots){
     const actual = S.kResults[id] || {};
     const rl=koRoundLabel(id);
     if(rl!==lastRound){
+      const roundSlots = slotsByRound[rl]||[];
+      const aliveMax = roundSlots.length;
+      const aliveCells = koParticipants.map(p=>{
+        const cnt = aliveCount(p, roundSlots);
+        const pct = aliveMax > 0 ? cnt/aliveMax : 0;
+        const col = pct===1?'#4ade80':pct>=0.5?'#facc15':'#f87171';
+        return `<td style="padding:0.25rem 0.35rem;text-align:center;font-size:0.7rem;font-weight:700;color:${col};">${cnt}/${aliveMax}</td>`;
+      }).join('');
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
+      koBody += `<tr style="background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.06);">
+        <td style="padding:0.25rem 0.5rem;font-size:0.68rem;color:#64748b;font-style:italic;position:sticky;left:0;background:#0d1e35;">Alive Teams</td>
+        ${aliveCells}
+      </tr>`;
       lastRound=rl;
     }
     const hasResult = S.kResults[id]?.homeScore != null;
