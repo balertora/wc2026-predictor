@@ -7471,7 +7471,7 @@ function renderRepicker(){
   }
 
   // Preview mode: show read-only bracket with confirmed teams only — for everyone while not open
-  if(!repickerOpen){
+  if(!repickerOpen && !_isAdmin){
     if(!S.name) return `<div style="text-align:center;padding:4rem 1rem;color:#64748b;">Log in to see the Repicker preview.</div>`;
     let preview = {};
     try { preview = repickerPreviewBracket(); } catch(e){ preview = {}; }
