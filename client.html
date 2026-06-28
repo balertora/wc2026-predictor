@@ -7493,13 +7493,13 @@ function renderPollaResults(){
   function pickCell(rp, actual, slotTeams){
     if(!rp || rp.homeScore==null) return `<td style="${TD}color:#334155;text-align:center;font-family:monospace;">–</td>`;
 
-    // Predicted winner flag
-    const predWinner = reAdvancerOf(slotTeams, rp);
+    // Predicted winner flag — only show if we know both teams
+    const bothKnown = repickerTeamKnown(slotTeams?.home) && repickerTeamKnown(slotTeams?.away);
+    const predWinner = bothKnown ? reAdvancerOf(slotTeams, rp) : null;
     const winnerFlag = predWinner ? `${flag(predWinner)} ` : '';
     const scoreStr = `${rp.homeScore}–${rp.awayScore}`;
 
     if(!actual || actual.homeScore==null){
-      // No result yet — show predicted winner flag + score, no coloring
       return `<td style="${TD}color:#94a3b8;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
     }
 
@@ -7518,6 +7518,13 @@ function renderPollaResults(){
   // Phase label — same style as main Results KO phase separator
   const phaseOf = id => id.startsWith('r32')?'Round of 32':id.startsWith('r16')?'Round of 16':id.startsWith('qf')?'Quarter-finals':id.startsWith('sf')?'Semi-finals':id==='third-1'?'Third place':'Final';
 
+  // Pre-compute real R32 slot teams (confirmed teams from group results)
+  const r32Teams = repickerR32Teams();
+  // Pre-compute user's bracket for R16+ slot team resolution
+  const userBracketSlots = repickerUserBracket(S.rePicks || {}, r32Teams);
+  // Get slot teams for a match: R32 uses real confirmed teams, R16+ uses user's advancing picks
+  const getSlotTeams = id => id.startsWith('r32') ? (r32Teams[id]||{}) : (userBracketSlots[id]||{});
+
   // Build rows with phase separators
   let lastPhase='';
   const rows = matchIds.map(id=>{
@@ -7531,6 +7538,12 @@ function renderPollaResults(){
       ? `<tr><td colspan="${1+players.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${phase}</td></tr>`
       : '';
     lastPhase = phase;
+
+    // Use actual result teams if available, else use known slot teams
+    const slotT = getSlotTeams(id);
+    const homeTeam = actual?.home || (repickerTeamKnown(slotT.home)?slotT.home:null);
+    const awayTeam = actual?.away || (repickerTeamKnown(slotT.away)?slotT.away:null);
+    const slotTeams = { home: homeTeam||'?', away: awayTeam||'?' };
 
     // Game cell — exact same format as main Results TD_GAME
     let scoreStr='';
@@ -7546,16 +7559,29 @@ function renderPollaResults(){
       scoreStr=`<span style="color:#475569;font-size:0.7rem;">${ds} · ${ts}</span>`;
     }
 
-    const homeTeam = actual?.home || '?', awayTeam = actual?.away || '?';
-    const slotTeams = { home: homeTeam, away: awayTeam };
     const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">
-      <span style="color:white;font-weight:500;">${teamSpan(homeTeam)}</span>
+      ${homeTeam ? `<span style="color:white;font-weight:500;">${teamSpan(homeTeam)}</span>` : `<span style="color:#475569;">?</span>`}
       <span style="color:#475569;margin:0 0.3rem;">v</span>
-      <span style="color:white;font-weight:500;">${teamSpan(awayTeam, true)}</span>
+      ${awayTeam ? `<span style="color:white;font-weight:500;">${teamSpan(awayTeam, true)}</span>` : `<span style="color:#475569;">?</span>`}
       <span style="margin-left:0.55rem;">${scoreStr}</span>
     </td>`;
 
-    const picks = players.map(p=>pickCell(p.picks[id], actual, slotTeams)).join('');
+    // For R32: slot teams are real (same for everyone)
+    // For R16+: each player has their own teams based on their R32 picks
+    const picks = players.map(p=>{
+      let playerSlotTeams;
+      if(id.startsWith('r32')){
+        playerSlotTeams = { home: homeTeam||'?', away: awayTeam||'?' };
+      } else {
+        const pBracket = repickerUserBracket(p.picks, r32Teams);
+        const pSlot = pBracket[id]||{};
+        playerSlotTeams = {
+          home: actual?.home || (repickerTeamKnown(pSlot.home)?pSlot.home:null) || '?',
+          away: actual?.away || (repickerTeamKnown(pSlot.away)?pSlot.away:null) || '?',
+        };
+      }
+      return pickCell(p.picks[id], actual, playerSlotTeams);
+    }).join('');
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
 
