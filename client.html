@@ -7409,7 +7409,7 @@ function renderRepicker(){
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Corta</h1>
     </div>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1.25rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border);">${pollaSubNav}</div>`;
+    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;margin-bottom:0.75rem;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${pollaSubNav}</div>`;
 
   if(pollaSub === 'picks')      return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollapicks()}</div>`;
   if(pollaSub === 'results')    return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaResults()}</div>`;
@@ -7468,7 +7468,7 @@ function renderPollaLarga(){
     <div style="margin-bottom:1rem;">
       <h1 style="font-size:1.4rem;font-weight:700;color:var(--text-strong);">⚽ Polla Larga</h1>
     </div>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1.25rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border);">${subNav}</div>`;
+    <div style="position:sticky;top:3.5rem;z-index:10;background:var(--bg);padding:0.5rem 0;margin-bottom:0.75rem;border-bottom:1px solid var(--border);display:flex;gap:0.4rem;flex-wrap:wrap;">${subNav}</div>`;
 
   let content;
   if(sub==='predict') content = S.name ? renderPredict() : renderNamePrompt();
