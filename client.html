@@ -2531,53 +2531,36 @@ function koAdvancer(home, away, hs, as_, penWinner){
 function koCompare(pred, actual){
   const aH=actual.home, aA=actual.away;
   const aHS=actual.homeScore, aAS=actual.awayScore;
-  const actualSet=[aH,aA].filter(Boolean);
   if(!pred || (!pred.home && !pred.away)) return {kind:'nopick'};
 
-  const predTeams=[pred.home,pred.away].filter(Boolean);
-  const inter=predTeams.filter(t=>actualSet.includes(t));
   const predLabel = (pred.home||'?')+' v '+(pred.away||'?')
     + (pred.homeScore!=null&&pred.awayScore!=null ? ` ${pred.homeScore}–${pred.awayScore}` : '');
 
-  // No predicted team in actual matchup → no points possible
-  if(inter.length===0) return {kind:'wrong', predLabel};
-
-  // Align predicted scores to actual team orientation
-  let ph, pa;
-  if(inter.length===2){
-    if(pred.home===aH && pred.away===aA){ ph=pred.homeScore; pa=pred.awayScore; }
-    else { ph=pred.awayScore; pa=pred.homeScore; }
-  } else {
-    // One team correct — align by whichever team matched
-    const matchedTeam = inter[0];
-    if(matchedTeam===aH){ ph=pred.home===aH?pred.homeScore:pred.awayScore; pa=pred.home===aH?pred.awayScore:pred.homeScore; }
-    else                 { pa=pred.home===aA?pred.homeScore:pred.awayScore; ph=pred.home===aA?pred.awayScore:pred.homeScore; }
-  }
-
-  if(ph==null || pa==null) return {kind:'teams', predLabel, inter:inter.length};
+  if(pred.homeScore==null || pred.awayScore==null) return {kind:'teams', predLabel};
 
   const actualAdv = koAdvancer(aH,aA,aHS,aAS,actual.penWinner);
-  const predAdv   = koAdvancer(aH,aA,ph,pa,pred.penWinner);
+  const predAdv   = _predAdvancer(pred); // uses pred.home/pred.away — who did they predict to win?
+
+  // Only prerequisite: predicted winner must match actual winner
+  if(!actualAdv || predAdv!==actualAdv) return {kind:'wrong', predLabel};
+
+  // Align predicted scores to actual team orientation for score comparison
+  let ph, pa;
+  if(pred.home===aH){ ph=pred.homeScore; pa=pred.awayScore; }
+  else if(pred.away===aH){ ph=pred.awayScore; pa=pred.homeScore; }
+  else if(pred.home===aA){ pa=pred.homeScore; ph=pred.awayScore; }
+  else { ph=pred.homeScore; pa=pred.awayScore; } // pred teams differ from actual — scores aligned by position
+
   const isDraw    = aHS===aAS;
-  const advOk     = !!actualAdv && predAdv===actualAdv;
+  const advOk     = true; // already checked above
   const homeOk    = ph===aHS, awayOk=pa===aAS;
-
-  // advOk is always the prerequisite — wrong advancing team → 0 pts
-  if(!advOk) return {kind:'wrong', predLabel};
-
-  // exact score only counts when match was not decided by penalties (5 pts)
-  // all other advOk cases get 3 pts
   const scoreMatch = homeOk && awayOk && !actual.penWinner;
+  const penOk     = !!actual.penWinner && outcome(ph,pa)==='D';
+  const exact     = scoreMatch || (homeOk && awayOk && penOk);
 
-  // pen bonus: +1 if match went to penalties and you predicted a draw (with right pen winner,
-  // already confirmed by advOk)
-  const penOk = !!actual.penWinner && outcome(ph,pa)==='D';
-
-  // legacy exact flag for UI colour badges
-  const exact = scoreMatch || (homeOk && awayOk && penOk);
   return {
     kind:'full', ph, pa, aHS, aAS, homeOk, awayOk, exact, advOk, isDraw,
-    scoreMatch, penOk, inter:inter.length,
+    scoreMatch, penOk, inter:2,
     actualPen: actual.penWinner||'', predPen: pred.penWinner||'',
   };
 }
@@ -4905,32 +4888,33 @@ function renderResults(){
       const base = TD+'text-align:center;font-family:monospace;font-weight:600;white-space:nowrap;';
       if(!kp || kp.homeScore==null) return '<td style="'+base+'color:#334155;">–</td>';
       const scoreStr3 = kp.homeScore+'–'+kp.awayScore;
-      // Use user's own predicted teams to determine who they predicted to advance
-      const predWinner = _predAdvancer(kp); // kp already has home/away from user's bracket
+      const predWinner = _predAdvancer(kp);
       const wFlag = predWinner ? flag(predWinner) : '';
-      // Check if predicted winner is in the actual matchup
       const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
-      const wrongMatchup = predWinner && !inMatchup;
-      if(!actual || actual.homeScore==null){
-        const style = wrongMatchup ? 'color:#475569;font-style:italic;opacity:0.6;' : 'color:#94a3b8;';
-        return '<td style="'+base+style+'">'+wFlag+' '+scoreStr3+'</td>';
+
+      // Grey italic for predictions where winner not in matchup — always
+      if(!inMatchup){
+        return '<td style="'+base+'color:#64748b;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
       }
-      // For scoring: if predicted winner is in matchup, use koCompare; if not, it's wrong
-      let bg='', col='#94a3b8';
-      if(!wrongMatchup){
-        const c = koCompare(kp, actual);
-        if(c.kind==='full'){
-          if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
-          else if(c.advOk){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
-          else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
-        } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
+
+      // Check if game has started (live or finished)
+      const liveKo = S.gLive?.[id];
+      const hasStarted = (actual && actual.homeScore!=null) || (liveKo && liveKo.hs!=null);
+
+      // No result yet and not live — show normally
+      if(!hasStarted){
+        return '<td style="'+base+'color:#94a3b8;">'+wFlag+' '+scoreStr3+'</td>';
       }
-      const c2 = !wrongMatchup ? koCompare(kp, actual) : {penOk:false, scoreMatch:false};
-      const exactBadge = c2.scoreMatch ? ' 🎯' : '';
-      const penStr = (c2.penOk) ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
-      if(wrongMatchup) return '<td style="'+base+'color:#64748b;font-style:italic;" title="Predicted a different matchup">'+wFlag+' '+scoreStr3+'</td>';
-      const displayContent = c2.scoreMatch ? '🎯' : wFlag+' '+scoreStr3+penStr;
-      return '<td style="'+base+'background:'+bg+';color:'+col+';">'+displayContent+'</td>';
+
+      // Game in progress or finished — color by outcome
+      const c = koCompare(kp, actual && actual.homeScore!=null ? actual : {home:homeT, away:awayT, homeScore:liveKo?.hs, awayScore:liveKo?.as, penWinner:''});
+      if(c.kind==='full'){
+        const penStr = c.penOk ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
+        if(c.scoreMatch) return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">🎯</td>';
+        return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">'+wFlag+' '+scoreStr3+penStr+'</td>';
+      }
+      // Wrong winner (was in matchup but losing/lost)
+      return '<td style="'+base+'background:rgba(248,113,113,0.06);color:#f87171;">'+wFlag+' '+scoreStr3+'</td>';
     }
 
     koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual)).join('')}</tr>`;
