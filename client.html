@@ -4702,15 +4702,41 @@ function renderResults(){
       No fixtures loaded.
     </div>`;
 
+  function participantHeader(p, thStyle){
+    const isSelf = p.name.endsWith(' (you)');
+    const u = S.otherUsers?.find(x=>x.name===p.name||(x.name+' (you)')===p.name);
+    const src = isSelf ? S.avatar : (u?.avatar||'');
+    const avatarHTML = src
+      ? `<img src="${src}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:0.15rem;" />`
+      : `<span style="font-size:0.7rem;">🧑</span>`;
+    const displayName = isSelf ? 'You' : esc(abbrevName(p.name));
+    return `<th style="${thStyle}"><div style="display:flex;flex-direction:column;align-items:center;gap:0.1rem;">${avatarHTML}<span style="font-size:0.62rem;color:${isSelf?'#4ade80':'var(--text-faint, #64748b)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:3.5rem;">${displayName}</span></div></th>`;
+  }
+
   const headerRow = `
     <tr>
       <th style="${TH_GAME}">Game</th>
-      ${participants.map(p=>`<th style="${TH}" title="${esc(p.name)}">${esc(abbrevName(p.name))}</th>`).join('')}
+      ${participants.map(p=>participantHeader(p, TH)).join('')}
     </tr>`;
 
-  const rows = liveGames.map(g=>gameRow(g,'live')).join('')
-             + completedGames.map(g=>gameRow(g,'done')).join('')
-             + upcomingGames.map(g=>gameRow(g,'upcoming')).join('');
+  // Build rows with date separator rows
+  let lastDate = '';
+  function gameRowWithSeparator(game, mode){
+    const iso = gameKickoff(game);
+    const dateKey = iso ? localDateKey(iso) : game.date;
+    const dateLabel = iso
+      ? _koDate(iso).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'})
+      : new Date(game.date+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+    const sep = dateKey!==lastDate
+      ? `<tr><td colspan="${1+participants.length}" style="padding:0.35rem 0.75rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${dateLabel}</td></tr>`
+      : '';
+    lastDate = dateKey;
+    return sep + gameRow(game, mode);
+  }
+
+  const rows = liveGames.map(g=>gameRowWithSeparator(g,'live')).join('')
+             + completedGames.map(g=>gameRowWithSeparator(g,'done')).join('')
+             + upcomingGames.map(g=>gameRowWithSeparator(g,'upcoming')).join('');
 
   // ── Knockout results section ──────────────────────────────
   // Mirror the group participant columns, but read KO predictions.
@@ -4778,7 +4804,7 @@ function renderResults(){
   const koHeaderRow = `
     <tr>
       <th style="${TH_GAME}">Match</th>
-      ${koParticipants.map(p=>`<th style="${TH}" title="${esc(p.name)}">${esc(abbrevName(p.name))}</th>`).join('')}
+      ${koParticipants.map(p=>participantHeader(p, TH)).join('')}
     </tr>`;
 
   const koLegend = `<div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
@@ -7029,11 +7055,16 @@ function renderRepickerBracket(userBracket, locked){
   }
 
   const cols = rounds.map(r=>{
+    const isFinalCol = r.ids.includes('final-1') && r.ids.includes('third-1');
     const cards = r.ids.map((id,i)=>{
       const sublabel = r.labels?.[i] ? `<div class="bk-sublabel">${r.labels[i]}</div>` : '';
       return `<div class="bk-match">${sublabel}${bracketCard(id)}</div>`;
     }).join('');
-    return `<div class="bk-col"><div class="bk-col-label">${r.label}</div><div class="bk-matches">${cards}</div></div>`;
+    // Final+3rd column: center both cards together rather than spacing them out
+    const matchesStyle = isFinalCol
+      ? 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;flex:1;gap:0.5rem;padding:0 0.15rem;'
+      : '';
+    return `<div class="bk-col"><div class="bk-col-label">${r.label}</div><div ${matchesStyle?`style="${matchesStyle}"`:'class="bk-matches"'}>${cards}</div></div>`;
   }).join('');
 
   return `
@@ -7420,11 +7451,118 @@ function renderPollapicks(){
   </div>`;
 }
 function renderPollaResults(){
-  return `<div style="text-align:center;padding:3rem 1rem;color:var(--text-faint);">
-    <div style="font-size:2rem;margin-bottom:0.75rem;">📊</div>
-    <p style="font-weight:600;color:var(--text);margin-bottom:0.5rem;">Coming soon</p>
-    <p style="font-size:0.875rem;">Match-by-match results view — coming in the next update.</p>
-  </div>`;
+  const now = Date.now();
+  const r32Starts = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
+  const r32Kicked = now >= r32Starts;
+  const allRP = S.allRePicks || {};
+
+  // Sorted match list: chronological by kickoff
+  const matchIds = [...RE_SLOT_IDS].sort((a,b)=>{
+    const ka = a==='final-1'?'final':a==='third-1'?'3rd':a;
+    const kb = b==='final-1'?'final':b==='third-1'?'3rd':b;
+    const ta = KICKOFFS[ka] ? new Date(KICKOFFS[ka]).getTime() : Infinity;
+    const tb = KICKOFFS[kb] ? new Date(KICKOFFS[kb]).getTime() : Infinity;
+    return ta - tb;
+  });
+
+  // Players to show — own picks always; others only after R32 kicks off
+  const myName = S.name;
+  const allNames = r32Kicked
+    ? Object.keys(allRP).sort((a,b)=>a===myName?-1:b===myName?1:a.localeCompare(b))
+    : [myName].filter(n=>allRP[n]);
+
+  const phaseOf = id => id.startsWith('r32')?'R32':id.startsWith('r16')?'R16':id.startsWith('qf')?'QF':id.startsWith('sf')?'SF':id==='third-1'?'3rd Place':'Final';
+
+  // Header row — avatar + short name
+  const headerCells = allNames.map(name=>{
+    const isSelf = name===myName;
+    const u = S.otherUsers?.find(x=>x.name===name||(x.name+' (you)')===name);
+    const src = isSelf ? S.avatar : (u?.avatar||'');
+    const avatarHTML = src
+      ? `<img src="${src}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:0.15rem;" />`
+      : `<span style="font-size:0.75rem;">🧑</span>`;
+    return `<th style="padding:0.4rem 0.5rem;text-align:center;min-width:4rem;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:0.1rem;">
+        ${avatarHTML}
+        <span style="font-size:0.62rem;color:${isSelf?'#4ade80':'var(--text-muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:3.5rem;">${esc(shortTeamName(name))}</span>
+      </div>
+    </th>`;
+  }).join('');
+
+  // Group matches by phase
+  let lastPhase = '';
+  const rows = matchIds.map(id=>{
+    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actual = S.kResults[actualId];
+    const phase = phaseOf(id);
+    const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id] || KICKOFFS[id];
+    const dateStr = iso ? _koDate(iso).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) : '';
+    const timeStr = iso ? fmtKickoffTime(iso) : '';
+
+    // Phase separator row
+    const phaseRow = phase!==lastPhase
+      ? `<tr><td colspan="${2+allNames.length}" style="padding:0.5rem 0.75rem;background:var(--bg-input);font-size:0.68rem;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;">${phase}</td></tr>`
+      : '';
+    lastPhase = phase;
+
+    // Match label
+    const homeLabel = actual?.home ? `${flag(actual.home)} ${esc(shortTeamName(actual.home))}` : id.toUpperCase();
+    const awayLabel = actual?.away ? `${flag(actual.away)} ${esc(shortTeamName(actual.away))}` : '';
+    const resultStr = actual?.homeScore!=null
+      ? `<span style="font-weight:700;color:var(--text-strong);">${actual.homeScore}–${actual.awayScore}</span>${actual.penWinner?`<span style="font-size:0.6rem;color:#fbbf24;"> (${esc(shortTeamName(actual.penWinner))} pens)</span>`:''}`
+      : `<span style="color:var(--text-faint);font-size:0.72rem;">${dateStr} ${timeStr}</span>`;
+
+    const matchCell = `<td style="padding:0.45rem 0.75rem;white-space:nowrap;">
+      <div style="font-size:0.78rem;color:var(--text-strong);">${homeLabel}${awayLabel?' vs '+awayLabel:''}</div>
+      <div style="font-size:0.72rem;margin-top:0.1rem;">${resultStr}</div>
+    </td>`;
+
+    // Per-player pick cells
+    const pickCells = allNames.map(name=>{
+      const picks = allRP[name];
+      const rp = picks?.[id];
+      if(!rp || rp.homeScore==null) return `<td style="padding:0.45rem 0.5rem;text-align:center;color:var(--text-faint);font-size:0.75rem;">–</td>`;
+
+      // Determine color based on result
+      let bg = '', textColor = 'var(--text-muted)';
+      if(actual?.homeScore!=null){
+        const c = koCompare(rp, actual);
+        if(c.kind==='full'){
+          if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; textColor='#4ade80'; }
+          else if(c.advOk){ bg='rgba(250,204,21,0.1)';  textColor='#facc15'; }
+          else             { bg='rgba(248,113,113,0.1)'; textColor='#f87171'; }
+        } else { bg='rgba(248,113,113,0.1)'; textColor='#f87171'; }
+      }
+
+      const scoreStr = `${rp.homeScore}–${rp.awayScore}`;
+      const penStr = rp.penWinner ? `<div style="font-size:0.58rem;color:#fbbf24;">${esc(shortTeamName(rp.penWinner))}</div>` : '';
+      return `<td style="padding:0.4rem 0.5rem;text-align:center;background:${bg};">
+        <div style="font-size:0.78rem;font-weight:600;color:${textColor};">${scoreStr}</div>
+        ${penStr}
+      </td>`;
+    }).join('');
+
+    return `${phaseRow}<tr style="border-bottom:1px solid var(--border-faint);">${matchCell}${pickCells}</tr>`;
+  }).join('');
+
+  const hiddenMsg = !r32Kicked ? `
+    <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#7c3aed;line-height:1.5;">
+      👀 Other players' picks will be revealed when R32 kicks off on ${KICKOFFS['r32-1']?_koDate(KICKOFFS['r32-1']).toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'}):'soon'}.
+    </div>` : '';
+
+  return `
+    ${hiddenMsg}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);">
+            <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--text-faint);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;min-width:10rem;">Match</th>
+            ${headerCells}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 function renderPollaLeaderboard(){
   const now = Date.now();
