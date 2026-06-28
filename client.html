@@ -6960,11 +6960,15 @@ function reScoreCell(matchId, side, val, locked, isPen){
 
 // ── Repicker bracket view ────────────────────────────────────────────────
 function renderRepickerBracket(userBracket, locked){
-  // Official bracket order: R32 pairs that feed into each R16 game
-  // RE_R32_PAIRS = [[12,14],[1,3],[2,7],[9,16],[8,5],[11,13],[6,4],[10,15]]
-  const r32Order = RE_R32_PAIRS.flat().map(n=>`r32-${n}`);
-  const r16Order = RE_R16_PAIRS.flat().map(n=>`r16-${n}`);
-  const qfOrder  = RE_QF_PAIRS.flat().map(n=>`qf-${n}`);
+  // Official FIFA 2026 bracket order from RE_R32_PAIRS
+  // Official bracket order — quarters 2 and 3 swapped vs RE_R32_PAIRS definition
+  const BRACKET_PAIRS = [[12,14],[1,3],[8,5],[11,13],[2,7],[9,16],[6,4],[10,15]];
+  const r32Order = BRACKET_PAIRS.flat().map(n=>`r32-${n}`);
+  // Each pair in BRACKET_PAIRS feeds into an R16 slot — use RE_R32_PAIRS index to find the right slot
+  const r16Order = BRACKET_PAIRS.map(pair=>{ const i=RE_R32_PAIRS.findIndex(p=>p[0]===pair[0]&&p[1]===pair[1]); return `r16-${i+1}`; });
+  // QF: qf-1 = winner r16-1 vs r16-3, qf-2 = r16-2 vs r16-4, qf-3 = r16-5 vs r16-7, qf-4 = r16-6 vs r16-8
+  // In bracket view order: qf-1,qf-2 top half, qf-3,qf-4 bottom half
+  const qfOrder  = ['qf-1','qf-2','qf-3','qf-4'];
   const sfOrder  = ['sf-1','sf-2'];
   const finalOrder = ['final-1'];
 
@@ -7592,9 +7596,10 @@ function renderPollapicks(){
   // Rebuild bracket with color coding injected directly into bracketCard
   function renderColoredBracket(viewBracket, picks){
     const now2 = Date.now();
-    const r32Order = RE_R32_PAIRS.flat().map(n=>`r32-${n}`);
-    const r16Order = RE_R16_PAIRS.flat().map(n=>`r16-${n}`);
-    const qfOrder  = RE_QF_PAIRS.flat().map(n=>`qf-${n}`);
+    const BRACKET_PAIRS2 = [[12,14],[1,3],[8,5],[11,13],[2,7],[9,16],[6,4],[10,15]];
+    const r32Order = BRACKET_PAIRS2.flat().map(n=>`r32-${n}`);
+    const r16Order = BRACKET_PAIRS2.map(pair=>{ const i=RE_R32_PAIRS.findIndex(p=>p[0]===pair[0]&&p[1]===pair[1]); return `r16-${i+1}`; });
+    const qfOrder  = ['qf-1','qf-2','qf-3','qf-4'];
     const sfOrder  = ['sf-1','sf-2'];
     const rounds = [
       {label:'R32',   ids: r32Order},
