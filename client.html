@@ -4703,7 +4703,7 @@ function renderResults(){
   const allGames = liveOnly
     ? [...liveGames]
     : [...liveGames, ...completedGames, ...upcomingGames];
-  if(allGames.length===0) return `
+  if(!liveOnly && allGames.length===0) return `
     <div style="text-align:center;padding:3rem 1rem;color:#64748b;">
       <div style="font-size:2rem;margin-bottom:0.5rem;">⏳</div>
       No fixtures loaded.
@@ -4714,10 +4714,10 @@ function renderResults(){
     const u = S.otherUsers?.find(x=>x.name===p.name||(x.name+' (you)')===p.name);
     const src = isSelf ? S.avatar : (u?.avatar||'');
     const avatarHTML = src
-      ? `<img src="${src}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:0.15rem;" />`
-      : `<span style="font-size:0.7rem;">🧑</span>`;
+      ? `<img src="${src}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;margin-bottom:0.2rem;" />`
+      : `<span style="font-size:0.85rem;">🧑</span>`;
     const displayName = isSelf ? 'You' : esc(abbrevName(p.name));
-    return `<th style="${thStyle}"><div style="display:flex;flex-direction:column;align-items:center;gap:0.1rem;">${avatarHTML}<span style="font-size:0.62rem;color:${isSelf?'#4ade80':'var(--text-faint, #64748b)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:3.5rem;">${displayName}</span></div></th>`;
+    return `<th style="${thStyle}"><div style="display:flex;flex-direction:column;align-items:center;gap:0.15rem;">${avatarHTML}<span style="font-size:0.68rem;font-weight:600;color:${isSelf?'#4ade80':'var(--text-faint, #64748b)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:4rem;">${displayName}</span></div></th>`;
   }
 
   const headerRow = `
@@ -4860,8 +4860,8 @@ function renderResults(){
         return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
       }).join('');
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
-      koBody += `<tr style="border-bottom:2px solid rgba(99,102,241,0.3);">
-        <td style="padding:0.4rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:#0a1628;white-space:nowrap;">🎯 Alive Teams</td>
+      koBody += `<tr style="background:rgba(99,102,241,0.06);">
+        <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:#0c1a35;white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams</td>
         ${aliveCells}
       </tr>`;
       lastRound=rl;
@@ -4962,7 +4962,11 @@ function renderResults(){
     ${koSection}
     <div style="margin-top:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.75rem;">📊 Group Stage Results</h2>
-      ${liveOnly && liveGames.length===0 ? `<div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">No live games right now.</div>` : `
+      ${liveOnly && liveGames.length===0 ? `
+      <div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">
+        No live group games right now.
+        <button onclick="S.resultsLiveOnly=false;render()" style="display:block;margin:0.75rem auto 0;padding:0.35rem 1rem;font-size:0.78rem;cursor:pointer;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.15);border-radius:0.4rem;">Show all games</button>
+      </div>` : `
       <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
           <thead>${headerRow}</thead>
@@ -5106,15 +5110,19 @@ function todaysGamesPanel(parts){
       advSide = adv===homeT?'h':adv===awayT?'a':null;
     } else { const t=e.actualKo[slot]||{}; homeT=t.home||'TBD'; awayT=t.away||'TBD'; mid=`<span style="color:#475569;font-size:0.72rem;">${esc(fmtKickoffTime(e.iso))}</span>`; }
     const mykp=S.kPreds[slot];
-    let pickTxt='–', pickCol='#475569';
+    let pickTxt='–', pickCol='#475569', pickStyle='';
     if(mykp && mykp.homeScore!=null){
-      pickTxt=`${mykp.homeScore}–${mykp.awayScore}`;
-      if(done && done.homeScore!=null){ const c=koCompare(mykp, done); pickCol = c.exact?'#4ade80':c.advOk?'#facc15':(c.kind==='nopick'?'#475569':'#f87171'); }
+      const predWinner = _predAdvancer(mykp);
+      const wFlag = predWinner ? flag(predWinner) : '';
+      const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
+      pickTxt=`${wFlag} ${mykp.homeScore}–${mykp.awayScore}`;
+      if(!inMatchup && predWinner){ pickCol='#475569'; pickStyle='font-style:italic;opacity:0.6;'; }
+      else if(done && done.homeScore!=null){ const c=koCompare(mykp, done); pickCol = c.scoreMatch?'#4ade80':c.advOk?'#facc15':(c.kind==='nopick'?'#475569':'#f87171'); }
       else pickCol='#94a3b8';
     }
     const d=_koPickDist(slot, homeT, awayT, parts);
     const dist=`${seg(d.h,'#60a5fa',advSide==='h')}·${seg(d.a,'#fb923c',advSide==='a')}`;
-    return rowHTML(pickCell(pickTxt,pickCol), homeT, awayT, mid, dist);
+    return rowHTML(`<span style="flex-shrink:0;width:3.5rem;text-align:left;font-family:monospace;font-size:0.74rem;font-weight:700;color:${pickCol};${pickStyle}">${pickTxt}</span>`, homeT, awayT, mid, dist);
   });
 
   return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.6rem 1rem 0.4rem;margin-bottom:1.25rem;">
@@ -5361,8 +5369,8 @@ function renderCompare(){
       return {name:p.name,ph,pa,p:pts(ph,pa,rh,ra),bad:Math.abs(ph-rh)+Math.abs(pa-ra)};
     }).filter(Boolean).sort((a,b)=>b.p-a.p);
     return `
-      <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:0.625rem;">
-        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.625rem 1rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(10,22,40,0.5);flex-wrap:wrap;">
+      <details style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;margin-bottom:0.5rem;">
+        <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.75rem;padding:0.625rem 1rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(10,22,40,0.5);flex-wrap:wrap;user-select:none;">
           <span style="font-size:0.7rem;color:#64748b;background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:0.25rem;white-space:nowrap;">Group ${game.g} MD${game.md}</span>
           <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.625rem;font-weight:600;flex-wrap:wrap;">
             <span>${teamSpan(game.home)}</span>
@@ -5370,7 +5378,7 @@ function renderCompare(){
             <span>${teamSpan(game.away,true)}</span>
           </div>
           <span style="font-size:0.7rem;color:#475569;">${game.date}</span>
-        </div>
+        </summary>
         ${gamePreds.length===0?'<div style="padding:0.625rem 1rem;font-size:0.8rem;color:#64748b;">No predictions</div>':
           gamePreds.map(p=>`
             <div style="display:flex;align-items:center;gap:0.625rem;padding:0.5rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.8rem;">
@@ -5382,7 +5390,7 @@ function renderCompare(){
                 <span style="color:#f87171;font-size:0.7rem;font-weight:600;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem;" title="Total goal error vs actual scores — lower is better">Pts err ${p.bad}</span>
               </div>
             </div>`).join('')}
-      </div>`;
+      </details>`;
   }).join('');
 
   // ── Repicker standings (separate game) — appears once KO results exist ──
@@ -5468,10 +5476,10 @@ function renderCompare(){
 
     <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-bottom:1.25rem;">
       <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#64748b;margin-bottom:0.375rem;">
-        <span>Tournament progress</span><span>${completed.length}/${GROUP_GAMES.length}</span>
+        <span>Tournament progress</span><span>${completed.length + Object.keys(S.kResults||{}).filter(id=>S.kResults[id]?.homeScore!=null).length}/${GROUP_GAMES.length + Object.keys(KO_VENUES).length}</span>
       </div>
       <div style="height:0.5rem;background:rgba(255,255,255,0.07);border-radius:9999px;overflow:hidden;">
-        <div style="height:100%;background:#16a34a;border-radius:9999px;width:${(completed.length/GROUP_GAMES.length*100).toFixed(1)}%;"></div>
+        <div style="height:100%;background:#16a34a;border-radius:9999px;width:${((completed.length + Object.keys(S.kResults||{}).filter(id=>S.kResults[id]?.homeScore!=null).length)/(GROUP_GAMES.length + Object.keys(KO_VENUES).length)*100).toFixed(1)}%;"></div>
       </div>
     </div>
 
@@ -5589,8 +5597,7 @@ function renderCompare(){
         <span style="font-size:0.72rem;color:#64748b;font-weight:400;">${completed.length} games · click to expand</span>
       </summary>
       <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:0.75rem;background:#0d1f35;">
-        ${resultCards.replace(/<div style="background:#112a45;border:1px solid rgba\(255,255,255,0\.07\);border-radius:0\.75rem;overflow:hidden;margin-bottom:0\.625rem;">/g,
-          '<details style="margin-bottom:0.5rem;"><summary style="cursor:pointer;list-style:none;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;overflow:hidden;user-select:none;">').replace(/<\/div>\s*$/g,'</details>')}
+        ${resultCards}
       </div>
     </details>`
       :`<div style="text-align:center;padding:2.5rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;">⏳ Game results appear here once entered in Admin.</div>`}
@@ -7788,27 +7795,37 @@ function renderPollapicks(){
   const r32Teams = repickerR32Teams();
 
   if(viewing==='real'){
-    // Real bracket — show actual results from S.kResults
+    // Real bracket — show ONLY actual confirmed results from S.kResults
     const realBracket = {};
-    for(const id of Object.keys(KO_VENUES)){
-      const r = S.kResults[id];
-      if(r && r.home && r.away) realBracket[id] = { home:r.home, away:r.away };
-    }
-    // Also populate r32 from confirmed slot teams
+    // R32: use confirmed group qualifiers only (real teams)
     for(const m of R32_FIXED){
-      if(!realBracket[m.id]){
+      const r = S.kResults[m.id];
+      if(r && r.home && r.away){
+        realBracket[m.id] = { home:r.home, away:r.away, homeScore:r.homeScore, awayScore:r.awayScore, penWinner:r.penWinner||'', _homeSet:true, _awaySet:true };
+      } else {
         const t = r32Teams[m.id]||{};
-        if(repickerTeamKnown(t.home)||repickerTeamKnown(t.away)) realBracket[m.id]=t;
+        if(repickerTeamKnown(t.home)||repickerTeamKnown(t.away)) realBracket[m.id]={home:t.home,away:t.away,homeScore:null,awayScore:null,penWinner:''};
       }
     }
-    // Map actual KO ids to repicker ids (final→final-1, third→third-1)
-    if(S.kResults['final']?.home) realBracket['final-1'] = { home:S.kResults['final'].home, away:S.kResults['final'].away };
-    if(S.kResults['third']?.home) realBracket['third-1'] = { home:S.kResults['third'].home, away:S.kResults['third'].away };
+    // R16+: only from actual results
+    for(const id of Object.keys(KO_VENUES)){
+      if(id.startsWith('r32')) continue;
+      const r = S.kResults[id];
+      if(r && r.home && r.away) realBracket[id] = { home:r.home, away:r.away, homeScore:r.homeScore, awayScore:r.awayScore, penWinner:r.penWinner||'', _homeSet:true, _awaySet:true };
+    }
+    if(S.kResults['final']?.home){ const r=S.kResults['final']; realBracket['final-1']={home:r.home,away:r.away,homeScore:r.homeScore,awayScore:r.awayScore,penWinner:r.penWinner||'',_homeSet:true,_awaySet:true}; }
+    if(S.kResults['third']?.home){ const r=S.kResults['third']; realBracket['third-1']={home:r.home,away:r.away,homeScore:r.homeScore,awayScore:r.awayScore,penWinner:r.penWinner||'',_homeSet:true,_awaySet:true}; }
+
+    // Temporarily override S.rePicks so the bracket card shows real scores not user picks
+    const _savedRePicks = S.rePicks;
+    S.rePicks = realBracket;
+    const realBracketHTML = renderRepickerBracket(realBracket, true);
+    S.rePicks = _savedRePicks;
 
     return `${hiddenMsg}
       <div style="position:sticky;top:6.5rem;z-index:9;background:var(--bg);padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;flex-wrap:nowrap;overflow-x:auto;margin-bottom:0.75rem;">${selectorBtns}</div>
       <p style="font-size:0.8rem;color:var(--text-faint);margin-bottom:0.75rem;">Real bracket — actual results as they come in.</p>
-      ${renderRepickerBracket(realBracket, true)}`;
+      ${realBracketHTML}`;
   }
 
   // Player bracket
@@ -8169,9 +8186,12 @@ function renderPollaResults(){
               const d2=_koDate(iso);
               scoreStr2='<span style="color:#475569;font-size:0.7rem;">'+d2.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' · '+fmtKickoffTime(iso)+'</span>';
             }
-            const gameCell2 = !realHome
-              ? `<td style="${TD_GAME}color:#475569;">?</td>`
-              : `<td style="${TD_GAME}font-size:0.82rem;"><span style="color:white;font-weight:500;">${teamSpan(realHome)}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span style="color:white;font-weight:500;">${teamSpan(realAway||'?',true)}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
+            const gameCell2 = !realHome && !realAway
+              ? `<td style="${TD_GAME}font-size:0.82rem;color:#475569;">
+                  <span style="color:#334155;">? v ?</span>
+                  ${scoreStr2?`<span style="margin-left:0.55rem;">${scoreStr2}</span>`:''}
+                </td>`
+              : `<td style="${TD_GAME}font-size:0.82rem;"><span style="color:white;font-weight:500;">${teamSpan(realHome||'?')}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span style="color:white;font-weight:500;">${teamSpan(realAway||'?',true)}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
             const picks2 = players.map(p=>{
               let playerSlotTeams;
               if(id.startsWith('r32')){
@@ -8268,6 +8288,13 @@ function renderPollaLeaderboard(){
 
   const statsHTML = statsBoxes.map(box=>{
     if(!box.r) return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;opacity:0.4;"><div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">${box.label}</div><div style="font-size:1.2rem;color:var(--text-faint);">–</div></div>`;
+    // Special layout for Top Pick
+    if(box.label==='Top pick'){
+      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;">
+        <div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">${box.label}</div>
+        <div style="font-size:0.78rem;line-height:1.7;color:var(--text);">${topChampDisplay}</div>
+      </div>`;
+    }
     const avatarNames = box.r.names.slice(0,2);
     const avatars = avatarNames.map(n=>{ const u=S.otherUsers?.find(x=>x.name===n); const src=n===S.name?S.avatar:u?.avatar||''; return src?`<img src="${src}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid ${box.accent};" />`:`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;">🧑</span>`; }).join('');
     const subLabel = box.r.names.length>1?`${box.r.names.length} tied`:esc(box.r.names[0]);
