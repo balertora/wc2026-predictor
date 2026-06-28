@@ -5796,7 +5796,36 @@ function renderAdmin(){
       </div>
     </details>
 
-    ${renderAdminKoEntry()}`;
+    ${renderAdminKoEntry()}
+
+    <!-- ── Polla Corta picks management ── -->
+    <details style="margin-top:1.5rem;">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem 1rem;color:white;font-weight:600;font-size:0.95rem;user-select:none;">
+        <span>🎱 Polla Corta — Manage picks</span>
+        <span style="font-size:0.75rem;color:#64748b;font-weight:400;">click to expand</span>
+      </summary>
+      <div style="border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 0.75rem 0.75rem;padding:1rem;background:#0d1f35;">
+        <p style="font-size:0.78rem;color:#64748b;margin-bottom:1rem;">View and restore Polla Corta picks for any user. To restore picks, edit the JSON and click Save — this will overwrite that user's current picks.</p>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          ${Object.entries(S.allRePicks||{}).sort(([a],[b])=>a.localeCompare(b)).map(([name, picks])=>{
+            const complete = rePickComplete(picks);
+            const filledCount = Object.values(picks).filter(p=>p&&p.homeScore!=null).length;
+            const total = RE_SLOT_IDS.length;
+            return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                <span style="font-weight:600;color:white;">${esc(name)}</span>
+                <span style="font-size:0.75rem;color:${complete?'#4ade80':'#f87171'};">${filledCount}/${total} picks · ${complete?'✓ Complete':'○ Incomplete'}</span>
+              </div>
+              <textarea id="re-picks-${esc(name)}" style="width:100%;height:8rem;font-family:monospace;font-size:0.7rem;background:#0a1628;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;padding:0.5rem;box-sizing:border-box;resize:vertical;">${esc(JSON.stringify(picks, null, 2))}</textarea>
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
+                <button onclick="adminSaveRePicks('${esc(name)}')" style="padding:0.35rem 0.875rem;font-size:0.78rem;background:#15803d;color:white;border:none;border-radius:0.5rem;cursor:pointer;font-weight:600;">💾 Save picks</button>
+                <button onclick="adminCopyRestoreScript('${esc(name)}')" style="padding:0.35rem 0.875rem;font-size:0.78rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;cursor:pointer;">📋 Copy restore script</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </details>`;
 }
 
 // ── Admin: knockout result entry ─────────────────────────────
@@ -7277,6 +7306,33 @@ const RE_R32_FIXED_MAP = Object.fromEntries(R32_FIXED.map(m=>[m.id,m]));
 
 
 let _reSaveTimer=null;
+async function adminSaveRePicks(name){
+  const ta = document.getElementById('re-picks-'+name);
+  if(!ta){ alert('Textarea not found'); return; }
+  let picks;
+  try { picks = JSON.parse(ta.value); }
+  catch(e){ alert('Invalid JSON: '+e.message); return; }
+  S.allRePicks[name] = picks;
+  try {
+    const res = await fetch('/api/admin/re-picks/'+encodeURIComponent(name), {
+      method:'PUT', headers:_authHeaders(), body:JSON.stringify({picks})
+    });
+    if(res.ok){ alert('✓ Picks saved for '+name); render(); return; }
+  } catch(e){}
+  // Fallback: copy console script
+  adminCopyRestoreScript(name);
+  alert('Admin endpoint not available. Console script copied — paste in console while logged in as '+name+'.');
+}
+function adminCopyRestoreScript(name){
+  const ta = document.getElementById('re-picks-'+name);
+  if(!ta) return;
+  let picks;
+  try { picks = JSON.parse(ta.value); }
+  catch(e){ alert('Invalid JSON: '+e.message); return; }
+  const script = `S.rePicks = ${JSON.stringify(picks)};\npersistRe();\nconsole.log('Picks restored for ${name}');`;
+  navigator.clipboard?.writeText(script).then(()=>alert('✓ Script copied! Paste in console while logged in as '+name+'.'));
+}
+
 function persistRe(){ clearTimeout(_reSaveTimer); _reSaveTimer=setTimeout(_doPersistRe,600); }
 async function _doPersistRe(){
   if(!_token) return;
