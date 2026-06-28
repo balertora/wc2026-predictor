@@ -7449,11 +7449,221 @@ function renderRepicker(){
 // POLLA CORTA SUB-TABS (Commits 2-4 will fill these in)
 // ═══════════════════════════════════════════════════════════
 function renderPollapicks(){
-  return `<div style="text-align:center;padding:3rem 1rem;color:var(--text-faint);">
-    <div style="font-size:2rem;margin-bottom:0.75rem;">👀</div>
-    <p style="font-weight:600;color:var(--text);margin-bottom:0.5rem;">Coming soon</p>
-    <p style="font-size:0.875rem;">Per-player bracket viewer — coming in the next update.</p>
-  </div>`;
+  const now = Date.now();
+  const r32Starts = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
+  const r32Kicked = now >= r32Starts;
+  const allRP = S.allRePicks || {};
+  const myName = S.name;
+
+  // Available viewers: own bracket always; others + real bracket only after R32 kicks off
+  const playerNames = r32Kicked
+    ? [myName, ...Object.keys(allRP).filter(n=>n!==myName).sort((a,b)=>a.localeCompare(b))]
+    : [myName];
+  const showReal = r32Kicked;
+
+  // Current selection — default to own name
+  if(!S.pollaPicksView || (!playerNames.includes(S.pollaPicksView) && S.pollaPicksView!=='real')){
+    S.pollaPicksView = myName;
+  }
+  const viewing = S.pollaPicksView;
+
+  // Player selector buttons
+  const selectorBtns = [
+    ...playerNames.map(name=>{
+      const isSelf = name===myName;
+      const u = S.otherUsers?.find(x=>x.name===name);
+      const src = isSelf ? S.avatar : (u?.avatar||'');
+      const av = src
+        ? `<img src="${src}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" />`
+        : `<span style="font-size:0.8rem;">🧑</span>`;
+      const active = viewing===name;
+      return `<button onclick="S.pollaPicksView='${esc(name)}';render()" title="${esc(name)}" style="display:flex;flex-direction:column;align-items:center;gap:0.2rem;padding:0.4rem 0.6rem;border-radius:0.5rem;cursor:pointer;border:1px solid ${active?'rgba(99,102,241,0.6)':'var(--border)'};background:${active?'rgba(99,102,241,0.15)':'transparent'};">
+        ${av}
+        <span style="font-size:0.6rem;color:${active?(isSelf?'#4ade80':'#a5b4fc'):'var(--text-faint)'};white-space:nowrap;max-width:3.5rem;overflow:hidden;text-overflow:ellipsis;">${isSelf?'You':esc(abbrevName(name))}</span>
+      </button>`;
+    }),
+    ...(showReal ? [`<button onclick="S.pollaPicksView='real';render()" style="display:flex;flex-direction:column;align-items:center;gap:0.2rem;padding:0.4rem 0.6rem;border-radius:0.5rem;cursor:pointer;border:1px solid ${viewing==='real'?'rgba(251,191,36,0.6)':'var(--border)'};background:${viewing==='real'?'rgba(251,191,36,0.1)':'transparent'};">
+      <span style="font-size:1.1rem;">🏆</span>
+      <span style="font-size:0.6rem;color:${viewing==='real'?'#fbbf24':'var(--text-faint)'};white-space:nowrap;">Real</span>
+    </button>`] : []),
+  ].join('');
+
+  const hiddenMsg = !r32Kicked ? `
+    <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#7c3aed;line-height:1.5;">
+      👀 Other players' brackets will be revealed when R32 kicks off${KICKOFFS['r32-1']?' on '+_koDate(KICKOFFS['r32-1']).toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'}):'.'}.
+    </div>` : '';
+
+  // Build the bracket to display
+  const r32Teams = repickerR32Teams();
+
+  if(viewing==='real'){
+    // Real bracket — show actual results from S.kResults
+    const realBracket = {};
+    for(const id of Object.keys(KO_VENUES)){
+      const r = S.kResults[id];
+      if(r && r.home && r.away) realBracket[id] = { home:r.home, away:r.away };
+    }
+    // Also populate r32 from confirmed slot teams
+    for(const m of R32_FIXED){
+      if(!realBracket[m.id]){
+        const t = r32Teams[m.id]||{};
+        if(repickerTeamKnown(t.home)||repickerTeamKnown(t.away)) realBracket[m.id]=t;
+      }
+    }
+    // Map actual KO ids to repicker ids (final→final-1, third→third-1)
+    if(S.kResults['final']?.home) realBracket['final-1'] = { home:S.kResults['final'].home, away:S.kResults['final'].away };
+    if(S.kResults['third']?.home) realBracket['third-1'] = { home:S.kResults['third'].home, away:S.kResults['third'].away };
+
+    return `${hiddenMsg}
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">${selectorBtns}</div>
+      <p style="font-size:0.8rem;color:var(--text-faint);margin-bottom:0.75rem;">Real bracket — actual results as they come in.</p>
+      ${renderRepickerBracket(realBracket, true)}`;
+  }
+
+  // Player bracket
+  const picks = allRP[viewing]||{};
+  const viewBracket = repickerUserBracket(picks, r32Teams);
+
+  // Color coding: from R16+, check if predicted advancing team actually advanced
+  // Returns 'correct', 'wrong', or null (no result yet / 3rd place exception)
+  function advancingColor(id, slotTeams){
+    if(id.startsWith('r32')) return null; // no color coding for R32
+    if(id==='third-1') return null; // no red for 3rd place (losing SF is expected)
+    const actualId = id==='final-1'?'final':id;
+    const actual = S.kResults[actualId];
+    if(!actual || actual.homeScore==null) return null;
+    const rp = picks[id];
+    if(!rp || rp.homeScore==null) return null;
+    const c = koCompare(rp, actual);
+    if(c.kind==='full') return c.advOk ? 'correct' : 'wrong';
+    return 'wrong';
+  }
+
+  // Build colored bracket — inject color into each card via data attribute style override
+  // We do this by building a modified bracket HTML with inline color styles
+  const coloredBracketHTML = renderRepickerBracket(viewBracket, true);
+
+  // Post-process: we need to inject color borders on cards based on advancingColor
+  // Instead, build a wrapper with per-slot color overrides via a style block
+  const colorStyles = RE_SLOT_IDS.map(id=>{
+    const slotTeams = viewBracket[id]||{};
+    const col = advancingColor(id, slotTeams);
+    if(!col) return '';
+    const borderColor = col==='correct' ? 'rgba(74,222,128,0.6)' : 'rgba(248,113,113,0.6)';
+    const bgColor = col==='correct' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)';
+    // Target cards by data attribute — we'll add data-slot to each card
+    return ``;
+  }).filter(Boolean).join('');
+
+  // Rebuild bracket with color coding injected directly into bracketCard
+  function renderColoredBracket(viewBracket, picks){
+    const now2 = Date.now();
+    const r32Order = RE_R32_PAIRS.flat().map(n=>`r32-${n}`);
+    const r16Order = RE_R16_PAIRS.flat().map(n=>`r16-${n}`);
+    const qfOrder  = RE_QF_PAIRS.flat().map(n=>`qf-${n}`);
+    const sfOrder  = ['sf-1','sf-2'];
+    const rounds = [
+      {label:'R32',   ids: r32Order},
+      {label:'R16',   ids: r16Order},
+      {label:'QF',    ids: qfOrder},
+      {label:'SF',    ids: sfOrder},
+      {label:'Final / 3rd', ids: ['final-1','third-1'], labels:['🏆 Final','🥉 3rd Place']},
+    ];
+
+    function coloredCard(id){
+      const t = viewBracket[id]||{};
+      const home = t.home, away = t.away;
+      const kickoff = KICKOFFS[id] ? fmtKickoffTime(KICKOFFS[id]) : '';
+      const city = KO_VENUES[id] || '';
+      const dateStr = KICKOFFS[id] ? _koDate(KICKOFFS[id]).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) : '';
+      const meta = (dateStr||city) ? `<div class="bk-meta">${dateStr}${kickoff?' · '+kickoff:''}${city?' · '+city:''}</div>` : '';
+
+      const col = advancingColor(id);
+      const cardBorder = col==='correct'?'border-color:rgba(74,222,128,0.7);':col==='wrong'?'border-color:rgba(248,113,113,0.6);':'';
+      const cardBg = col==='correct'?'background:rgba(74,222,128,0.06);':col==='wrong'?'background:rgba(248,113,113,0.05);':'';
+
+      if(!home && !away) return `<div class="bk-card bk-tbd" style="${cardBorder}${cardBg}">${meta}<span class="bk-ph-sm">TBD</span></div>`;
+
+      const homeKnown = repickerTeamKnown(home);
+      const awayKnown = repickerTeamKnown(away);
+
+      if(id.startsWith('r32') && (!homeKnown || !awayKnown)){
+        const r32Match = RE_R32_FIXED_MAP?.[id];
+        const posB = r32Match?.posB||'';
+        const slotKey = posB.match(/^3rd-slot-(.+)$/)?.[1];
+        const possibles = slotKey ? possible3rdNamesGlobal(slotKey) : [];
+        const homeStr = homeKnown
+          ? `<div class="bk-team-row"><span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span></div>`
+          : `<div class="bk-team-row"><span class="bk-ph">${esc(home||'TBD')}</span></div>`;
+        const awayStr = awayKnown
+          ? `<div class="bk-team-row"><span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span></div>`
+          : possibles.length
+            ? `<div class="bk-team-row"><span class="bk-ph">🔒 ${possibles.join(' / ')}</span></div>`
+            : `<div class="bk-team-row"><span class="bk-ph">🔒 ${esc(away||'TBD')}</span></div>`;
+        return `<div class="bk-card bk-locked" style="${cardBorder}${cardBg}">${meta}${homeStr}${awayStr}</div>`;
+      }
+
+      if(!homeKnown || !awayKnown){
+        return `<div class="bk-card bk-tbd" style="${cardBorder}${cardBg}">${meta}<span class="bk-ph-sm">${esc(home||'TBD')} vs ${esc(away||'TBD')}</span></div>`;
+      }
+
+      const rp = picks[id];
+      const hv = rp?.homeScore!==undefined ? rp.homeScore : '';
+      const av = rp?.awayScore!==undefined ? rp.awayScore : '';
+      const isDraw = rp?._homeSet && rp?._awaySet && hv!=='' && av!=='' && Number(hv)===Number(av);
+      const ar = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
+      const actualStr = (ar && ar.home && ar.homeScore!=null)
+        ? `<div class="bk-actual">✓ ${esc(shortTeamName(ar.home))} ${ar.homeScore}–${ar.awayScore} ${esc(shortTeamName(ar.away))}</div>`
+        : '';
+      const penWinnerStr = isDraw && rp?.penWinner ? `<div class="bk-pen">🎯 Pens: ${esc(shortTeamName(rp.penWinner))}</div>` : '';
+      const scoreDisplay = hv!==''&&av!=='' ? `<span style="font-size:0.75rem;color:var(--text-faint);margin-left:0.3rem;">${hv}–${av}</span>` : '';
+
+      return `<div class="bk-card${isDraw?' bk-draw':''}" style="${cardBorder}${cardBg}">
+        ${meta}
+        <div class="bk-team-row"><span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>${hv!==''?`<span style="font-size:0.72rem;color:var(--text-faint);">${hv}</span>`:''}</div>
+        <div class="bk-team-row"><span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>${av!==''?`<span style="font-size:0.72rem;color:var(--text-faint);">${av}</span>`:''}</div>
+        ${penWinnerStr}${actualStr}
+      </div>`;
+    }
+
+    const cols = rounds.map(r=>{
+      const isFinalCol = r.ids.includes('final-1') && r.ids.includes('third-1');
+      const cards = r.ids.map((id,i)=>{
+        const sublabel = r.labels?.[i] ? `<div class="bk-sublabel">${r.labels[i]}</div>` : '';
+        return `<div class="bk-match">${sublabel}${coloredCard(id)}</div>`;
+      }).join('');
+      const matchesStyle = isFinalCol ? 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;flex:1;gap:0.5rem;padding:0 0.15rem;' : '';
+      return `<div class="bk-col"><div class="bk-col-label">${r.label}</div><div ${matchesStyle?`style="${matchesStyle}"`:'class="bk-matches"'}>${cards}</div></div>`;
+    }).join('');
+
+    return `<div class="bk-wrap"><div class="bk-grid">${cols}</div></div>`;
+  }
+
+  // Helper for possible 3rd names (needs locks from outer scope)
+  function possible3rdNamesGlobal(slotKey){
+    const locks = thirdSlotLocks();
+    const info = locks[slotKey];
+    if(!info || !info.groups) return [];
+    return info.groups.map(g=>{
+      const gGames = GROUP_GAMES.filter(x=>x.g===g);
+      const groupDone = gGames.every(gm=>S.gResults[gm.id]);
+      if(groupDone){ const st=actualGroupStandings(g); return st[2]?.name?shortTeamName(st[2].name):`3rd Grp ${g}`; }
+      return `3rd Grp ${g}`;
+    });
+  }
+
+  const viewingName = viewing===myName ? 'Your bracket' : `${esc(viewing)}'s bracket`;
+  const colorLegend = r32Kicked ? `<div style="font-size:0.68rem;color:var(--text-faint);margin-top:0.5rem;display:flex;gap:1rem;flex-wrap:wrap;">
+    <span><span style="color:#4ade80;">●</span> Correct advancing team (from R16)</span>
+    <span><span style="color:#f87171;">●</span> Wrong advancing team eliminated</span>
+    <span style="color:var(--text-very-faint);">3rd place game not color-coded</span>
+  </div>` : '';
+
+  return `${hiddenMsg}
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">${selectorBtns}</div>
+    <p style="font-size:0.8rem;color:var(--text-faint);margin-bottom:0.75rem;">${viewingName}</p>
+    ${renderColoredBracket(viewBracket, picks)}
+    ${colorLegend}`;
 }
 function renderPollaResults(){
   const now = Date.now();
