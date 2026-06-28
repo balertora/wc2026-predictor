@@ -4743,8 +4743,8 @@ function renderResults(){
   // ── Knockout results section ──────────────────────────────
   // Mirror the group participant columns, but read KO predictions.
   const koParticipants=[];
-  if(S.name && Object.keys(S.gPreds).length>0) koParticipants.push({name:S.name+' (you)', kPreds:S.kPreds||{}});
-  koParticipants.push(...S.otherUsers.filter(_hasPicks).map(u=>({name:u.name, kPreds:u.kPreds||{}})));
+  if(S.name && Object.keys(S.kPreds).length>0) koParticipants.push({name:S.name+' (you)', kPreds:S.kPreds||{}});
+  koParticipants.push(...S.otherUsers.filter(u=>u.kPreds && Object.keys(u.kPreds).some(k=>k.startsWith('r32'))).map(u=>({name:u.name, kPreds:u.kPreds||{}})));
 
   const koRoundLabel = id =>
     id.startsWith('r32') ? 'Round of 32' :
@@ -4853,11 +4853,11 @@ function renderResults(){
         const cnt = aliveCount(p, roundSlots);
         const pct = aliveMax > 0 ? cnt/aliveMax : 0;
         const col = pct===1?'#4ade80':pct>=0.5?'#facc15':'#f87171';
-        return `<td style="padding:0.25rem 0.35rem;text-align:center;font-size:0.7rem;font-weight:700;color:${col};">${cnt}/${aliveMax}</td>`;
+        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:800;color:${col};">${cnt}/${aliveMax}</td>`;
       }).join('');
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
-      koBody += `<tr style="background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.06);">
-        <td style="padding:0.25rem 0.5rem;font-size:0.68rem;color:#64748b;font-style:italic;position:sticky;left:0;background:#0d1e35;">Alive Teams</td>
+      koBody += `<tr style="border-bottom:2px solid rgba(99,102,241,0.3);">
+        <td style="padding:0.4rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:#0a1628;white-space:nowrap;">🎯 Alive Teams</td>
         ${aliveCells}
       </tr>`;
       lastRound=rl;
