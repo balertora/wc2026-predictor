@@ -5012,6 +5012,7 @@ function renderCompare(){
 
   const koActive = Object.keys(KO_VENUES).some(id=>{ const r=S.kResults[id]; return r&&r.home&&r.away&&r.homeScore!=null; });
   const allGroupsDone = GROUP_GAMES.every(g=>S.gResults[g.id]);
+  const r32Kicked = KICKOFFS['r32-1'] ? Date.now() >= new Date(KICKOFFS['r32-1']).getTime() : false;
 
   // Crowd-odds weight per completed game: the actual result's "decimal odds"
   // from how people guessed (total picks / picks for the actual outcome). The
@@ -5147,7 +5148,7 @@ function renderCompare(){
         const avatarHTML=avatarSrc
           ?`<img src="${avatarSrc}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.55),0 0 0 1.5px rgba(255,255,255,0.12);" />`
           :`<span style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.07);display:inline-flex;align-items:center;justify-content:center;font-size:0.75rem;flex-shrink:0;margin-right:0.4rem;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🧑</span>`;
-        const champFlag = e.champion ? `<span title="${esc(e.champion)}" style="font-size:1rem;margin-right:0.35rem;flex-shrink:0;">${flag(e.champion)}</span>` : '';
+        const champFlag = (r32Kicked && e.champion) ? `<span title="${esc(e.champion)}" style="font-size:1rem;margin-right:0.35rem;flex-shrink:0;">${flag(e.champion)}</span>` : '';
         return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
           <td style="padding:0.75rem 1rem;">${rankDisplay}</td>
@@ -7441,12 +7442,6 @@ function renderRepicker(){
       ? renderRepickerBracket(userBracket, locked)
       : `<div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>${matchesHtml}`
     }
-
-    ${scored.length ? `
-    <div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;margin-top:1.5rem;">
-      <h2 style="font-weight:600;color:white;font-size:0.9rem;margin-bottom:0.625rem;">🏆 Polla Corta Leaderboard <span style="color:#64748b;font-weight:400;font-size:0.75rem;">(KO points)</span></h2>
-      ${lbRows}
-    </div>` : ''}
   </div>${pollaFooter}</div>`;
 }
 
@@ -7897,6 +7892,8 @@ function renderPollaLeaderboard(){
     '3rd': KICKOFFS['3rd'],
     final: KICKOFFS['final'],
   };
+  const r32Starts = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
+  const r32Kicked = now >= r32Starts;
   const phaseStarted = k => PHASE_FIRST[k] && new Date(PHASE_FIRST[k]).getTime() <= now;
   const PHASE_LABELS = {r32:'R32', r16:'R16', qf:'QF', sf:'SF', '3rd':'3rd', final:'F'};
   const activePhases = ['r32','r16','qf','sf','3rd','final'].filter(phaseStarted);
@@ -8002,7 +7999,7 @@ function renderPollaLeaderboard(){
     const avatarHTML = avatarSrc
       ?`<img src="${avatarSrc}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.35rem;" />`
       :`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;margin-right:0.35rem;">🧑</span>`;
-    const champFlag = e.champ ? `<span title="${esc(e.champ)}" style="font-size:0.9rem;margin-right:0.3rem;">${flag(e.champ)}</span>` : '';
+    const champFlag = (r32Kicked && e.champ) ? `<span title="${esc(e.champ)}" style="font-size:0.9rem;margin-right:0.3rem;">${flag(e.champ)}</span>` : '';
     const phaseCells = activePhases.map(k=>`<td style="padding:0.5rem 0.6rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?e.phases[k].toFixed(1):'–'}</td>`).join('');
     return `<tr style="border-bottom:1px solid var(--border-faint);${isSelf?'background:rgba(22,163,74,0.06);':''}">
       <td style="padding:0.5rem 0.75rem;font-size:0.82rem;color:var(--text-faint);">${rankDisplay}</td>
@@ -8065,6 +8062,7 @@ function renderPollaLeaderboard(){
 
     ${scoringPanel}
 
+    ${r32Kicked ? `
     <!-- Stats bar -->
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;">${statsHTML}</div>
 
@@ -8086,7 +8084,11 @@ function renderPollaLeaderboard(){
           <tbody>${lbRows}</tbody>
         </table>
       </div>
-    </div>`;
+    </div>` : `
+    <div style="text-align:center;padding:2rem 1rem;color:var(--text-faint);font-size:0.875rem;">
+      📊 Stats and leaderboard will appear once R32 games kick off.
+    </div>`}
+  `;
 }
 
 // ═══════════════════════════════════════════════════════════
