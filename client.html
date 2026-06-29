@@ -10,6 +10,7 @@
 <style>
   /* ───── Theme tokens ───── */
   /* LIGHT (default) */
+  .team-flag-only { display: none; }
   @media (max-width: 640px) {
     /* Today's games: smaller font on mobile */
     .tg-row { font-size: 0.76rem !important; gap: 0.3rem !important; }
@@ -27,6 +28,9 @@
       padding-left: 0.2rem !important;
       padding-right: 0.2rem !important;
     }
+    /* Team names: hide on mobile, show flags only */
+    .team-name-txt { display: none !important; }
+    .team-flag-only { display: inline !important; }
   }
   :root {
     --bg:           #f1f5f9;
@@ -4912,8 +4916,8 @@ function renderResults(){
       }
     }
 
-    const homeDisplay = homeT ? teamSpan(homeT) : '<span style="color:#475569;">?</span>';
-    const awayDisplay = awayT ? teamSpan(awayT,true) : '<span style="color:#475569;">?</span>';
+    const homeDisplay = homeT ? `<span class="team-name-txt">${teamSpan(homeT)}</span><span class="team-flag-only">${flag(homeT)}</span>` : '<span style="color:#475569;">?</span>';
+    const awayDisplay = awayT ? `<span class="team-flag-only">${flag(awayT)}</span><span class="team-name-txt">${teamSpan(awayT,true)}</span>` : '<span style="color:#475569;">?</span>';
     const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">${homeDisplay}<span style="color:#475569;margin:0 0.3rem;">v</span>${awayDisplay}${hasResult?dossierBtn(homeT,awayT):''}<span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
 
     // Pred cell
@@ -5100,9 +5104,9 @@ function todaysGamesPanel(parts){
   const pickCell=(txt,color)=>`<span title="Your pick" class="tg-pick" style="flex-shrink:0;text-align:left;font-family:monospace;font-size:0.88rem;font-weight:700;color:${color};white-space:nowrap;">${txt}</span>`;
   const rowHTML=(pick,homeT,awayT,mid,dist)=>`<div class="tg-row" style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.88rem;">
       ${pick}
-      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
+      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;"><span class="team-name-txt">${esc(shortTeamName(homeT))} </span>${flag(homeT)}</span>
       <span style="flex-shrink:0;min-width:5.5rem;text-align:center;">${mid}</span>
-      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${flag(awayT)} ${esc(shortTeamName(awayT))}</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${flag(awayT)}<span class="team-name-txt"> ${esc(shortTeamName(awayT))}</span></span>
       <span title="How players picked — left team · (draw) · right team" style="flex-shrink:0;font-size:0.82rem;font-family:monospace;min-width:3.5rem;text-align:right;">${dist}</span>
     </div>`;
 
@@ -5194,9 +5198,9 @@ function todaysGamesPanel_repicker(slotIds, r32Teams){
     const pick=`<span style="flex-shrink:0;text-align:left;font-family:monospace;font-size:0.88rem;font-weight:700;color:${pickCol};white-space:nowrap;">${pickTxt}</span>`;
     return `<div class="tg-row" style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.88rem;">
       ${pick}
-      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
+      <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;"><span class="team-name-txt">${esc(shortTeamName(homeT))} </span>${flag(homeT)}</span>
       <span style="flex-shrink:0;min-width:5.5rem;text-align:center;">${mid}</span>
-      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${flag(awayT)} ${esc(shortTeamName(awayT))}</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${flag(awayT)}<span class="team-name-txt"> ${esc(shortTeamName(awayT))}</span></span>
       <span style="flex-shrink:0;font-size:0.82rem;font-family:monospace;min-width:3rem;text-align:right;">${dist}</span>
     </div>`;
   }).join('');
@@ -8291,10 +8295,10 @@ function renderPollaResults(){
     }
 
     const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">
-      ${realHome ? `<span style="color:white;font-weight:500;">${teamSpan(realHome)}</span>` : `<span style="color:#475569;">?</span>`}
+      ${realHome ? `<span class="team-name-txt">${teamSpan(realHome)}</span><span class="team-flag-only">${flag(realHome)}</span>` : `<span style="color:#475569;">?</span>`}
       <span style="color:#475569;margin:0 0.3rem;">v</span>
-      ${realAway ? `<span style="color:white;font-weight:500;">${teamSpan(realAway, true)}</span>` : `<span style="color:#475569;">?</span>`}
-      <span style="margin-left:0.55rem;">${scoreStr}</span>
+      ${realAway ? `<span class="team-name-txt">${teamSpan(realAway, true)}</span><span class="team-flag-only">${flag(realAway)}</span>` : `<span style="color:#475569;">?</span>`}
+      <span style="margin-left:0.4rem;font-size:0.78rem;">${scoreStr}</span>
     </td>`;
 
     // For pick cells: R32 uses real confirmed teams for winner resolution
@@ -8378,7 +8382,7 @@ function renderPollaResults(){
               }
               const gameCell2 = !realHome && !realAway
                 ? `<td style="${TD_GAME}font-size:0.82rem;color:#475569;"><span style="color:#334155;">? v ?</span>${scoreStr2?`<span style="margin-left:0.55rem;">${scoreStr2}</span>`:''}</td>`
-                : `<td style="${TD_GAME}font-size:0.82rem;"><span style="color:white;font-weight:500;">${teamSpan(realHome||'?')}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span style="color:white;font-weight:500;">${teamSpan(realAway||'?',true)}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
+                : `<td style="${TD_GAME}font-size:0.82rem;"><span class="team-cell">${realHome?`<span class="team-name-txt">${flag(realHome)} ${esc(shortTeamName(realHome))}</span><span class="team-flag-only">${flag(realHome)}</span>`:'<span style="color:#475569;">?</span>'}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span class="team-cell">${realAway?`<span class="team-name-txt">${esc(shortTeamName(realAway))} ${flag(realAway)}</span><span class="team-flag-only">${flag(realAway)}</span>`:'<span style="color:#475569;">?</span>'}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
               const picks2 = players.map(p=>{
                 let playerSlotTeams;
                 if(id.startsWith('r32')){
