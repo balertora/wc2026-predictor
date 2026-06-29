@@ -4799,34 +4799,43 @@ function renderResults(){
     const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
     const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
     return ta - tb;
-  }).filter(id => {
-    const r = S.kResults[id];
-    if(r && r.home && r.away) return true;
-    // For R32, only show if both teams confirmed from real group results
-    if(id.startsWith('r32')) return !!confirmedR32[id];
-    return false; // R16+ only show when actual results are in
-  });
+  }); // Show ALL slots regardless of confirmation status
+
   const enteredKo = Object.keys(KO_VENUES).filter(id => { const r=S.kResults[id]; return r && r.home && r.away; });
+
+  // Helper: resolve team for a slot — from results, confirmedR32, or '?'
+  function resolveTeam(id, side){
+    const r = S.kResults[id];
+    if(r && r[side]) return r[side];
+    const conf = confirmedR32[id];
+    if(conf && conf[side]) return conf[side];
+    return null; // unknown
+  }
+
   // Pre-compute per-round alive team counts per participant
   // A slot counts as "alive" if the predicted winner is in the actual matchup
   function aliveCount(p, slotIds){
     return slotIds.filter(id=>{
       const kp = p.kPreds[id];
       if(!kp || kp.homeScore==null) return false;
-      const conf = S.kResults[id] || confirmedR32[id] || {};
-      const homeT = conf.home, awayT = conf.away;
+      const homeT = resolveTeam(id,'home'), awayT = resolveTeam(id,'away');
       if(!homeT || !awayT) return false;
       const predWinner = _predAdvancer(kp);
       return predWinner && (predWinner===homeT || predWinner===awayT);
     }).length;
   }
 
-  // Group allKoSlots by round label
+  // Group ALL slots by round label
   const slotsByRound = {};
   for(const id of allKoSlots){
     const rl = koRoundLabel(id);
     if(!slotsByRound[rl]) slotsByRound[rl]=[];
     slotsByRound[rl].push(id);
+  }
+
+  // Check if all slots in a round have both teams confirmed
+  function roundFullyConfirmed(rl){
+    return (slotsByRound[rl]||[]).every(id => resolveTeam(id,'home') && resolveTeam(id,'away'));
   }
 
   // Live KO detection
@@ -4842,27 +4851,33 @@ function renderResults(){
     const actual = S.kResults[id] || {};
     const rl=koRoundLabel(id);
     if(rl!==lastRound){
-      const roundSlots = slotsByRound[rl]||[];
-      const aliveMax = roundSlots.length;
-      const aliveCells = koParticipants.map(p=>{
-        const cnt = aliveCount(p, roundSlots);
-        const pct = aliveMax > 0 ? cnt/aliveMax : 0;
-        const col = pct===1?'#4ade80':pct>=0.5?'#fbbf24':'#f87171';
-        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
-      }).join('');
+      // Phase separator
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
-      koBody += `<tr style="background:rgba(99,102,241,0.06);">
-        <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:rgba(99,102,241,0.12);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams</td>
-        ${aliveCells}
-      </tr>`;
+      // Alive Teams — only when all matchups in this round are confirmed
+      if(roundFullyConfirmed(rl)){
+        const roundSlots = slotsByRound[rl]||[];
+        const aliveMax = roundSlots.length;
+        const aliveCells = koParticipants.map(p=>{
+          const cnt = aliveCount(p, roundSlots);
+          const pct = aliveMax > 0 ? cnt/aliveMax : 0;
+          const col = pct===1?'#4ade80':pct>=0.5?'#fbbf24':'#f87171';
+          return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
+        }).join('');
+        koBody += `<tr style="background:rgba(99,102,241,0.06);">
+          <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:rgba(99,102,241,0.12);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams</td>
+          ${aliveCells}
+        </tr>`;
+      }
       lastRound=rl;
     }
+
     const hasResult = S.kResults[id]?.homeScore != null;
     const liveKo = S.gLive?.[id];
-    const actualOrConf = S.kResults[id] || confirmedR32[id] || {};
-    const homeT = actualOrConf.home || '?';
-    const awayT = actualOrConf.away || '?';
-    // Game cell — live score, result, or date/time
+    const homeT = resolveTeam(id,'home');
+    const awayT = resolveTeam(id,'away');
+    const bothConfirmed = !!(homeT && awayT);
+
+    // Game cell
     let scoreStr2 = '';
     if(liveKo && liveKo.hs != null){
       scoreStr2 = '<span style="color:#f87171;font-family:monospace;font-weight:800;">' + liveKo.hs + '–' + liveKo.as + '</span>' + _liveClock(KICKOFFS[id], liveKo.detail, true, '0.6rem');
@@ -4878,46 +4893,45 @@ function renderResults(){
         scoreStr2 = '<span style="color:#475569;font-size:0.7rem;">' + d2.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' + fmtKickoffTime(iso2) + '</span>';
       }
     }
-    const gameCell = homeT==='?'
-      ? `<td style="${TD_GAME}color:#475569;">TBD</td>`
-      : `<td style="${TD_GAME}font-size:0.82rem;"><span style="color:white;font-weight:500;">${teamSpan(homeT)}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span style="color:white;font-weight:500;">${teamSpan(awayT,true)}</span>${hasResult?dossierBtn(homeT,awayT):''}<span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
 
-    // Pred cell: flag of predicted winner + score (like Polla Corta Results)
-    function koFlagPredCell(p, id, homeT, awayT, actual){
+    const homeDisplay = homeT ? teamSpan(homeT) : '<span style="color:#475569;">?</span>';
+    const awayDisplay = awayT ? teamSpan(awayT,true) : '<span style="color:#475569;">?</span>';
+    const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">${homeDisplay}<span style="color:#475569;margin:0 0.3rem;">v</span>${awayDisplay}${hasResult?dossierBtn(homeT,awayT):''}<span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
+
+    // Pred cell
+    function koFlagPredCell(p, id, homeT, awayT, actual, bothConfirmed){
       const kp = p.kPreds[id];
       const base = TD+'text-align:center;font-family:monospace;font-weight:600;white-space:nowrap;';
       if(!kp || kp.homeScore==null) return '<td style="'+base+'color:#334155;">–</td>';
       const scoreStr3 = kp.homeScore+'–'+kp.awayScore;
       const predWinner = _predAdvancer(kp);
       const wFlag = predWinner ? flag(predWinner) : '';
-      const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
+      const inMatchup = bothConfirmed && predWinner && (predWinner===homeT || predWinner===awayT);
 
-      // Not in matchup → grey background + italic always (before and after result)
-      if(!inMatchup){
+      // Both teams confirmed and predicted winner not in matchup → grey background + italic
+      if(bothConfirmed && !inMatchup){
         return '<td style="'+base+'background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
-      // In matchup, game not started → normal white
-      const liveKo = S.gLive?.[id];
-      const hasStarted = (actual && actual.homeScore!=null) || (liveKo && liveKo.hs!=null);
+      // Teams not fully confirmed yet, or in matchup → show normally until game starts
+      const liveKo2 = S.gLive?.[id];
+      const hasStarted = (actual && actual.homeScore!=null) || (liveKo2 && liveKo2.hs!=null);
       if(!hasStarted){
         return '<td style="'+base+'color:#94a3b8;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
-      // In matchup, game in progress or finished → color by outcome
-      const compareActual = (actual && actual.homeScore!=null) ? actual : {home:homeT, away:awayT, homeScore:liveKo?.hs, awayScore:liveKo?.as, penWinner:''};
+      // Game in progress or finished — color by outcome
+      const compareActual = (actual && actual.homeScore!=null) ? actual : {home:homeT, away:awayT, homeScore:liveKo2?.hs, awayScore:liveKo2?.as, penWinner:''};
       const c = koCompare(kp, compareActual);
       if(c.kind==='full'){
-        // Correct winner
         const penStr = c.penOk ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
         if(c.scoreMatch) return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">🎯</td>';
         return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">'+wFlag+' '+scoreStr3+penStr+'</td>';
       }
-      // Wrong winner (was in matchup but lost/losing) → red
       return '<td style="'+base+'background:rgba(248,113,113,0.06);color:#f87171;">'+wFlag+' '+scoreStr3+'</td>';
     }
 
-    koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual)).join('')}</tr>`;
+    koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual,bothConfirmed)).join('')}</tr>`;
   }
 
   const koHeaderRow = `
