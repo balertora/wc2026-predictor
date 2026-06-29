@@ -1109,7 +1109,107 @@ app.put('/api/re-picks', requireAuth, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ── Chat endpoints ───────────────────────────────────────────────────────────
+// PUT /api/admin/re-picks/:name — admin saves Repicker picks for any user by name
+app.put('/api/admin/re-picks/:name', requireAdmin, asyncHandler(async (req, res) => {
+  const targetName = req.params.name;
+  const { picks } = req.body;
+  if (!picks || typeof picks !== 'object') return res.status(400).json({ error: 'picks required' });
+
+  const userRow = await dbGet('SELECT id FROM users WHERE LOWER(name) = LOWER(?)', [targetName]);
+  if (!userRow) return res.status(404).json({ error: `User "${targetName}" not found` });
+  const targetId = userRow.id;
+
+  const intOrNull = (v, max) => {
+    if (v == null) return null;
+    const n = parseInt(v, 10);
+    return (Number.isFinite(n) && n >= 0 && n <= max) ? n : null;
+  };
+
+  const statements = [];
+  for (const [matchId, pred] of Object.entries(picks)) {
+    if (typeof matchId !== 'string' || !matchId) continue;
+    if (!pred || typeof pred !== 'object' || (!pred.home && !pred.away)) {
+      statements.push({ sql: 'DELETE FROM re_picks WHERE user_id = ? AND match_id = ?', args: [targetId, matchId] });
+      continue;
+    }
+    const home = typeof pred.home === 'string' ? pred.home.slice(0, 40) : null;
+    const away = typeof pred.away === 'string' ? pred.away.slice(0, 40) : null;
+    const hs = intOrNull(pred.homeScore, 30);
+    const as_ = intOrNull(pred.awayScore, 30);
+    const penWinner = (pred.penWinner && (pred.penWinner === home || pred.penWinner === away)) ? pred.penWinner : null;
+    const ph = intOrNull(pred.penHome, 30);
+    const pa = intOrNull(pred.penAway, 30);
+    const winner = reAdvancer(home, away, hs, as_, penWinner);
+    statements.push({
+      sql: `INSERT OR REPLACE INTO re_picks
+            (user_id, match_id, winner, home, away, home_score, away_score, pen_winner, pen_home, pen_away, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      args: [targetId, matchId, winner, home, away, hs, as_, penWinner, ph, pa],
+    });
+  }
+
+  if (statements.length > 0) await db.batch(statements, 'write');
+  scheduleBroadcast();
+  res.json({ ok: true });
+}));
+
+// PUT /api/admin/predictions/:name — admin saves group + KO predictions for any user by name
+app.put('/api/admin/predictions/:name', requireAdmin, asyncHandler(async (req, res) => {
+  const targetName = req.params.name;
+  const { gPreds = {}, kPreds = {} } = req.body;
+
+  const userRow = await dbGet('SELECT id FROM users WHERE LOWER(name) = LOWER(?)', [targetName]);
+  if (!userRow) return res.status(404).json({ error: `User "${targetName}" not found` });
+  const targetId = userRow.id;
+
+  const statements = [];
+
+  for (const [gameIdStr, scores] of Object.entries(gPreds)) {
+    const gameId = parseInt(gameIdStr, 10);
+    if (!Number.isInteger(gameId) || gameId < 1 || gameId > 72) continue;
+    if (!Array.isArray(scores) || scores.length < 2) continue;
+    const h = parseInt(scores[0], 10), a = parseInt(scores[1], 10);
+    if (!Number.isFinite(h) || !Number.isFinite(a) || h < 0 || a < 0 || h > 30 || a > 30) continue;
+    statements.push({
+      sql: `INSERT INTO group_predictions (user_id, game_id, home_score, away_score, updated_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(user_id, game_id) DO UPDATE SET
+              home_score = excluded.home_score,
+              away_score = excluded.away_score,
+              updated_at = excluded.updated_at`,
+      args: [targetId, gameId, h, a],
+    });
+  }
+
+  for (const [matchId, pred] of Object.entries(kPreds)) {
+    if (typeof matchId !== 'string' || !pred || typeof pred !== 'object') continue;
+    const hs = pred.homeScore != null ? parseInt(pred.homeScore, 10) : null;
+    const as_ = pred.awayScore != null ? parseInt(pred.awayScore, 10) : null;
+    if (hs !== null && (!Number.isFinite(hs) || hs < 0 || hs > 30)) continue;
+    if (as_ !== null && (!Number.isFinite(as_) || as_ < 0 || as_ > 30)) continue;
+    let ph = pred.penHome != null ? parseInt(pred.penHome, 10) : null;
+    let pa = pred.penAway != null ? parseInt(pred.penAway, 10) : null;
+    if (ph !== null && (!Number.isFinite(ph) || ph < 0 || ph > 30)) ph = null;
+    if (pa !== null && (!Number.isFinite(pa) || pa < 0 || pa > 30)) pa = null;
+    statements.push({
+      sql: `INSERT INTO ko_predictions (user_id, match_id, home, away, home_score, away_score, pen_winner, pen_home, pen_away, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(user_id, match_id) DO UPDATE SET
+              home = excluded.home, away = excluded.away,
+              home_score = excluded.home_score, away_score = excluded.away_score,
+              pen_winner = excluded.pen_winner,
+              pen_home = excluded.pen_home, pen_away = excluded.pen_away,
+              updated_at = excluded.updated_at`,
+      args: [targetId, matchId, pred.home || null, pred.away || null, hs, as_, pred.penWinner || null, ph, pa],
+    });
+  }
+
+  if (statements.length > 0) await db.batch(statements, 'write');
+  scheduleBroadcast();
+  res.json({ ok: true });
+}));
+
+
 
 // Simple per-user send rate limit (10 s cooldown)
 const _msgCooldown = new Map(); // userId → timestamp

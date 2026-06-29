@@ -4864,7 +4864,7 @@ function renderResults(){
           return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
         }).join('');
         koBody += `<tr style="background:rgba(99,102,241,0.06);">
-          <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:rgba(99,102,241,0.12);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams</td>
+          <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:rgba(99,102,241,0.12);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams <span style="font-weight:400;font-size:0.7rem;opacity:0.8;">(${rl})</span></td>
           ${aliveCells}
         </tr>`;
       }
@@ -5938,7 +5938,44 @@ function renderAdmin(){
       </div>
     </details>
 
-    <!-- Polla Corta picks management -->
+    <!-- Polla Larga picks management -->
+    <details style="${detailsStyle}">
+      <summary style="${summaryStyle}">
+        <span>📝 Polla Larga — Manage picks</span>
+        <span style="font-size:0.72rem;color:#64748b;font-weight:400;">Edit user gPreds / kPreds</span>
+      </summary>
+      <div style="${bodyStyle}">
+        <p style="font-size:0.78rem;color:#64748b;margin-bottom:1rem;">Edit a user's group predictions (gPreds) or KO predictions (kPreds). Use the Copy restore script button and paste in console while logged in as that user to save.</p>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          ${[{name:S.name,gPreds:S.gPreds,kPreds:S.kPreds}, ...S.otherUsers].map(u=>{
+            const gCount = Object.keys(u.gPreds||{}).length;
+            const kCount = Object.keys(u.kPreds||{}).length;
+            return `<div style="background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;padding:0.875rem;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                <span style="font-weight:600;color:white;">${esc(u.name)}</span>
+                <span style="font-size:0.75rem;color:#64748b;">${gCount} group · ${kCount} KO picks</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+                <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="padding:0.25rem 0.6rem;font-size:0.72rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem;cursor:pointer;">Toggle gPreds</button>
+                <button onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display==='none'?'block':'none'" style="padding:0.25rem 0.6rem;font-size:0.72rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem;cursor:pointer;">Toggle kPreds</button>
+              </div>
+              <div style="display:none;">
+                <p style="font-size:0.7rem;color:#64748b;margin-bottom:0.25rem;">gPreds — group stage picks (gameId → [homeScore, awayScore])</p>
+                <textarea id="gpreds-${esc(u.name)}" style="width:100%;height:7rem;font-family:monospace;font-size:0.68rem;background:#0a1628;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;padding:0.5rem;box-sizing:border-box;resize:vertical;">${esc(JSON.stringify(u.gPreds||{}, null, 2))}</textarea>
+              </div>
+              <div style="display:none;">
+                <p style="font-size:0.7rem;color:#64748b;margin-bottom:0.25rem;">kPreds — KO picks (slotId → {home,away,homeScore,awayScore,penWinner})</p>
+                <textarea id="kpreds-${esc(u.name)}" style="width:100%;height:7rem;font-family:monospace;font-size:0.68rem;background:#0a1628;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;padding:0.5rem;box-sizing:border-box;resize:vertical;">${esc(JSON.stringify(u.kPreds||{}, null, 2))}</textarea>
+              </div>
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
+                <button onclick="adminSavePreds('${esc(u.name)}')" style="padding:0.35rem 0.875rem;font-size:0.78rem;background:#15803d;color:white;border:none;border-radius:0.5rem;cursor:pointer;font-weight:600;">💾 Save picks</button>
+                <button onclick="adminCopyPredsScript('${esc(u.name)}')" style="padding:0.35rem 0.875rem;font-size:0.78rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;cursor:pointer;">📋 Copy restore script</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </details>
     <details style="${detailsStyle}">
       <summary style="${summaryStyle}">
         <span>🎱 Polla Corta — Manage picks</span>
@@ -7446,6 +7483,34 @@ const RE_R32_FIXED_MAP = Object.fromEntries(R32_FIXED.map(m=>[m.id,m]));
 
 
 let _reSaveTimer=null;
+async function adminSavePreds(name){
+  const gTa = document.getElementById('gpreds-'+name);
+  const kTa = document.getElementById('kpreds-'+name);
+  if(!gTa || !kTa){ alert('Textareas not found — toggle them open first'); return; }
+  let gPreds, kPreds;
+  try { gPreds = JSON.parse(gTa.value); } catch(e){ alert('Invalid gPreds JSON: '+e.message); return; }
+  try { kPreds = JSON.parse(kTa.value); } catch(e){ alert('Invalid kPreds JSON: '+e.message); return; }
+  try {
+    const res = await fetch('/api/admin/predictions/'+encodeURIComponent(name), {
+      method:'PUT', headers:_authHeaders(), body:JSON.stringify({gPreds, kPreds})
+    });
+    if(res.ok){ alert('✓ Picks saved for '+name); render(); return; }
+  } catch(e){}
+  // Fallback: copy console script
+  adminCopyPredsScript(name);
+  alert('Admin endpoint not available. Console script copied — paste in console while logged in as '+name+'.');
+}
+function adminCopyPredsScript(name){
+  const gTa = document.getElementById('gpreds-'+name);
+  const kTa = document.getElementById('kpreds-'+name);
+  if(!gTa || !kTa){ alert('Textareas not found — toggle them open first'); return; }
+  let gPreds, kPreds;
+  try { gPreds = JSON.parse(gTa.value); } catch(e){ alert('Invalid gPreds JSON: '+e.message); return; }
+  try { kPreds = JSON.parse(kTa.value); } catch(e){ alert('Invalid kPreds JSON: '+e.message); return; }
+  const script = `// Restore Polla Larga picks for ${name}\nS.gPreds = ${JSON.stringify(gPreds)};\nS.kPreds = ${JSON.stringify(kPreds)};\npersist();\nconsole.log('Picks restored for ${name}');`;
+  navigator.clipboard?.writeText(script).then(()=>alert('✓ Script copied! Paste in console while logged in as '+name+'.'));
+}
+
 async function adminSaveRePicks(name){
   const ta = document.getElementById('re-picks-'+name);
   if(!ta){ alert('Textarea not found'); return; }
@@ -7459,7 +7524,6 @@ async function adminSaveRePicks(name){
     });
     if(res.ok){ alert('✓ Picks saved for '+name); render(); return; }
   } catch(e){}
-  // Fallback: copy console script
   adminCopyRestoreScript(name);
   alert('Admin endpoint not available. Console script copied — paste in console while logged in as '+name+'.');
 }
