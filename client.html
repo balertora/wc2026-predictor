@@ -4948,9 +4948,9 @@ function renderResults(){
   const koSection = (liveOnly ? liveKoIds.size > 0 : allKoSlots.length) ? `
     <div style="margin-bottom:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.5rem;">🏆 Knockout results</h2>
-      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+      <div style="overflow:auto;max-height:70vh;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-          <thead>${koHeaderRow}</thead>
+          <thead style="position:sticky;top:0;z-index:3;">${koHeaderRow}</thead>
           <tbody>${koBody}</tbody>
         </table>
       </div>
@@ -4977,9 +4977,9 @@ function renderResults(){
     ${koSection}
     ${liveOnly ? '' : `<div style="margin-top:1.75rem;">
       <h2 style="font-size:1.1rem;font-weight:700;color:white;margin-bottom:0.75rem;">📊 Group Stage Results</h2>
-      <div style="overflow-x:auto;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
+      <div style="overflow:auto;max-height:70vh;background:#112a45;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-          <thead>${headerRow}</thead>
+          <thead style="position:sticky;top:0;z-index:3;">${headerRow}</thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
