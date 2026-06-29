@@ -4852,7 +4852,7 @@ function renderResults(){
     const rl=koRoundLabel(id);
     if(rl!==lastRound){
       // Phase separator
-      koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:#0a1628;color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
+      koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:var(--bg);color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
       // Alive Teams — only when all matchups in this round are confirmed
       if(roundFullyConfirmed(rl)){
         const roundSlots = slotsByRound[rl]||[];
@@ -4863,8 +4863,8 @@ function renderResults(){
           const col = pct===1?'#4ade80':pct>=0.5?'#fbbf24':'#f87171';
           return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
         }).join('');
-        koBody += `<tr style="background:rgba(99,102,241,0.06);">
-          <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:rgba(99,102,241,0.12);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams <span style="font-weight:400;font-size:0.7rem;opacity:0.8;">(${rl})</span></td>
+        koBody += `<tr style="background:var(--bg);">
+          <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:var(--bg);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams <span style="font-weight:400;font-size:0.7rem;opacity:0.8;">(${rl})</span></td>
           ${aliveCells}
         </tr>`;
       }
@@ -5956,14 +5956,14 @@ function renderAdmin(){
                 <span style="font-size:0.75rem;color:#64748b;">${gCount} group · ${kCount} KO picks</span>
               </div>
               <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
-                <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="padding:0.25rem 0.6rem;font-size:0.72rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem;cursor:pointer;">Toggle gPreds</button>
-                <button onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display==='none'?'block':'none'" style="padding:0.25rem 0.6rem;font-size:0.72rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem;cursor:pointer;">Toggle kPreds</button>
+                <button onclick="var el=document.getElementById('gpreds-box-${esc(u.name)}');el.style.display=el.style.display==='none'?'block':'none'" style="padding:0.25rem 0.6rem;font-size:0.72rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem;cursor:pointer;">Toggle gPreds</button>
+                <button onclick="var el=document.getElementById('kpreds-box-${esc(u.name)}');el.style.display=el.style.display==='none'?'block':'none'" style="padding:0.25rem 0.6rem;font-size:0.72rem;background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.4rem;cursor:pointer;">Toggle kPreds</button>
               </div>
-              <div style="display:none;">
+              <div id="gpreds-box-${esc(u.name)}" style="display:none;">
                 <p style="font-size:0.7rem;color:#64748b;margin-bottom:0.25rem;">gPreds — group stage picks (gameId → [homeScore, awayScore])</p>
                 <textarea id="gpreds-${esc(u.name)}" style="width:100%;height:7rem;font-family:monospace;font-size:0.68rem;background:#0a1628;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;padding:0.5rem;box-sizing:border-box;resize:vertical;">${esc(JSON.stringify(u.gPreds||{}, null, 2))}</textarea>
               </div>
-              <div style="display:none;">
+              <div id="kpreds-box-${esc(u.name)}" style="display:none;">
                 <p style="font-size:0.7rem;color:#64748b;margin-bottom:0.25rem;">kPreds — KO picks (slotId → {home,away,homeScore,awayScore,penWinner})</p>
                 <textarea id="kpreds-${esc(u.name)}" style="width:100%;height:7rem;font-family:monospace;font-size:0.68rem;background:#0a1628;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;padding:0.5rem;box-sizing:border-box;resize:vertical;">${esc(JSON.stringify(u.kPreds||{}, null, 2))}</textarea>
               </div>
