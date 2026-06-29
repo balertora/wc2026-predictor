@@ -5173,7 +5173,7 @@ function todaysGamesPanel_repicker(slotIds, r32Teams){
     const aPicks = Object.values(allRP).filter(p=>{ const rp=p[id]; if(!rp||rp.homeScore==null) return false; return reAdvancerOf({home:homeT,away:awayT},rp)===awayT; }).length;
     const adv = done?.homeScore!=null ? koAdvancer(done.home,done.away,done.homeScore,done.awayScore,done.penWinner) : null;
     const dist = `${seg(hPicks,'#60a5fa',adv===homeT)}·${seg(aPicks,'#fb923c',adv===awayT)}`;
-    const pick=`<span style="flex-shrink:0;width:3.2rem;text-align:left;font-family:monospace;font-size:0.88rem;font-weight:700;color:${pickCol};">${pickTxt}</span>`;
+    const pick=`<span style="flex-shrink:0;text-align:left;font-family:monospace;font-size:0.88rem;font-weight:700;color:${pickCol};white-space:nowrap;">${pickTxt}</span>`;
     return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.88rem;">
       ${pick}
       <span style="flex:1;min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;font-weight:500;">${esc(shortTeamName(homeT))} ${flag(homeT)}</span>
@@ -7985,7 +7985,7 @@ function renderPollapicks(){
     // Temporarily override viewing picks so renderColoredBracket shows real scores
     const _savedRePicks = S.rePicks;
     S.rePicks = realBracket;
-    const realBracketHTML = renderColoredBracket(realBracket, realBracket);
+    const realBracketHTML = renderColoredBracket(realBracket, realBracket, false);
     S.rePicks = _savedRePicks;
 
     return `${hiddenMsg}
@@ -8000,10 +8000,9 @@ function renderPollapicks(){
 
   // Color coding: from R16+, check if predicted advancing team actually advanced
   // Returns 'correct', 'wrong', or null (no result yet / 3rd place exception)
-  function advancingColor(id, slotTeams){
-    if(id.startsWith('r32')) return null; // no color coding for R32
-    if(id==='third-1') return null; // no red for 3rd place (losing SF is expected)
-    const actualId = id==='final-1'?'final':id;
+  function advancingColor(id){
+    if(id==='third-1') return null; // no red for 3rd place
+    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
     const actual = S.kResults[actualId];
     if(!actual || actual.homeScore==null) return null;
     const rp = picks[id];
@@ -8030,7 +8029,7 @@ function renderPollapicks(){
   }).filter(Boolean).join('');
 
   // Rebuild bracket with color coding injected directly into bracketCard
-  function renderColoredBracket(viewBracket, picks){
+  function renderColoredBracket(viewBracket, picks, showActual=true){
     const now2 = Date.now();
     const BRACKET_PAIRS2 = [[12,14],[1,3],[8,5],[11,13],[2,7],[9,16],[6,4],[10,15]];
     const r32Order = BRACKET_PAIRS2.flat().map(n=>`r32-${n}`);
@@ -8087,16 +8086,16 @@ function renderPollapicks(){
       const av = rp?.awayScore!=null ? rp.awayScore : '';
       const isDraw = rp?._homeSet && rp?._awaySet && hv!=='' && av!=='' && Number(hv)===Number(av);
       const ar = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
-      const actualStr = (ar && ar.home && ar.homeScore!=null)
+      const penWinnerStr = isDraw && rp?.penWinner ? `<div class="bk-pen">Pens: ${esc(shortTeamName(rp.penWinner))}</div>` : '';
+      const actualStr = showActual && (ar && ar.home && ar.homeScore!=null)
         ? `<div class="bk-actual">✓ ${esc(shortTeamName(ar.home))} ${ar.homeScore}–${ar.awayScore} ${esc(shortTeamName(ar.away))}</div>`
         : '';
-      const penWinnerStr = isDraw && rp?.penWinner ? `<div class="bk-pen">Pens: ${esc(shortTeamName(rp.penWinner))}</div>` : '';
 
       return `<div class="bk-card${isDraw?' bk-draw':''}" style="${cardBorder}${cardBg}">
         ${meta}
-        <div class="bk-team-row"><span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>${hv!==''?`<span style="font-size:0.72rem;color:var(--text-faint);margin-left:0.25rem;">${hv}</span>`:''}</div>
-        <div class="bk-team-row"><span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>${av!==''?`<span style="font-size:0.72rem;color:var(--text-faint);margin-left:0.25rem;">${av}</span>`:''}</div>
-        ${penWinnerStr}
+        <div class="bk-team-row"><span class="bk-team">${flag(home)} ${esc(shortTeamName(home))}</span>${hv!==''?`<span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);margin-left:0.35rem;">${hv}</span>`:''}</div>
+        <div class="bk-team-row"><span class="bk-team">${flag(away)} ${esc(shortTeamName(away))}</span>${av!==''?`<span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);margin-left:0.35rem;">${av}</span>`:''}</div>
+        ${penWinnerStr}${actualStr}
       </div>`;
     }
 
@@ -8224,7 +8223,7 @@ function renderPollaResults(){
     } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
     const penStr = c.kind==='full' && c.penOk
       ? `<span style="font-size:0.58rem;color:#fbbf24;"> P✓</span>` : '';
-    if(badge) return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">🎯</td>`;
+    if(badge) return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}🎯</td>`;
     return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}${penStr}</td>`;
   }
 
@@ -8435,7 +8434,7 @@ function renderPollaLeaderboard(){
   const champCounts = {};
   allPlayers.forEach(name=>{ const c=lb.find(x=>x.name===name)?.champ; if(c) champCounts[c]=(champCounts[c]||0)+1; });
   const topChamps = Object.entries(champCounts).sort((a,b)=>b[1]-a[1]);
-  const topChampDisplay = topChamps.slice(0,3).map(([team,cnt],i)=>`${'🥇🥈🥉'[i]} ${flag(team)} ${esc(shortTeamName(team))} · ${cnt}`).join('<br>') || '–';
+  const topChampDisplay = topChamps.slice(0,3).map(([team,cnt],i)=>`${ ['🥇','🥈','🥉'][i]} ${flag(team)} ${esc(shortTeamName(team))} · ${cnt}`).join('<br>') || '–';
 
   // Stats leaders
   const scored = lb.filter(e=>e.total!==null);
