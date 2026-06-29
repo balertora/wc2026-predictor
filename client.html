@@ -7960,6 +7960,9 @@ function renderPollapicks(){
   // Build the bracket to display
   const r32Teams = repickerR32Teams();
 
+  // picks must be declared before any call to renderColoredBracket (advancingColor closes over it)
+  const picks = allRP[viewing]||{};
+
   if(viewing==='real'){
     // Real bracket — show ONLY actual confirmed results from S.kResults
     const realBracket = {};
@@ -7995,7 +7998,6 @@ function renderPollapicks(){
   }
 
   // Player bracket
-  const picks = allRP[viewing]||{};
   const viewBracket = repickerUserBracket(picks, r32Teams);
 
   // Color coding: from R16+, check if predicted advancing team actually advanced
@@ -8500,19 +8502,19 @@ function renderPollaLeaderboard(){
     const u = S.otherUsers?.find(x=>x.name===e.name||(x.name+' (you)')===e.name);
     const avatarSrc = isSelf?S.avatar:(u?.avatar||'');
     const avatarHTML = avatarSrc
-      ?`<img src="${avatarSrc}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.35rem;" />`
-      :`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;margin-right:0.35rem;">🧑</span>`;
-    const champFlag = (r32Kicked && e.champ) ? `<span title="${esc(e.champ)}" style="font-size:0.9rem;margin-right:0.3rem;">${flag(e.champ)}</span>` : '';
-    const phaseCells = activePhases.map(k=>`<td style="padding:0.5rem 0.6rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?Math.round(e.phases[k]):'–'}</td>`).join('');
+      ?`<img src="${avatarSrc}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:0.4rem;" />`
+      :`<span style="width:24px;height:24px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;margin-right:0.4rem;">🧑</span>`;
+    const champFlag = (r32Kicked && e.champ) ? `<span title="${esc(e.champ)}" style="font-size:1rem;margin-right:0.35rem;">${flag(e.champ)}</span>` : '';
+    const phaseCells = activePhases.map(k=>`<td style="padding:0.75rem 0.5rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?Math.round(e.phases[k]):'–'}</td>`).join('');
     const scoringCells = r32Kicked
-      ? `<td style="padding:0.5rem 0.75rem;text-align:right;font-weight:700;color:#fcd34d;font-size:0.95rem;">${e.total!==null?Math.round(e.total):'–'}</td>`
-        +`<td style="padding:0.5rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>`
-        +`<td style="padding:0.5rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>`
+      ? `<td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total!==null?Math.round(e.total):'–'}</td>`
+        +`<td style="padding:0.75rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>`
+        +`<td style="padding:0.75rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>`
         +phaseCells
       : '';
     return `<tr style="border-bottom:1px solid var(--border-faint);${isSelf?'background:rgba(22,163,74,0.06);':''}">
-      <td style="padding:0.5rem 0.75rem;font-size:0.82rem;color:var(--text-faint);">${r32Kicked ? rankDisplay : '–'}</td>
-      <td style="padding:0.5rem 0.5rem;">
+      <td style="padding:0.75rem 1rem;font-size:0.82rem;color:var(--text-faint);">${r32Kicked ? rankDisplay : '–'}</td>
+      <td style="padding:0.75rem 1rem;">
         <div style="display:flex;align-items:center;">${champFlag}${avatarHTML}<span style="font-weight:500;color:var(--text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</span></div>
       </td>
       ${scoringCells}
