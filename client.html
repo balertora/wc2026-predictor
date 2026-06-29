@@ -15,7 +15,11 @@
     /* Today's games: smaller font on mobile */
     .tg-row { font-size: 0.76rem !important; gap: 0.3rem !important; }
     .tg-pick { font-size: 0.76rem !important; }
-    /* Results tables: compress match column on mobile */
+    /* Results tables: let table be as wide as content needs, scroll container handles overflow */
+    .res-table {
+      width: max-content !important;
+      min-width: 100%;
+    }
     .res-table td:first-child, .res-table th:first-child {
       font-size: 0.72rem !important;
       padding-left: 0.35rem !important;
