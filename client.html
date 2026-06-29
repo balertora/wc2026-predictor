@@ -8457,21 +8457,23 @@ function renderPollaLeaderboard(){
   ];
 
   const statsHTML = statsBoxes.map(box=>{
-    if(!box.r) return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;opacity:0.4;"><div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">${box.label}</div><div style="font-size:1.2rem;color:var(--text-faint);">–</div></div>`;
+    if(!box.r) return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;opacity:0.4;"><div style="font-size:0.65rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">${box.label}</div><div style="font-size:1.1rem;color:var(--text-faint);">–</div></div>`;
     // Special layout for Top Pick
     if(box.label==='Top pick'){
       return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;">
-        <div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">${box.label}</div>
-        <div style="font-size:0.78rem;line-height:1.7;color:var(--text);">${topChampDisplay}</div>
+        <div style="font-size:1rem;margin-bottom:0.25rem;">⚽</div>
+        <div style="font-size:0.65rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">${box.label}</div>
+        <div style="font-size:0.82rem;line-height:1.7;color:var(--text);">${topChampDisplay}</div>
       </div>`;
     }
     const avatarNames = box.r.names.slice(0,2);
-    const avatars = avatarNames.map(n=>{ const u=S.otherUsers?.find(x=>x.name===n); const src=n===S.name?S.avatar:u?.avatar||''; return src?`<img src="${src}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid ${box.accent};" />`:`<span style="width:22px;height:22px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;">🧑</span>`; }).join('');
-    const subLabel = box.r.names.length>1?`${box.r.names.length} tied`:esc(box.r.names[0]);
+    const avatars = avatarNames.map(n=>{ const u=S.otherUsers?.find(x=>x.name===n); const src=n===S.name?S.avatar:u?.avatar||''; return src?`<img src="${src}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid ${box.accent};" />`:`<span style="width:26px;height:26px;border-radius:50%;background:var(--bg-input);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;">🧑</span>`; }).join('');
+    const subLabel = box.r.names.length>1?`${box.r.names.length} tied for top`:esc(box.r.names[0]);
     return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.75rem;flex:1;min-width:8rem;">
-      <div style="font-size:0.6rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">${box.label}</div>
-      <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.2rem;">${avatars}<span style="font-size:1.1rem;font-weight:700;color:${box.accent};">${box.fmt(box.r.val, box.r.names)}</span></div>
-      <div style="font-size:0.68rem;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${subLabel}</div>
+      <div style="font-size:1rem;margin-bottom:0.25rem;">${box.icon}</div>
+      <div style="font-size:0.65rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">${box.label}</div>
+      <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.2rem;">${avatars}<span style="font-size:1.1rem;font-weight:800;color:${box.accent};">${box.fmt(box.r.val, box.r.names)}</span></div>
+      <div style="font-size:0.62rem;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${subLabel}</div>
     </div>`;
   }).join('');
 
@@ -8557,13 +8559,13 @@ function renderPollaLeaderboard(){
 
   return `
     <!-- Progress bar -->
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:0.875rem 1rem;margin-bottom:1.25rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
-        <span style="font-size:0.8rem;color:var(--text-muted);">Tournament progress</span>
-        <span style="font-size:0.8rem;color:var(--text-faint);">${rePlayed}/${reTotal}</span>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:1rem;margin-bottom:1.25rem;">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-faint);margin-bottom:0.375rem;">
+        <span>Tournament progress</span>
+        <span>${rePlayed}/${reTotal}</span>
       </div>
-      <div style="height:6px;background:var(--bg-input);border-radius:9999px;overflow:hidden;">
-        <div style="height:100%;background:#16a34a;width:${reTotal>0?(rePlayed/reTotal*100).toFixed(1):0}%;transition:width 0.4s;"></div>
+      <div style="height:0.5rem;background:var(--bg-input);border-radius:9999px;overflow:hidden;">
+        <div style="height:100%;background:#16a34a;border-radius:9999px;width:${reTotal>0?(rePlayed/reTotal*100).toFixed(1):0}%;transition:width 0.4s;"></div>
       </div>
     </div>
 
