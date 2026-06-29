@@ -4892,28 +4892,28 @@ function renderResults(){
       const wFlag = predWinner ? flag(predWinner) : '';
       const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
 
-      // Grey italic for predictions where winner not in matchup — always
+      // Not in matchup → grey background + italic always (before and after result)
       if(!inMatchup){
-        return '<td style="'+base+'color:#64748b;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
+        return '<td style="'+base+'background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
-      // Check if game has started (live or finished)
+      // In matchup, game not started → normal white
       const liveKo = S.gLive?.[id];
       const hasStarted = (actual && actual.homeScore!=null) || (liveKo && liveKo.hs!=null);
-
-      // No result yet and not live — show normally
       if(!hasStarted){
         return '<td style="'+base+'color:#94a3b8;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
-      // Game in progress or finished — color by outcome
-      const c = koCompare(kp, actual && actual.homeScore!=null ? actual : {home:homeT, away:awayT, homeScore:liveKo?.hs, awayScore:liveKo?.as, penWinner:''});
+      // In matchup, game in progress or finished → color by outcome
+      const compareActual = (actual && actual.homeScore!=null) ? actual : {home:homeT, away:awayT, homeScore:liveKo?.hs, awayScore:liveKo?.as, penWinner:''};
+      const c = koCompare(kp, compareActual);
       if(c.kind==='full'){
+        // Correct winner
         const penStr = c.penOk ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
         if(c.scoreMatch) return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">🎯</td>';
         return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">'+wFlag+' '+scoreStr3+penStr+'</td>';
       }
-      // Wrong winner (was in matchup but losing/lost)
+      // Wrong winner (was in matchup but lost/losing) → red
       return '<td style="'+base+'background:rgba(248,113,113,0.06);color:#f87171;">'+wFlag+' '+scoreStr3+'</td>';
     }
 
