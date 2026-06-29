@@ -3020,7 +3020,15 @@ function checkVersion(data){
 }
 
 // ── Server state application ──────────────────────────────
+function _dismissLoadingScreen(){
+  const ls = document.getElementById('loading-screen');
+  if(!ls) return;
+  ls.classList.add('fade-out');
+  setTimeout(()=>ls.remove(), 380);
+}
+
 function _applyServerState(data){
+  _dismissLoadingScreen();
   checkVersion(data);
   const myName = S.name.toLowerCase();
   const preds  = data.predictions || {};
@@ -8929,20 +8937,16 @@ if(_token && S.name){
   showView('polla-larga');
   connectWS();
   render();
+  // Fallback: dismiss loading screen after 5s if WebSocket hasn't connected
+  setTimeout(_dismissLoadingScreen, 5000);
 } else {
   S.pollaLargaSub = 'compare';
   showView('polla-larga');
   render();
   showAuthOverlay();
+  // No WebSocket for unauthenticated users — dismiss loading screen now
+  _dismissLoadingScreen();
 }
-
-// Dismiss loading screen — JS has parsed and first render is complete
-(function(){
-  const ls = document.getElementById('loading-screen');
-  if(!ls) return;
-  ls.classList.add('fade-out');
-  setTimeout(()=>ls.remove(), 380);
-})();
 
 // ESPN live score ticker — still runs in the browser to show the in-progress
 // ticker display (the server handles result recording independently).
