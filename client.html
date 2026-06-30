@@ -2619,9 +2619,10 @@ const KO_ROUND_WEIGHTS = {
   gentle:   { r32:1, r16:1.5, qf:2, sf:2.5, final:3, '3rd':1 },
   moderate: { r32:1, r16:2,   qf:3, sf:4,   final:5, '3rd':1 },
   steep:    { r32:1, r16:2,   qf:4, sf:6,   final:8, '3rd':1 },
+  shifted:  { r32:2, r16:3,   qf:4, sf:5,   final:6, '3rd':1 },
 };
-const KO_CURVE_LABELS = { gentle:'Gentle (1·1.5·2·2.5·3)', moderate:'Moderate (1·2·3·4·5)', steep:'Steep (1·2·4·6·8)' };
-function koCurveName(){ return KO_ROUND_WEIGHTS[S.settings?.ko_weight_curve] ? S.settings.ko_weight_curve : 'moderate'; }
+const KO_CURVE_LABELS = { gentle:'Gentle (1·1.5·2·2.5·3)', moderate:'Moderate (1·2·3·4·5)', steep:'Steep (1·2·4·6·8)', shifted:'Shifted (2·3·4·5·6)' };
+function koCurveName(){ return KO_ROUND_WEIGHTS[S.settings?.ko_weight_curve] ? S.settings.ko_weight_curve : 'shifted'; }
 function koWeights(){ return KO_ROUND_WEIGHTS[koCurveName()]; }
 // Repicker uses its own independent curve (falls back to moderate).
 function reCurveName(){ return KO_ROUND_WEIGHTS[S.settings?.re_weight_curve] ? S.settings.re_weight_curve : 'moderate'; }
