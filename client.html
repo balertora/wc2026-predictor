@@ -4987,7 +4987,13 @@ function renderResults(){
       const homeT2 = resolveTeam(id,'home');
       const awayT2 = resolveTeam(id,'away');
       const bothConfirmed2 = !!(homeT2 && awayT2);
-      const elimSet = eliminatedTeamsForRound(koRoundKey(id));
+      const rk2 = koRoundKey(id);
+      const elimSet = eliminatedTeamsForRound(rk2);
+      // Final and 3rd place are terminal matches — a team's identity is all
+      // that matters there, so an earlier-round slot mismatch (team assigned
+      // to the wrong physical bracket path) shouldn't grey it out here as
+      // long as it's genuinely one of the two real teams in that match.
+      const skipChainPropagation = rk2==='final' || rk2==='3rd';
       for(const p of koParticipants){
         const kp = p.kPreds[id];
         const predWinner = kp ? _predAdvancer(kp) : null;
@@ -4995,10 +5001,10 @@ function renderResults(){
         if(predWinner){
           if(bothConfirmed2 && predWinner!==homeT2 && predWinner!==awayT2) invalid = true;
           if(elimSet.has(predWinner)) invalid = true;
-          if(knownBad.get(p.name)?.has(predWinner)) invalid = true;
+          if(!skipChainPropagation && knownBad.get(p.name)?.has(predWinner)) invalid = true;
         }
         invalidMemo.set(p.name+'|'+id, invalid);
-        if(invalid && predWinner){
+        if(invalid && predWinner && !skipChainPropagation){
           if(!knownBad.has(p.name)) knownBad.set(p.name, new Set());
           knownBad.get(p.name).add(predWinner);
         }
@@ -8494,7 +8500,12 @@ function renderPollaResults(){
       const realHome2 = actual2?.home || confSlot.home || null;
       const realAway2 = actual2?.away || confSlot.away || null;
       const bothRealKnown2 = !!(realHome2 && realAway2);
-      const elimSet = eliminatedByRound[pcRoundKey(id)];
+      const rk2 = pcRoundKey(id);
+      const elimSet = eliminatedByRound[rk2];
+      // Final and 3rd place are terminal matches — a team's identity is all
+      // that matters there, so an earlier-round slot mismatch shouldn't grey
+      // it out here as long as it's genuinely one of the two real teams.
+      const skipChainPropagation = rk2==='final' || rk2==='3rd';
       for(const p of players){
         const pBracket = repickerUserBracket(p.picks, r32Teams);
         const ownSlotTeams = pBracket[id] || {};
@@ -8504,10 +8515,10 @@ function renderPollaResults(){
         if(ownWinner){
           if(bothRealKnown2 && ownWinner!==realHome2 && ownWinner!==realAway2) invalid = true;
           if(elimSet && elimSet.has(ownWinner)) invalid = true;
-          if(knownBad.get(p.name)?.has(ownWinner)) invalid = true;
+          if(!skipChainPropagation && knownBad.get(p.name)?.has(ownWinner)) invalid = true;
         }
         pcInvalidMemo.set(p.name+'|'+id, invalid);
-        if(invalid && ownWinner){
+        if(invalid && ownWinner && !skipChainPropagation){
           if(!knownBad.has(p.name)) knownBad.set(p.name, new Set());
           knownBad.get(p.name).add(ownWinner);
         }
