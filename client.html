@@ -2871,7 +2871,7 @@ function buildConfirmedKoTeams(){
     const home = koWinnerStrict(ga.id, ga.home, ga.away);
     const away = koWinnerStrict(gb.id, gb.home, gb.away);
     r16.push({id:`r16-${i+1}`, home, away});
-    if(home && away) map[`r16-${i+1}`] = {home, away};
+    if(home || away) map[`r16-${i+1}`] = {home, away};
   }
   const qfPairs=[[0,1],[2,3],[4,5],[6,7]];
   const qf=[];
@@ -2881,7 +2881,7 @@ function buildConfirmedKoTeams(){
     const home = (ga.home&&ga.away) ? koWinnerStrict(ga.id, ga.home, ga.away) : null;
     const away = (gb.home&&gb.away) ? koWinnerStrict(gb.id, gb.home, gb.away) : null;
     qf.push({id:`qf-${i+1}`, home, away});
-    if(home && away) map[`qf-${i+1}`] = {home, away};
+    if(home || away) map[`qf-${i+1}`] = {home, away};
   }
   const sf=[
     {id:'sf-1', home:(qf[0].home&&qf[0].away)?koWinnerStrict('qf-1',qf[0].home,qf[0].away):null,
@@ -2889,14 +2889,14 @@ function buildConfirmedKoTeams(){
     {id:'sf-2', home:(qf[1].home&&qf[1].away)?koWinnerStrict('qf-2',qf[1].home,qf[1].away):null,
                 away:(qf[3].home&&qf[3].away)?koWinnerStrict('qf-4',qf[3].home,qf[3].away):null},
   ];
-  sf.forEach(s=>{ if(s.home && s.away) map[s.id] = {home:s.home, away:s.away}; });
+  sf.forEach(s=>{ if(s.home || s.away) map[s.id] = {home:s.home, away:s.away}; });
   const sf1=sf[0], sf2=sf[1];
   const thirdHome = (sf1.home&&sf1.away)?koLoserStrict('sf-1',sf1.home,sf1.away):null;
   const thirdAway = (sf2.home&&sf2.away)?koLoserStrict('sf-2',sf2.home,sf2.away):null;
   const finalHome = (sf1.home&&sf1.away)?koWinnerStrict('sf-1',sf1.home,sf1.away):null;
   const finalAway = (sf2.home&&sf2.away)?koWinnerStrict('sf-2',sf2.home,sf2.away):null;
-  if(thirdHome && thirdAway) map['3rd']   = {home:thirdHome, away:thirdAway};
-  if(finalHome && finalAway) map['final'] = {home:finalHome, away:finalAway};
+  if(thirdHome || thirdAway) map['3rd']   = {home:thirdHome, away:thirdAway};
+  if(finalHome || finalAway) map['final'] = {home:finalHome, away:finalAway};
   return map;
 }
 
