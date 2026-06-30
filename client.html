@@ -1974,6 +1974,23 @@ const R32_FIXED = [
   {id:'r32-16', posA:'1L',  posB:'3rd-slot-1L',date:'2026-07-01'}, // Mercedes-Benz, Atlanta
 ];
 
+// Fixed structural feeder relationships: which two earlier-round slots feed
+// into each later-round slot, regardless of which teams end up in them.
+// Used to propagate "this predicted matchup is already impossible" forward
+// through a player's own predicted bracket chain.
+const KO_FEEDER_MAP = (() => {
+  const map = {};
+  const r16Pairs=[[11,13],[0,2],[1,6],[8,15],[7,4],[10,12],[5,3],[9,14]];
+  r16Pairs.forEach((pair,i)=>{ map[`r16-${i+1}`] = [R32_FIXED[pair[0]].id, R32_FIXED[pair[1]].id]; });
+  const qfPairs=[[0,1],[2,3],[4,5],[6,7]];
+  qfPairs.forEach((pair,i)=>{ map[`qf-${i+1}`] = [`r16-${pair[0]+1}`, `r16-${pair[1]+1}`]; });
+  map['sf-1'] = ['qf-1','qf-3'];
+  map['sf-2'] = ['qf-2','qf-4'];
+  map['final'] = ['sf-1','sf-2'];
+  map['3rd']   = ['sf-1','sf-2'];
+  return map;
+})();
+
 // Venues for knockout games — keyed by match id
 // All assignments confirmed via Wikipedia / official FIFA 2026 schedule
 const KO_VENUES = {
@@ -4964,6 +4981,45 @@ function renderResults(){
     return null; // unknown
   }
 
+  // Pre-pass: for every participant, determine whether their predicted
+  // matchup at each KO slot can already be proven impossible — either
+  // directly (the round is confirmed and their predicted winner isn't in
+  // the real matchup, or that team is already eliminated elsewhere), or
+  // because an EARLIER slot feeding into this one (in their own predicted
+  // chain) was already invalid. This runs over ALL slots in chronological
+  // order (not just what's currently displayed), so propagation stays
+  // correct even when the Live-only filter hides earlier rounds.
+  const invalidMemo = new Map(); // key: `${name}|${slotId}` → boolean
+  (() => {
+    const allSlotsChrono = Object.keys(KO_VENUES).sort((a,b)=>{
+      const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
+      const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
+      return ta - tb;
+    });
+    for(const id of allSlotsChrono){
+      const homeT2 = resolveTeam(id,'home');
+      const awayT2 = resolveTeam(id,'away');
+      const bothConfirmed2 = !!(homeT2 && awayT2);
+      const elimSet = eliminatedTeamsForRound(koRoundKey(id));
+      const feeders = KO_FEEDER_MAP[id] || [];
+      for(const p of koParticipants){
+        const kp = p.kPreds[id];
+        const predWinner = kp ? _predAdvancer(kp) : null;
+        let invalid = false;
+        if(predWinner){
+          if(bothConfirmed2 && predWinner!==homeT2 && predWinner!==awayT2) invalid = true;
+          if(elimSet.has(predWinner)) invalid = true;
+        }
+        if(!invalid){
+          for(const fid of feeders){
+            if(invalidMemo.get(p.name+'|'+fid)){ invalid = true; break; }
+          }
+        }
+        invalidMemo.set(p.name+'|'+id, invalid);
+      }
+    }
+  })();
+
   // Pre-compute per-round alive team counts per participant
   // A slot counts as "alive" if the predicted winner is in the actual matchup
   function aliveCount(p, slotIds){
@@ -4998,7 +5054,7 @@ function renderResults(){
 
   const visibleKoSlots = liveOnly ? allKoSlots.filter(id => liveKoIds.has(id)) : allKoSlots;
 
-  let koBody='', lastRound='', currentEliminated=new Set();
+  let koBody='', lastRound='';
   for(const id of visibleKoSlots){
     const actual = S.kResults[id] || {};
     const rl=koRoundLabel(id);
@@ -5020,7 +5076,6 @@ function renderResults(){
           ${aliveCells}
         </tr>`;
       }
-      currentEliminated = eliminatedTeamsForRound(koRoundKey(id));
       lastRound=rl;
     }
 
@@ -5052,19 +5107,19 @@ function renderResults(){
     const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">${homeDisplay}<span style="color:#475569;margin:0 0.3rem;">v</span>${awayDisplay}${hasResult?dossierBtn(homeT,awayT):''}<span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
 
     // Pred cell
-    function koFlagPredCell(p, id, homeT, awayT, actual, bothConfirmed, eliminated){
+    function koFlagPredCell(p, id, homeT, awayT, actual, bothConfirmed){
       const kp = p.kPreds[id];
       const base = TD+'text-align:center;font-family:monospace;font-weight:600;white-space:nowrap;';
       if(!kp || kp.homeScore==null) return '<td style="'+base+'color:#334155;">–</td>';
       const scoreStr3 = kp.homeScore+'–'+kp.awayScore;
       const predWinner = _predAdvancer(kp);
       const wFlag = predWinner ? flag(predWinner) : '';
-      const inMatchup = bothConfirmed && predWinner && (predWinner===homeT || predWinner===awayT);
-      const isEliminated = predWinner && eliminated && eliminated.has(predWinner);
+      const invalid = invalidMemo.get(p.name+'|'+id);
 
-      // Not in matchup (once confirmed) or predicted team already eliminated
-      // elsewhere in the bracket → grey background + italic
-      if((bothConfirmed && !inMatchup) || isEliminated){
+      // Predicted matchup already proven impossible — either directly (wrong
+      // real matchup / eliminated team) or because an earlier slot in this
+      // player's own chain was already invalid → grey background + italic
+      if(invalid){
         return '<td style="'+base+'background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
@@ -5086,7 +5141,7 @@ function renderResults(){
       return '<td style="'+base+'background:rgba(248,113,113,0.06);color:#f87171;">'+wFlag+' '+scoreStr3+'</td>';
     }
 
-    koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual,bothConfirmed,currentEliminated)).join('')}</tr>`;
+    koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual,bothConfirmed)).join('')}</tr>`;
   }
 
   const koHeaderRow = `
