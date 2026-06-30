@@ -8425,23 +8425,26 @@ function renderPollaResults(){
   }
 
   // Pick cell: flag of predicted winner + predicted score, color coded by result
-  function pickCell(rp, actual, slotTeams, eliminated){
+  function pickCell(rp, actual, ownSlotTeams, realSlotTeams, eliminated){
     if(!rp || rp.homeScore==null) return `<td style="${TD}color:#334155;text-align:center;font-family:monospace;">–</td>`;
 
     const scoreStr = `${rp.homeScore}–${rp.awayScore}`;
-    // Predicted winner from the pick's own stored teams — works even before
-    // the real slot matchup is confirmed, so eliminated picks can be flagged early.
-    const ownWinner = rpAdvancer(rp);
-    const bothKnown = repickerTeamKnown(slotTeams?.home) && repickerTeamKnown(slotTeams?.away);
-    const slotWinner = bothKnown ? reAdvancerOf(slotTeams, rp) : null;
-    const predWinner = slotWinner || ownWinner;
-    const winnerFlag = predWinner ? `${flag(predWinner)} ` : '';
-    const inMatchup = bothKnown && slotWinner && (slotWinner===slotTeams.home || slotWinner===slotTeams.away);
+    // Predicted winner derived from the player's OWN reconstructed bracket
+    // chain (ownSlotTeams) — never from whichever team happens to occupy
+    // the same home/away position in the real confirmed matchup, since
+    // that can misattribute a pick to the wrong team entirely once the
+    // real bracket diverges from what the player predicted.
+    const bothOwnKnown = repickerTeamKnown(ownSlotTeams?.home) && repickerTeamKnown(ownSlotTeams?.away);
+    const ownWinner = bothOwnKnown ? reAdvancerOf(ownSlotTeams, rp) : null;
+    const winnerFlag = ownWinner ? `${flag(ownWinner)} ` : '';
+
+    const bothRealKnown = repickerTeamKnown(realSlotTeams?.home) && repickerTeamKnown(realSlotTeams?.away);
+    const inMatchup = bothRealKnown && ownWinner && (ownWinner===realSlotTeams.home || ownWinner===realSlotTeams.away);
     const isEliminated = ownWinner && eliminated && eliminated.has(ownWinner);
 
     // Predicted team already eliminated elsewhere in the bracket, or (once
-    // confirmed) simply not part of this matchup → grey background + italic
-    if(isEliminated || (bothKnown && !inMatchup)){
+    // confirmed) simply not part of this real matchup → grey background + italic
+    if(isEliminated || (bothRealKnown && !inMatchup)){
       return `<td style="${TD}background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
     }
 
@@ -8449,7 +8452,21 @@ function renderPollaResults(){
       return `<td style="${TD}color:#94a3b8;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
     }
 
-    const c = koCompare(rp, actual);
+    // Build a prediction object aligned to the REAL match's home/away
+    // orientation before scoring — rp's own stored orientation may not
+    // match actual's, even though we've confirmed ownWinner is correctly
+    // one of the two real teams (inMatchup above).
+    const ownLoser = ownWinner===ownSlotTeams.home ? ownSlotTeams.away : ownSlotTeams.home;
+    const winnerScore = ownWinner===ownSlotTeams.home ? rp.homeScore : rp.awayScore;
+    const loserScore  = ownWinner===ownSlotTeams.home ? rp.awayScore : rp.homeScore;
+    const alignedPred = {
+      home: actual.home, away: actual.away,
+      homeScore: actual.home===ownWinner ? winnerScore : loserScore,
+      awayScore: actual.away===ownWinner ? winnerScore : loserScore,
+      penWinner: rp.penWinner,
+    };
+
+    const c = koCompare(alignedPred, actual);
     let bg='', col='#94a3b8', badge='';
     if(c.kind==='full'){
       if(c.exact){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; badge='🎯'; }
@@ -8526,22 +8543,15 @@ function renderPollaResults(){
       <span style="margin-left:0.4rem;font-size:0.78rem;">${scoreStr}</span>
     </td>`;
 
-    // For pick cells: use the strictly confirmed real teams whenever known
-    // (covers all rounds via confirmedAllKo), falling back to each player's
-    // own predicted bracket only when the real matchup isn't confirmed yet
+    // For pick cells: always reconstruct each player's OWN predicted bracket
+    // chain for this slot (consistent team identities regardless of real
+    // confirmation), and separately pass the real confirmed teams (if known)
+    // so we can check whether their own pick is actually part of reality.
     const picks = players.map(p=>{
-      let playerSlotTeams;
-      if(realHome && realAway){
-        playerSlotTeams = { home: realHome, away: realAway };
-      } else {
-        const pBracket = repickerUserBracket(p.picks, r32Teams);
-        const pSlot = pBracket[id]||{};
-        playerSlotTeams = {
-          home: (repickerTeamKnown(pSlot.home)?pSlot.home:null) || '?',
-          away: (repickerTeamKnown(pSlot.away)?pSlot.away:null) || '?',
-        };
-      }
-      return pickCell(p.picks[id], actual, playerSlotTeams, eliminatedByRound[pcRoundKey(id)]);
+      const pBracket = repickerUserBracket(p.picks, r32Teams);
+      const ownSlotTeams = pBracket[id] || {};
+      const realSlotTeams = { home: realHome, away: realAway };
+      return pickCell(p.picks[id], actual, ownSlotTeams, realSlotTeams, eliminatedByRound[pcRoundKey(id)]);
     }).join('');
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
@@ -8611,15 +8621,10 @@ function renderPollaResults(){
                 ? `<td style="${TD_GAME}font-size:0.82rem;color:#475569;"><span style="color:#334155;">? v ?</span>${scoreStr2?`<span style="margin-left:0.55rem;">${scoreStr2}</span>`:''}</td>`
                 : `<td style="${TD_GAME}font-size:0.82rem;"><span class="team-cell">${realHome?`<span class="team-name-txt">${flag(realHome)} ${esc(shortTeamName(realHome))}</span><span class="team-flag-only">${flag(realHome)}</span>`:'<span style="color:#475569;">?</span>'}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span class="team-cell">${realAway?`<span class="team-name-txt">${esc(shortTeamName(realAway))} ${flag(realAway)}</span><span class="team-flag-only">${flag(realAway)}</span>`:'<span style="color:#475569;">?</span>'}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
               const picks2 = players.map(p=>{
-                let playerSlotTeams;
-                if(realHome && realAway){
-                  playerSlotTeams = { home: realHome, away: realAway };
-                } else {
-                  const pBracket = repickerUserBracket(p.picks, r32Teams);
-                  const pSlot = pBracket[id]||{};
-                  playerSlotTeams = { home: (repickerTeamKnown(pSlot.home)?pSlot.home:null)||'?', away: (repickerTeamKnown(pSlot.away)?pSlot.away:null)||'?' };
-                }
-                return pickCell(p.picks[id], actual, playerSlotTeams, eliminatedByRound[pcRoundKey(id)]);
+                const pBracket = repickerUserBracket(p.picks, r32Teams);
+                const ownSlotTeams = pBracket[id] || {};
+                const realSlotTeams = { home: realHome, away: realAway };
+                return pickCell(p.picks[id], actual, ownSlotTeams, realSlotTeams, eliminatedByRound[pcRoundKey(id)]);
               }).join('');
               return `${phSep2}<tr>${gameCell2}${picks2}</tr>`;
             }).join('');
