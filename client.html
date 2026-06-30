@@ -2781,7 +2781,49 @@ function buildFinal(sf){
   ];
 }
 
-// Run the full bracket pipeline once in dependency order.
+// Returns a Set of teams that can no longer possibly appear as the winner
+// shown in `roundKey` (r32/r16/qf/sf/3rd/final), based on confirmed KO
+// results so far. A team eliminated earlier in the bracket is excluded from
+// every later round — except SF losers, who play the 3rd-place game (not
+// eliminated there) but cannot reach the Final (eliminated there). SF
+// winners conversely cannot play 3rd place (they're in the Final instead).
+function eliminatedTeamsForRound(roundKey){
+  const conf = buildConfirmedKoTeams();
+  const eliminated = new Set();
+  const addLoser = (slotId) => {
+    const c = conf[slotId];
+    const r = S.kResults[slotId];
+    if(!c || !r || r.homeScore==null) return;
+    const winner = koWinnerStrict(slotId, c.home, c.away);
+    if(!winner) return;
+    eliminated.add(winner===c.home ? c.away : c.home);
+  };
+  if(roundKey==='r32') return eliminated; // nothing to prune yet at the first KO round
+
+  for(const m of R32_FIXED) addLoser(m.id);
+  if(roundKey==='r16') return eliminated;
+
+  for(let i=1;i<=8;i++) addLoser(`r16-${i}`);
+  if(roundKey==='qf') return eliminated;
+
+  for(let i=1;i<=4;i++) addLoser(`qf-${i}`);
+  if(roundKey==='sf') return eliminated;
+
+  // Beyond SF: 3rd place and Final each exclude a different half of the SF outcome
+  const sfWinners=[], sfLosers=[];
+  for(const id of ['sf-1','sf-2']){
+    const c = conf[id];
+    const r = S.kResults[id];
+    if(!c || !r || r.homeScore==null) continue;
+    const w = koWinnerStrict(id, c.home, c.away);
+    if(!w) continue;
+    sfWinners.push(w);
+    sfLosers.push(w===c.home ? c.away : c.home);
+  }
+  if(roundKey==='3rd'){ sfWinners.forEach(t=>eliminated.add(t)); return eliminated; }
+  if(roundKey==='final'){ sfLosers.forEach(t=>eliminated.add(t)); return eliminated; }
+  return eliminated;
+}
 // Returns every round so callers can pick what they need without re-running the chain.
 function buildAllRounds(){
   const q    = getQualifiers();
@@ -4956,7 +4998,7 @@ function renderResults(){
 
   const visibleKoSlots = liveOnly ? allKoSlots.filter(id => liveKoIds.has(id)) : allKoSlots;
 
-  let koBody='', lastRound='';
+  let koBody='', lastRound='', currentEliminated=new Set();
   for(const id of visibleKoSlots){
     const actual = S.kResults[id] || {};
     const rl=koRoundLabel(id);
@@ -4978,6 +5020,7 @@ function renderResults(){
           ${aliveCells}
         </tr>`;
       }
+      currentEliminated = eliminatedTeamsForRound(koRoundKey(id));
       lastRound=rl;
     }
 
@@ -5009,7 +5052,7 @@ function renderResults(){
     const gameCell = `<td style="${TD_GAME}font-size:0.82rem;">${homeDisplay}<span style="color:#475569;margin:0 0.3rem;">v</span>${awayDisplay}${hasResult?dossierBtn(homeT,awayT):''}<span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
 
     // Pred cell
-    function koFlagPredCell(p, id, homeT, awayT, actual, bothConfirmed){
+    function koFlagPredCell(p, id, homeT, awayT, actual, bothConfirmed, eliminated){
       const kp = p.kPreds[id];
       const base = TD+'text-align:center;font-family:monospace;font-weight:600;white-space:nowrap;';
       if(!kp || kp.homeScore==null) return '<td style="'+base+'color:#334155;">–</td>';
@@ -5017,9 +5060,11 @@ function renderResults(){
       const predWinner = _predAdvancer(kp);
       const wFlag = predWinner ? flag(predWinner) : '';
       const inMatchup = bothConfirmed && predWinner && (predWinner===homeT || predWinner===awayT);
+      const isEliminated = predWinner && eliminated && eliminated.has(predWinner);
 
-      // Both teams confirmed and predicted winner not in matchup → grey background + italic
-      if(bothConfirmed && !inMatchup){
+      // Not in matchup (once confirmed) or predicted team already eliminated
+      // elsewhere in the bracket → grey background + italic
+      if((bothConfirmed && !inMatchup) || isEliminated){
         return '<td style="'+base+'background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
@@ -5041,7 +5086,7 @@ function renderResults(){
       return '<td style="'+base+'background:rgba(248,113,113,0.06);color:#f87171;">'+wFlag+' '+scoreStr3+'</td>';
     }
 
-    koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual,bothConfirmed)).join('')}</tr>`;
+    koBody += `<tr>${gameCell}${koParticipants.map(p=>koFlagPredCell(p,id,homeT,awayT,actual,bothConfirmed,currentEliminated)).join('')}</tr>`;
   }
 
   const koHeaderRow = `
