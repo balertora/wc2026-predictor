@@ -2792,6 +2792,72 @@ function buildAllRounds(){
   return { q, r16, qf, sf, fin };
 }
 
+// ── Strict (results-only) bracket resolution — for Results tables ──────────
+// Unlike winnerOf()/loserOf() (used by the Predict tab to preview the
+// viewer's own bracket), these never fall back to anyone's predictions.
+// They only resolve a team once an ACTUAL confirmed result exists.
+function koWinnerStrict(matchId, home, away){
+  const kr = S.kResults && S.kResults[matchId];
+  if(!kr || kr.homeScore==null || !home || !away) return null;
+  if(kr.homeScore > kr.awayScore) return home;
+  if(kr.awayScore > kr.homeScore) return away;
+  if(kr.penWinner===home || kr.penWinner===away) return kr.penWinner;
+  return null;
+}
+function koLoserStrict(matchId, home, away){
+  const w = koWinnerStrict(matchId, home, away);
+  if(!w) return null;
+  return w===home ? away : home;
+}
+// Returns { slotId: {home, away} } for every KO slot whose teams are
+// strictly confirmed by actual results so far (R32 from group qualifiers,
+// R16+ derived from earlier-round results via the official bracket).
+function buildConfirmedKoTeams(){
+  const q = getQualifiers();
+  const r32Games = R32_FIXED.map(m=>({ id:m.id, home:resolvePos(m.posA,q), away:resolvePos(m.posB,q) }));
+  const map = {};
+  const isReal = t => t && !t.includes('Group') && !t.includes('place') && !t.includes('TBD');
+  R32_FIXED.forEach((m,i)=>{
+    const {home, away} = r32Games[i];
+    if(isReal(home) && isReal(away)) map[m.id] = {home, away};
+  });
+  const r16Pairs=[[11,13],[0,2],[1,6],[8,15],[7,4],[10,12],[5,3],[9,14]];
+  const r16=[];
+  for(let i=0;i<8;i++){
+    const [ai,bi]=r16Pairs[i];
+    const ga=r32Games[ai], gb=r32Games[bi];
+    const home = koWinnerStrict(ga.id, ga.home, ga.away);
+    const away = koWinnerStrict(gb.id, gb.home, gb.away);
+    r16.push({id:`r16-${i+1}`, home, away});
+    if(home && away) map[`r16-${i+1}`] = {home, away};
+  }
+  const qfPairs=[[0,1],[2,3],[4,5],[6,7]];
+  const qf=[];
+  for(let i=0;i<4;i++){
+    const [ai,bi]=qfPairs[i];
+    const ga=r16[ai], gb=r16[bi];
+    const home = (ga.home&&ga.away) ? koWinnerStrict(ga.id, ga.home, ga.away) : null;
+    const away = (gb.home&&gb.away) ? koWinnerStrict(gb.id, gb.home, gb.away) : null;
+    qf.push({id:`qf-${i+1}`, home, away});
+    if(home && away) map[`qf-${i+1}`] = {home, away};
+  }
+  const sf=[
+    {id:'sf-1', home:(qf[0].home&&qf[0].away)?koWinnerStrict('qf-1',qf[0].home,qf[0].away):null,
+                away:(qf[2].home&&qf[2].away)?koWinnerStrict('qf-3',qf[2].home,qf[2].away):null},
+    {id:'sf-2', home:(qf[1].home&&qf[1].away)?koWinnerStrict('qf-2',qf[1].home,qf[1].away):null,
+                away:(qf[3].home&&qf[3].away)?koWinnerStrict('qf-4',qf[3].home,qf[3].away):null},
+  ];
+  sf.forEach(s=>{ if(s.home && s.away) map[s.id] = {home:s.home, away:s.away}; });
+  const sf1=sf[0], sf2=sf[1];
+  const thirdHome = (sf1.home&&sf1.away)?koLoserStrict('sf-1',sf1.home,sf1.away):null;
+  const thirdAway = (sf2.home&&sf2.away)?koLoserStrict('sf-2',sf2.home,sf2.away):null;
+  const finalHome = (sf1.home&&sf1.away)?koWinnerStrict('sf-1',sf1.home,sf1.away):null;
+  const finalAway = (sf2.home&&sf2.away)?koWinnerStrict('sf-2',sf2.home,sf2.away):null;
+  if(thirdHome && thirdAway) map['3rd']   = {home:thirdHome, away:thirdAway};
+  if(finalHome && finalAway) map['final'] = {home:finalHome, away:finalAway};
+  return map;
+}
+
 // ═══════════════════════════════════════════════════════════
 // SCORING
 // ═══════════════════════════════════════════════════════════
@@ -4837,20 +4903,7 @@ function renderResults(){
 
   // Only include slots where BOTH teams are real confirmed teams from actual results
   // For R32: use only slots where S.kResults has the teams OR they're in confirmed group results
-  const confirmedR32 = (() => {
-    const q = getQualifiers();
-    const map = {};
-    R32_FIXED.forEach(m=>{
-      const home = resolvePos(m.posA, q);
-      const away = resolvePos(m.posB, q);
-      // Only include if both teams are real (not placeholder strings)
-      if(home && away && !home.includes('Group') && !home.includes('place') && !home.includes('TBD') &&
-         !away.includes('Group') && !away.includes('place') && !away.includes('TBD')){
-        map[m.id] = {home, away};
-      }
-    });
-    return map;
-  })();
+  const confirmedR32 = buildConfirmedKoTeams();
 
   const allKoSlots = Object.keys(KO_VENUES).sort((a,b)=>{
     const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
@@ -8296,6 +8349,10 @@ function renderPollaResults(){
   const userBracketSlots = repickerUserBracket(S.rePicks || {}, r32Teams);
   // Get slot teams for a match: R32 uses real confirmed teams, R16+ uses user's advancing picks
   const getSlotTeams = id => id.startsWith('r32') ? (r32Teams[id]||{}) : (userBracketSlots[id]||{});
+  // Strictly confirmed teams for ALL rounds, derived from actual results only
+  // (no prediction fallback) — used to show real matchups before kickoff
+  const confirmedAllKo = buildConfirmedKoTeams();
+  const koSlotIdOf = id => id==='final-1'?'final':id==='third-1'?'3rd':id;
 
   // Build rows with phase separators
   let lastPhase='';
@@ -8311,10 +8368,12 @@ function renderPollaResults(){
       : '';
     lastPhase = phase;
 
-    // Game cell: only show real teams from actual results (S.kResults)
-    // For R32 we can also use confirmed slot teams; for R16+ only show if result is entered
-    const realHome = actual?.home || (id.startsWith('r32') && repickerTeamKnown(r32Teams[id]?.home) ? r32Teams[id].home : null);
-    const realAway = actual?.away || (id.startsWith('r32') && repickerTeamKnown(r32Teams[id]?.away) ? r32Teams[id].away : null);
+    // Game cell: real teams from actual results, falling back to strictly
+    // confirmed bracket teams derived from earlier-round results (covers
+    // all rounds, not just R32)
+    const confSlot = confirmedAllKo[koSlotIdOf(id)] || {};
+    const realHome = actual?.home || confSlot.home || null;
+    const realAway = actual?.away || confSlot.away || null;
 
     // Game cell — exact same format as main Results TD_GAME
     let scoreStr='';
@@ -8337,18 +8396,19 @@ function renderPollaResults(){
       <span style="margin-left:0.4rem;font-size:0.78rem;">${scoreStr}</span>
     </td>`;
 
-    // For pick cells: R32 uses real confirmed teams for winner resolution
-    // R16+: use each player's own predicted bracket to determine their pick's winner
+    // For pick cells: use the strictly confirmed real teams whenever known
+    // (covers all rounds via confirmedAllKo), falling back to each player's
+    // own predicted bracket only when the real matchup isn't confirmed yet
     const picks = players.map(p=>{
       let playerSlotTeams;
-      if(id.startsWith('r32')){
-        playerSlotTeams = { home: realHome||'?', away: realAway||'?' };
+      if(realHome && realAway){
+        playerSlotTeams = { home: realHome, away: realAway };
       } else {
         const pBracket = repickerUserBracket(p.picks, r32Teams);
         const pSlot = pBracket[id]||{};
         playerSlotTeams = {
-          home: actual?.home || (repickerTeamKnown(pSlot.home)?pSlot.home:null) || '?',
-          away: actual?.away || (repickerTeamKnown(pSlot.away)?pSlot.away:null) || '?',
+          home: (repickerTeamKnown(pSlot.home)?pSlot.home:null) || '?',
+          away: (repickerTeamKnown(pSlot.away)?pSlot.away:null) || '?',
         };
       }
       return pickCell(p.picks[id], actual, playerSlotTeams);
@@ -8404,8 +8464,9 @@ function renderPollaResults(){
                 ? `<tr><td colspan="${1+players.length}" style="padding:0.4rem 0.5rem;background:var(--bg);color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${ph2}</td></tr>`
                 : '';
               lastPh2=ph2;
-              const realHome = actual?.home || (id.startsWith('r32') && repickerTeamKnown(r32Teams[id]?.home) ? r32Teams[id].home : null);
-              const realAway = actual?.away || (id.startsWith('r32') && repickerTeamKnown(r32Teams[id]?.away) ? r32Teams[id].away : null);
+              const confSlot2 = confirmedAllKo[koSlotIdOf(id)] || {};
+              const realHome = actual?.home || confSlot2.home || null;
+              const realAway = actual?.away || confSlot2.away || null;
               let scoreStr2='';
               if(live){
                 scoreStr2 = '<span style="color:#f87171;font-family:monospace;font-weight:800;">'+live.hs+'–'+live.as+'</span><span style="color:#f87171;font-size:0.6rem;font-weight:700;margin-left:0.25rem;animation:pulse 1.2s infinite;">● LIVE</span>';
@@ -8421,12 +8482,12 @@ function renderPollaResults(){
                 : `<td style="${TD_GAME}font-size:0.82rem;"><span class="team-cell">${realHome?`<span class="team-name-txt">${flag(realHome)} ${esc(shortTeamName(realHome))}</span><span class="team-flag-only">${flag(realHome)}</span>`:'<span style="color:#475569;">?</span>'}</span><span style="color:#475569;margin:0 0.3rem;">v</span><span class="team-cell">${realAway?`<span class="team-name-txt">${esc(shortTeamName(realAway))} ${flag(realAway)}</span><span class="team-flag-only">${flag(realAway)}</span>`:'<span style="color:#475569;">?</span>'}</span><span style="margin-left:0.55rem;">${scoreStr2}</span></td>`;
               const picks2 = players.map(p=>{
                 let playerSlotTeams;
-                if(id.startsWith('r32')){
-                  playerSlotTeams = { home: realHome||'?', away: realAway||'?' };
+                if(realHome && realAway){
+                  playerSlotTeams = { home: realHome, away: realAway };
                 } else {
                   const pBracket = repickerUserBracket(p.picks, r32Teams);
                   const pSlot = pBracket[id]||{};
-                  playerSlotTeams = { home: actual?.home||(repickerTeamKnown(pSlot.home)?pSlot.home:null)||'?', away: actual?.away||(repickerTeamKnown(pSlot.away)?pSlot.away:null)||'?' };
+                  playerSlotTeams = { home: (repickerTeamKnown(pSlot.home)?pSlot.home:null)||'?', away: (repickerTeamKnown(pSlot.away)?pSlot.away:null)||'?' };
                 }
                 return pickCell(p.picks[id], actual, playerSlotTeams);
               }).join('');
