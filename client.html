@@ -1974,23 +1974,6 @@ const R32_FIXED = [
   {id:'r32-16', posA:'1L',  posB:'3rd-slot-1L',date:'2026-07-01'}, // Mercedes-Benz, Atlanta
 ];
 
-// Fixed structural feeder relationships: which two earlier-round slots feed
-// into each later-round slot, regardless of which teams end up in them.
-// Used to propagate "this predicted matchup is already impossible" forward
-// through a player's own predicted bracket chain.
-const KO_FEEDER_MAP = (() => {
-  const map = {};
-  const r16Pairs=[[11,13],[0,2],[1,6],[8,15],[7,4],[10,12],[5,3],[9,14]];
-  r16Pairs.forEach((pair,i)=>{ map[`r16-${i+1}`] = [R32_FIXED[pair[0]].id, R32_FIXED[pair[1]].id]; });
-  const qfPairs=[[0,1],[2,3],[4,5],[6,7]];
-  qfPairs.forEach((pair,i)=>{ map[`qf-${i+1}`] = [`r16-${pair[0]+1}`, `r16-${pair[1]+1}`]; });
-  map['sf-1'] = ['qf-1','qf-3'];
-  map['sf-2'] = ['qf-2','qf-4'];
-  map['final'] = ['sf-1','sf-2'];
-  map['3rd']   = ['sf-1','sf-2'];
-  return map;
-})();
-
 // Venues for knockout games — keyed by match id
 // All assignments confirmed via Wikipedia / official FIFA 2026 schedule
 const KO_VENUES = {
@@ -4982,13 +4965,16 @@ function renderResults(){
   }
 
   // Pre-pass: for every participant, determine whether their predicted
-  // matchup at each KO slot can already be proven impossible — either
+  // winner at each KO slot can already be proven impossible — either
   // directly (the round is confirmed and their predicted winner isn't in
   // the real matchup, or that team is already eliminated elsewhere), or
-  // because an EARLIER slot feeding into this one (in their own predicted
-  // chain) was already invalid. This runs over ALL slots in chronological
-  // order (not just what's currently displayed), so propagation stays
-  // correct even when the Live-only filter hides earlier rounds.
+  // because that SAME TEAM was already shown invalid for this player in an
+  // EARLIER round. Tracking by team identity (not by abstract slot/feeder
+  // structure) avoids incorrectly tainting one side of a future matchup
+  // just because the OTHER side's feeder game happened to be invalid.
+  // Runs over ALL slots in chronological order (not just what's currently
+  // displayed), so propagation stays correct even when Live-only hides
+  // earlier rounds.
   const invalidMemo = new Map(); // key: `${name}|${slotId}` → boolean
   (() => {
     const allSlotsChrono = Object.keys(KO_VENUES).sort((a,b)=>{
@@ -4996,12 +4982,12 @@ function renderResults(){
       const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
       return ta - tb;
     });
+    const knownBad = new Map(); // playerName -> Set of teams already proven wrong
     for(const id of allSlotsChrono){
       const homeT2 = resolveTeam(id,'home');
       const awayT2 = resolveTeam(id,'away');
       const bothConfirmed2 = !!(homeT2 && awayT2);
       const elimSet = eliminatedTeamsForRound(koRoundKey(id));
-      const feeders = KO_FEEDER_MAP[id] || [];
       for(const p of koParticipants){
         const kp = p.kPreds[id];
         const predWinner = kp ? _predAdvancer(kp) : null;
@@ -5009,13 +4995,13 @@ function renderResults(){
         if(predWinner){
           if(bothConfirmed2 && predWinner!==homeT2 && predWinner!==awayT2) invalid = true;
           if(elimSet.has(predWinner)) invalid = true;
-        }
-        if(!invalid){
-          for(const fid of feeders){
-            if(invalidMemo.get(p.name+'|'+fid)){ invalid = true; break; }
-          }
+          if(knownBad.get(p.name)?.has(predWinner)) invalid = true;
         }
         invalidMemo.set(p.name+'|'+id, invalid);
+        if(invalid && predWinner){
+          if(!knownBad.has(p.name)) knownBad.set(p.name, new Set());
+          knownBad.get(p.name).add(predWinner);
+        }
       }
     }
   })();
@@ -8425,7 +8411,7 @@ function renderPollaResults(){
   }
 
   // Pick cell: flag of predicted winner + predicted score, color coded by result
-  function pickCell(rp, actual, ownSlotTeams, realSlotTeams, eliminated){
+  function pickCell(rp, actual, ownSlotTeams, invalid){
     if(!rp || rp.homeScore==null) return `<td style="${TD}color:#334155;text-align:center;font-family:monospace;">–</td>`;
 
     const scoreStr = `${rp.homeScore}–${rp.awayScore}`;
@@ -8438,13 +8424,10 @@ function renderPollaResults(){
     const ownWinner = bothOwnKnown ? reAdvancerOf(ownSlotTeams, rp) : null;
     const winnerFlag = ownWinner ? `${flag(ownWinner)} ` : '';
 
-    const bothRealKnown = repickerTeamKnown(realSlotTeams?.home) && repickerTeamKnown(realSlotTeams?.away);
-    const inMatchup = bothRealKnown && ownWinner && (ownWinner===realSlotTeams.home || ownWinner===realSlotTeams.away);
-    const isEliminated = ownWinner && eliminated && eliminated.has(ownWinner);
-
-    // Predicted team already eliminated elsewhere in the bracket, or (once
-    // confirmed) simply not part of this real matchup → grey background + italic
-    if(isEliminated || (bothRealKnown && !inMatchup)){
+    // Predicted team's matchup already proven impossible (eliminated,
+    // wrong real matchup, or already invalid earlier in this player's
+    // own chain) → grey background + italic
+    if(invalid){
       return `<td style="${TD}background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
     }
 
@@ -8501,6 +8484,44 @@ function renderPollaResults(){
   const confirmedAllKo = buildConfirmedKoTeams();
   const koSlotIdOf = id => id==='final-1'?'final':id==='third-1'?'3rd':id;
 
+  // Pre-pass: for every player, determine whether their predicted winner at
+  // each slot can already be proven impossible — directly (real matchup
+  // confirmed and their pick isn't in it, or that team is eliminated), or
+  // because that SAME TEAM was already proven invalid for this player in an
+  // earlier round. Tracked by team identity so one broken side of a future
+  // matchup never taints the other, still-valid side.
+  const pcInvalidMemo = new Map(); // key: `${name}|${slotId}` → boolean
+  (() => {
+    const chrono = [...matchIds]; // already sorted chronologically above
+    const knownBad = new Map(); // playerName -> Set of teams already proven wrong
+    for(const id of chrono){
+      const actualId2 = id==='final-1'?'final':id==='third-1'?'third':id;
+      const actual2 = S.kResults[actualId2];
+      const confSlot = confirmedAllKo[koSlotIdOf(id)] || {};
+      const realHome2 = actual2?.home || confSlot.home || null;
+      const realAway2 = actual2?.away || confSlot.away || null;
+      const bothRealKnown2 = !!(realHome2 && realAway2);
+      const elimSet = eliminatedByRound[pcRoundKey(id)];
+      for(const p of players){
+        const pBracket = repickerUserBracket(p.picks, r32Teams);
+        const ownSlotTeams = pBracket[id] || {};
+        const bothOwnKnown = repickerTeamKnown(ownSlotTeams.home) && repickerTeamKnown(ownSlotTeams.away);
+        const ownWinner = bothOwnKnown ? reAdvancerOf(ownSlotTeams, p.picks[id]) : null;
+        let invalid = false;
+        if(ownWinner){
+          if(bothRealKnown2 && ownWinner!==realHome2 && ownWinner!==realAway2) invalid = true;
+          if(elimSet && elimSet.has(ownWinner)) invalid = true;
+          if(knownBad.get(p.name)?.has(ownWinner)) invalid = true;
+        }
+        pcInvalidMemo.set(p.name+'|'+id, invalid);
+        if(invalid && ownWinner){
+          if(!knownBad.has(p.name)) knownBad.set(p.name, new Set());
+          knownBad.get(p.name).add(ownWinner);
+        }
+      }
+    }
+  })();
+
   // Build rows with phase separators
   let lastPhase='';
   const rows = matchIds.map(id=>{
@@ -8543,15 +8564,13 @@ function renderPollaResults(){
       <span style="margin-left:0.4rem;font-size:0.78rem;">${scoreStr}</span>
     </td>`;
 
-    // For pick cells: always reconstruct each player's OWN predicted bracket
-    // chain for this slot (consistent team identities regardless of real
-    // confirmation), and separately pass the real confirmed teams (if known)
-    // so we can check whether their own pick is actually part of reality.
+    // For pick cells: reconstruct each player's OWN predicted bracket chain
+    // for this slot (consistent team identities regardless of real
+    // confirmation); validity is looked up from the pre-computed pcInvalidMemo.
     const picks = players.map(p=>{
       const pBracket = repickerUserBracket(p.picks, r32Teams);
       const ownSlotTeams = pBracket[id] || {};
-      const realSlotTeams = { home: realHome, away: realAway };
-      return pickCell(p.picks[id], actual, ownSlotTeams, realSlotTeams, eliminatedByRound[pcRoundKey(id)]);
+      return pickCell(p.picks[id], actual, ownSlotTeams, pcInvalidMemo.get(p.name+'|'+id));
     }).join('');
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
@@ -8623,8 +8642,7 @@ function renderPollaResults(){
               const picks2 = players.map(p=>{
                 const pBracket = repickerUserBracket(p.picks, r32Teams);
                 const ownSlotTeams = pBracket[id] || {};
-                const realSlotTeams = { home: realHome, away: realAway };
-                return pickCell(p.picks[id], actual, ownSlotTeams, realSlotTeams, eliminatedByRound[pcRoundKey(id)]);
+                return pickCell(p.picks[id], actual, ownSlotTeams, pcInvalidMemo.get(p.name+'|'+id));
               }).join('');
               return `${phSep2}<tr>${gameCell2}${picks2}</tr>`;
             }).join('');
