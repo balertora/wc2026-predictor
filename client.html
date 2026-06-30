@@ -5007,15 +5007,14 @@ function renderResults(){
   })();
 
   // Pre-compute per-round alive team counts per participant
-  // A slot counts as "alive" if the predicted winner is in the actual matchup
+  // A slot counts as "alive" if the pick hasn't been proven impossible yet
+  // (uses the same invalidMemo as the grey-out logic, so partial bracket
+  // confirmation and cross-round elimination are both already accounted for)
   function aliveCount(p, slotIds){
     return slotIds.filter(id=>{
       const kp = p.kPreds[id];
       if(!kp || kp.homeScore==null) return false;
-      const homeT = resolveTeam(id,'home'), awayT = resolveTeam(id,'away');
-      if(!homeT || !awayT) return false;
-      const predWinner = _predAdvancer(kp);
-      return predWinner && (predWinner===homeT || predWinner===awayT);
+      return !invalidMemo.get(p.name+'|'+id);
     }).length;
   }
 
@@ -5025,11 +5024,6 @@ function renderResults(){
     const rl = koRoundLabel(id);
     if(!slotsByRound[rl]) slotsByRound[rl]=[];
     slotsByRound[rl].push(id);
-  }
-
-  // Check if all slots in a round have both teams confirmed
-  function roundFullyConfirmed(rl){
-    return (slotsByRound[rl]||[]).every(id => resolveTeam(id,'home') && resolveTeam(id,'away'));
   }
 
   // Live KO detection
@@ -5047,21 +5041,20 @@ function renderResults(){
     if(rl!==lastRound){
       // Phase separator
       koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:var(--bg);color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
-      // Alive Teams — only when all matchups in this round are confirmed
-      if(roundFullyConfirmed(rl)){
-        const roundSlots = slotsByRound[rl]||[];
-        const aliveMax = roundSlots.length;
-        const aliveCells = koParticipants.map(p=>{
-          const cnt = aliveCount(p, roundSlots);
-          const pct = aliveMax > 0 ? cnt/aliveMax : 0;
-          const col = pct===1?'#4ade80':pct>=0.5?'#fbbf24':'#f87171';
-          return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
-        }).join('');
-        koBody += `<tr style="background:var(--bg);">
-          <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:var(--bg);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams <span style="font-weight:400;font-size:0.7rem;opacity:0.8;">(${rl})</span></td>
-          ${aliveCells}
-        </tr>`;
-      }
+      // Alive Teams — shown for every round now that partial bracket
+      // confirmation and cross-round elimination are tracked precisely
+      const roundSlots = slotsByRound[rl]||[];
+      const aliveMax = roundSlots.length;
+      const aliveCells = koParticipants.map(p=>{
+        const cnt = aliveCount(p, roundSlots);
+        const pct = aliveMax > 0 ? cnt/aliveMax : 0;
+        const col = pct===1?'#4ade80':pct>=0.5?'#fbbf24':'#f87171';
+        return `<td style="padding:0.4rem 0.35rem;text-align:center;font-size:0.82rem;font-weight:600;color:${col};">${cnt}/${aliveMax}</td>`;
+      }).join('');
+      koBody += `<tr style="background:var(--bg);">
+        <td style="padding:0.45rem 0.75rem;font-size:0.78rem;font-weight:700;color:#a5b4fc;position:sticky;left:0;background:var(--bg);white-space:nowrap;letter-spacing:0.01em;">🎯 Alive Teams <span style="font-weight:400;font-size:0.7rem;opacity:0.8;">(${rl})</span></td>
+        ${aliveCells}
+      </tr>`;
       lastRound=rl;
     }
 
