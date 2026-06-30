@@ -2654,7 +2654,7 @@ function koScoreFor(kPreds){
     const c = koCompare(kPreds ? kPreds[id] : undefined, actual);
     let resultPts=0, penPts=0;
     if(c.kind==='full'){
-      if(c.scoreMatch){ resultPts=5; exacts++; }
+      if(c.exact){ resultPts=5; exacts++; }
       else            { resultPts=3; advancers++; }
       if(c.penOk)       penPts=1;
     }
@@ -2694,7 +2694,7 @@ function koScoreForRepicker(rePicks){
     const c = koCompare(rePicks ? rePicks[id] : undefined, actual);
     let resultPts=0, penPts=0;
     if(c.kind==='full'){
-      if(c.scoreMatch){ resultPts=5; exacts++; }
+      if(c.exact){ resultPts=5; exacts++; }
       else            { resultPts=3; advancers++; }
       if(c.penOk)       penPts=1;
     }
@@ -4982,7 +4982,7 @@ function renderResults(){
       const c = koCompare(kp, compareActual);
       if(c.kind==='full'){
         const penStr = c.penOk ? ' <span style="font-size:0.6rem;color:#fbbf24;">P✓</span>' : '';
-        if(c.scoreMatch) return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">🎯</td>';
+        if(c.exact) return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">🎯'+penStr+'</td>';
         return '<td style="'+base+'background:rgba(74,222,128,0.12);color:#4ade80;">'+wFlag+' '+scoreStr3+penStr+'</td>';
       }
       return '<td style="'+base+'background:rgba(248,113,113,0.06);color:#f87171;">'+wFlag+' '+scoreStr3+'</td>';
@@ -5184,7 +5184,7 @@ function todaysGamesPanel(parts){
       const inMatchup = predWinner && (predWinner===homeT || predWinner===awayT);
       pickTxt=`${wFlag} ${mykp.homeScore}–${mykp.awayScore}`;
       if(!inMatchup && predWinner){ pickCol='#475569'; pickStyle='font-style:italic;opacity:0.6;'; }
-      else if(done && done.homeScore!=null){ const c=koCompare(mykp, done); pickCol = c.scoreMatch?'#4ade80':c.advOk?'#facc15':(c.kind==='nopick'?'#475569':'#f87171'); }
+      else if(done && done.homeScore!=null){ const c=koCompare(mykp, done); pickCol = c.exact?'#4ade80':c.advOk?'#facc15':(c.kind==='nopick'?'#475569':'#f87171'); }
       else pickCol='#94a3b8';
     }
     const d=_koPickDist(slot, homeT, awayT, parts);
@@ -5301,7 +5301,7 @@ function renderCompare(){
     for(const slot of Object.keys(KO_VENUES)){
       const a=S.kResults[slot]; if(!a||!a.home||!a.away||a.homeScore==null) continue;
       const c=koCompare(p.kPreds?p.kPreds[slot]:undefined, a);
-      const resPts = c.kind==='full' ? (c.scoreMatch?5:3) + (c.penOk?1:0) : 0;
+      const resPts = c.kind==='full' ? (c.exact?5:3) + (c.penOk?1:0) : 0;
       if(resPts>0) surprise += resPts * (koOddsWeight[slot]||1);
     }
     const ko=koScoreFor(p.kPreds);
@@ -5448,7 +5448,7 @@ function renderCompare(){
       let ptVal = 0;
       if(inMatchup){
         const c = koCompare(kp, r);
-        if(c.kind==='full'){ if(c.scoreMatch){ptVal=5*(koWeights()[koRoundKey(id)]||1);} else if(c.advOk){ptVal=3*(koWeights()[koRoundKey(id)]||1);} }
+        if(c.kind==='full'){ ptVal = ((c.exact?5:c.advOk?3:0) + (c.penOk?1:0)) * (koWeights()[koRoundKey(id)]||1); }
       }
       return { name:p.name, predWinner, inMatchup, kp, pts:ptVal };
     }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
@@ -5522,7 +5522,7 @@ function renderCompare(){
       const predWinner = _predAdvancer(kp);
       const inMatchup = !predWinner || predWinner===r.home || predWinner===r.away;
       let ptVal = 0;
-      if(c.kind==='full'){ ptVal = (c.scoreMatch?5:c.advOk?3:0) * (w[koRoundKey(id)]||1); }
+      if(c.kind==='full'){ ptVal = ((c.exact?5:c.advOk?3:0) + (c.penOk?1:0)) * (w[koRoundKey(id)]||1); }
       return { name:p.name, predWinner, inMatchup, kp, pts:ptVal };
     }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
     const rl = id.startsWith('r32')?'R32':id.startsWith('r16')?'R16':id.startsWith('qf')?'QF':id.startsWith('sf')?'SF':id==='3rd'?'3rd Place':'Final';
@@ -8277,13 +8277,13 @@ function renderPollaResults(){
     const c = koCompare(rp, actual);
     let bg='', col='#94a3b8', badge='';
     if(c.kind==='full'){
-      if(c.scoreMatch){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; badge='🎯'; }
+      if(c.exact){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; badge='🎯'; }
       else if(c.advOk){ bg='rgba(74,222,128,0.12)'; col='#4ade80'; }
       else             { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
     } else { bg='rgba(248,113,113,0.06)'; col='#f87171'; }
     const penStr = c.kind==='full' && c.penOk
       ? `<span style="font-size:0.58rem;color:#fbbf24;"> P✓</span>` : '';
-    if(badge) return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}🎯</td>`;
+    if(badge) return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}🎯${penStr}</td>`;
     return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}${penStr}</td>`;
   }
 
@@ -8690,7 +8690,7 @@ function renderPollaLeaderboard(){
           const predWinner = _predAdvancer(rp);
           const inMatchup = predWinner && (predWinner===r.home||predWinner===r.away);
           let ptVal=0;
-          if(inMatchup&&c.kind==='full'){ ptVal=(c.scoreMatch?5:c.advOk?3:0)*(w[id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':id==='third-1'?'3rd':'final']||1); }
+          if(inMatchup&&c.kind==='full'){ ptVal=((c.exact?5:c.advOk?3:0)+(c.penOk?1:0))*(w[id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':id==='third-1'?'3rd':'final']||1); }
           return {name,rp,predWinner,inMatchup,pts:ptVal};
         }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
         return `<details style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;overflow:hidden;margin-bottom:0.5rem;">
