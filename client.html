@@ -7843,8 +7843,11 @@ function renderRepicker(){
     </div>`;
   }
 
-  // Preview mode: show read-only bracket with confirmed teams only — for everyone while not open
-  if(!repickerOpen && !_isAdmin){
+  // Preview content for the Predict tab when repicker is closed to this user —
+  // a function now (not an early return), so the subnav/header below still
+  // renders and Picks/Results/Leaderboard stay reachable regardless of
+  // whether the repicker itself is open.
+  function renderRepickerPreviewContent(){
     if(!S.name) return `<div style="text-align:center;padding:4rem 1rem;color:#64748b;">Log in to see the Repicker preview.</div>`;
     let preview = {};
     try { preview = repickerPreviewBracket(); } catch(e){ preview = {}; }
@@ -7880,9 +7883,16 @@ function renderRepicker(){
         <div style="flex:1;">${awayStr}</div>
       </div>`;
     }).join('');
+    const r32StartedNow = KICKOFFS['r32-1'] ? Date.now() >= new Date(KICKOFFS['r32-1']).getTime() : false;
+    const forceClosedByAdmin = S.settings?.repicker_force_closed === 'true';
+    const statusMsg = forceClosedByAdmin
+      ? `👀 <b>Preview mode</b> — picks have been closed by the admin. Teams in <b>bold</b> have secured their position; <i>italic slots</i> are still to be decided.`
+      : r32StartedNow
+        ? `👀 <b>Preview mode</b> — picks closed once the Round of 32 kicked off. Teams in <b>bold</b> have secured their position; <i>italic slots</i> are still to be decided.`
+        : `👀 <b>Preview mode</b> — picks open after the group stage ends. Teams in <b>bold</b> have secured their position; <i>italic slots</i> are still to be decided. ${gDone}/72 group results in.`;
     return `<div style="max-width:640px;margin:0 auto;padding:0 0.5rem;">
       <div style="background:linear-gradient(90deg,rgba(167,139,250,0.1),rgba(99,102,241,0.06));border:1px solid rgba(167,139,250,0.25);border-radius:0.75rem;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#7c3aed;line-height:1.5;">
-        👀 <b>Preview mode</b> — picks open after the group stage ends. Teams in <b>bold</b> have secured their position; <i>italic slots</i> are still to be decided. ${gDone}/72 group results in.
+        ${statusMsg}
       </div>
       <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">${tabsHtml}</div>
       ${matchesHtml}
@@ -8058,10 +8068,12 @@ function renderRepicker(){
   if(pollaSub === 'results')     return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaResults()}${pollaFooter}</div>`;
   if(pollaSub === 'leaderboard') return `<div style="padding-bottom:1.5rem;">${pollaHeader}${renderPollaLeaderboard()}${pollaFooter}</div>`;
 
-  // pollaSub === 'predict' — existing predict UI below
-  return `
-  <div style="padding-bottom:1.5rem;">
-    ${pollaHeader}
+  // pollaSub === 'predict' — editable bracket once open (or admin); read-only
+  // preview content otherwise. Either way, pollaHeader/subnav above stays
+  // visible so Picks/Results/Leaderboard remain reachable.
+  const predictBody = (!repickerOpen && !_isAdmin)
+    ? renderRepickerPreviewContent()
+    : `
     <div style="margin-bottom:1rem;display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
       <div>
         <h1 style="font-size:1.25rem;font-weight:700;color:white;">🔄 Repicker Bracket</h1>
@@ -8078,8 +8090,9 @@ function renderRepicker(){
     ${(S.reViewMode||'bracket')==='bracket'
       ? renderRepickerBracket(userBracket, locked)
       : `<div style="display:flex;gap:0.25rem;overflow-x:auto;padding-bottom:0.375rem;margin-bottom:1rem;">${tabsHtml}</div>${matchesHtml}`
-    }
-  </div>${pollaFooter}</div>`;
+    }`;
+
+  return `<div style="padding-bottom:1.5rem;">${pollaHeader}${predictBody}${pollaFooter}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
