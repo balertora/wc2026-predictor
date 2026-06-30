@@ -7427,6 +7427,17 @@ function repickerTeamKnown(name){
 }
 
 // Advancing team from a repicker score pick (decisive score, else pen winner).
+// Predicted winner from a repicker pick's OWN stored home/away teams —
+// unlike reAdvancerOf (which needs the slot's current confirmed teams),
+// this works even before the real matchup is known, so we can flag
+// already-eliminated picks ahead of confirmation.
+function rpAdvancer(rp){
+  if(!rp || rp.homeScore==null || rp.awayScore==null) return null;
+  if(rp.homeScore>rp.awayScore) return rp.home||null;
+  if(rp.awayScore>rp.homeScore) return rp.away||null;
+  return rp.penWinner || null;
+}
+
 function reAdvancerOf(slotTeams, rp){
   if(!slotTeams || !rp) return null;
   if(!repickerTeamKnown(slotTeams.home) || !repickerTeamKnown(slotTeams.away)) return null;
@@ -8359,14 +8370,25 @@ function renderPollaResults(){
   }
 
   // Pick cell: flag of predicted winner + predicted score, color coded by result
-  function pickCell(rp, actual, slotTeams){
+  function pickCell(rp, actual, slotTeams, eliminated){
     if(!rp || rp.homeScore==null) return `<td style="${TD}color:#334155;text-align:center;font-family:monospace;">–</td>`;
 
-    // Predicted winner flag — only show if we know both teams
-    const bothKnown = repickerTeamKnown(slotTeams?.home) && repickerTeamKnown(slotTeams?.away);
-    const predWinner = bothKnown ? reAdvancerOf(slotTeams, rp) : null;
-    const winnerFlag = predWinner ? `${flag(predWinner)} ` : '';
     const scoreStr = `${rp.homeScore}–${rp.awayScore}`;
+    // Predicted winner from the pick's own stored teams — works even before
+    // the real slot matchup is confirmed, so eliminated picks can be flagged early.
+    const ownWinner = rpAdvancer(rp);
+    const bothKnown = repickerTeamKnown(slotTeams?.home) && repickerTeamKnown(slotTeams?.away);
+    const slotWinner = bothKnown ? reAdvancerOf(slotTeams, rp) : null;
+    const predWinner = slotWinner || ownWinner;
+    const winnerFlag = predWinner ? `${flag(predWinner)} ` : '';
+    const inMatchup = bothKnown && slotWinner && (slotWinner===slotTeams.home || slotWinner===slotTeams.away);
+    const isEliminated = ownWinner && eliminated && eliminated.has(ownWinner);
+
+    // Predicted team already eliminated elsewhere in the bracket, or (once
+    // confirmed) simply not part of this matchup → grey background + italic
+    if(isEliminated || (bothKnown && !inMatchup)){
+      return `<td style="${TD}background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
+    }
 
     if(!actual || actual.homeScore==null){
       return `<td style="${TD}color:#94a3b8;font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}</td>`;
@@ -8384,6 +8406,14 @@ function renderPollaResults(){
     if(badge) return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}🎯${penStr}</td>`;
     return `<td style="${TD}background:${bg};color:${col};font-family:monospace;font-weight:600;font-size:0.78rem;text-align:center;white-space:nowrap;">${winnerFlag}${scoreStr}${penStr}</td>`;
   }
+
+  // Round key matching eliminatedTeamsForRound's expected keys (r32/r16/qf/sf/3rd/final)
+  const pcRoundKey = id => id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':id==='third-1'?'3rd':'final';
+  const eliminatedByRound = {
+    r32: eliminatedTeamsForRound('r32'), r16: eliminatedTeamsForRound('r16'),
+    qf: eliminatedTeamsForRound('qf'),   sf: eliminatedTeamsForRound('sf'),
+    '3rd': eliminatedTeamsForRound('3rd'), final: eliminatedTeamsForRound('final'),
+  };
 
   // Phase label — same style as main Results KO phase separator
   const phaseOf = id => id.startsWith('r32')?'Round of 32':id.startsWith('r16')?'Round of 16':id.startsWith('qf')?'Quarter-finals':id.startsWith('sf')?'Semi-finals':id==='third-1'?'Third place':'Final';
@@ -8456,7 +8486,7 @@ function renderPollaResults(){
           away: (repickerTeamKnown(pSlot.away)?pSlot.away:null) || '?',
         };
       }
-      return pickCell(p.picks[id], actual, playerSlotTeams);
+      return pickCell(p.picks[id], actual, playerSlotTeams, eliminatedByRound[pcRoundKey(id)]);
     }).join('');
     return `${phaseSep}<tr>${gameCell}${picks}</tr>`;
   }).join('');
@@ -8534,7 +8564,7 @@ function renderPollaResults(){
                   const pSlot = pBracket[id]||{};
                   playerSlotTeams = { home: (repickerTeamKnown(pSlot.home)?pSlot.home:null)||'?', away: (repickerTeamKnown(pSlot.away)?pSlot.away:null)||'?' };
                 }
-                return pickCell(p.picks[id], actual, playerSlotTeams);
+                return pickCell(p.picks[id], actual, playerSlotTeams, eliminatedByRound[pcRoundKey(id)]);
               }).join('');
               return `${phSep2}<tr>${gameCell2}${picks2}</tr>`;
             }).join('');
