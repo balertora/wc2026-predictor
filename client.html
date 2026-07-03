@@ -2646,8 +2646,16 @@ function koRoundKey(id){
 // Returns weighted koTotal plus unweighted breakdown stats.
 function koScoreFor(kPreds){
   const w = koWeights();
-  let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
+  let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0, wrongSlot=0;
   const phases={r32:0,r16:0,qf:0,sf:0,'3rd':0,final:0};
+
+  // Group all slots by round key for the wrong-path bonus pass
+  const slotsByRk={};
+  for(const id of Object.keys(KO_VENUES)){
+    const rk=koRoundKey(id);
+    (slotsByRk[rk]||(slotsByRk[rk]=[])).push(id);
+  }
+
   for(const id of Object.keys(KO_VENUES)){
     const actual = S.kResults[id];
     if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
@@ -2664,7 +2672,38 @@ function koScoreFor(kPreds){
     koTotal += pts;
     if(phases[rk]!==undefined) phases[rk] = (phases[rk]||0) + pts;
   }
-  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored, phases };
+
+  // Wrong-path bonus: +1×weight when the actual winner of a game was
+  // predicted to win a DIFFERENT slot in the same round (right team,
+  // wrong bracket path). Only applies when the user didn't already score
+  // points for the correct slot (mutually exclusive by design since each
+  // team can only appear in one slot per round).
+  for(const [rk, slots] of Object.entries(slotsByRk)){
+    for(const id of slots){
+      const actual = S.kResults[id];
+      if(!actual || actual.homeScore==null) continue;
+      const actualWinner = koWinnerStrict(id, actual.home, actual.away);
+      if(!actualWinner) continue;
+      // Skip if user already correctly predicted the winner in this slot
+      const myPred = kPreds?.[id];
+      if(myPred && _predAdvancer(myPred)===actualWinner) continue;
+      // Check other slots in this round for a matching predicted winner
+      for(const otherId of slots){
+        if(otherId===id) continue;
+        const otherPred = kPreds?.[otherId];
+        if(!otherPred) continue;
+        if(_predAdvancer(otherPred)===actualWinner){
+          const bonus = w[rk] || 1;
+          koTotal += bonus;
+          if(phases[rk]!==undefined) phases[rk] = (phases[rk]||0) + bonus;
+          wrongSlot++;
+          break; // one bonus per actual game, cap enforced
+        }
+      }
+    }
+  }
+
+  return { koTotal:+koTotal.toFixed(2), matchups:+matchups.toFixed(1), exacts, advancers, scored, wrongSlot, phases };
 }
 
 // The 31 knockout slots a complete Repicker bracket covers.
@@ -5041,6 +5080,19 @@ function renderResults(){
 
   const visibleKoSlots = liveOnly ? allKoSlots.filter(id => liveKoIds.has(id)) : allKoSlots;
 
+  // Pre-compute actual winners by round — used to detect wrong-slot bonus
+  // (predicted team won their real game but in a different slot this round)
+  const actualWinnersByRound = {};
+  for(const id of Object.keys(KO_VENUES)){
+    const r = S.kResults[id];
+    if(!r || r.homeScore==null) continue;
+    const rk2 = koRoundKey(id);
+    const w2 = koWinnerStrict(id, r.home, r.away);
+    if(!w2) continue;
+    if(!actualWinnersByRound[rk2]) actualWinnersByRound[rk2] = new Set();
+    actualWinnersByRound[rk2].add(w2);
+  }
+
   let koBody='', lastRound='';
   for(const id of visibleKoSlots){
     const actual = S.kResults[id] || {};
@@ -5104,8 +5156,14 @@ function renderResults(){
 
       // Predicted matchup already proven impossible — either directly (wrong
       // real matchup / eliminated team) or because an earlier slot in this
-      // player's own chain was already invalid → grey background + italic
+      // player's own chain was already invalid → grey background + italic.
+      // Exception: if the predicted team actually WON their real game elsewhere
+      // in this round (right team, wrong slot), show yellow to signal the bonus.
       if(invalid){
+        const rk3 = koRoundKey(id);
+        if(predWinner && actualWinnersByRound[rk3]?.has(predWinner)){
+          return '<td style="'+base+'background:rgba(250,204,21,0.15);color:#fbbf24;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
+        }
         return '<td style="'+base+'background:rgba(100,116,139,0.15);color:#94a3b8;font-style:italic;">'+wFlag+' '+scoreStr3+'</td>';
       }
 
