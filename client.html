@@ -2789,20 +2789,6 @@ function buildFinal(sf){
 // winners conversely cannot play 3rd place (they're in the Final instead).
 // Returns the set of teams eliminated in the group stage — teams in a
 // completed group that didn't advance to the KO round.
-function groupEliminatedTeams(){
-  const q = getQualifiers();
-  const qualified = new Set(Object.values(q).filter(t=>t && typeof t==='string' && repickerTeamKnown(t)));
-  const elim = new Set();
-  for(const [g, teams] of Object.entries(GROUPS)){
-    const games = GROUP_GAMES.filter(x=>x.g===g);
-    if(!games.every(x=>S.gResults[x.id])) continue; // group not finished yet
-    for(const t of teams){
-      if(!qualified.has(t)) elim.add(t);
-    }
-  }
-  return elim;
-}
-
 function eliminatedTeamsForRound(roundKey){
   const conf = buildConfirmedKoTeams();
   const eliminated = new Set();
@@ -2814,25 +2800,17 @@ function eliminatedTeamsForRound(roundKey){
     if(!winner) return;
     eliminated.add(winner===c.home ? c.away : c.home);
   };
-  if(roundKey==='r32') return eliminated; // nothing to prune at R32
+  if(roundKey==='r32') return eliminated;
 
-  // All rounds beyond R32 include group-stage eliminated teams
-  for(const t of groupEliminatedTeams()) eliminated.add(t);
-
-  // Accumulate R32 losers
   for(const m of R32_FIXED) addLoser(m.id);
   if(roundKey==='r16') return eliminated;
 
-  // Accumulate R16 losers
   for(let i=1;i<=8;i++) addLoser(`r16-${i}`);
   if(roundKey==='qf') return eliminated;
 
-  // Accumulate QF losers
   for(let i=1;i<=4;i++) addLoser(`qf-${i}`);
   if(roundKey==='sf') return eliminated;
 
-  // 3rd place: also excludes SF winners (they're in the Final instead)
-  // Final: also excludes SF losers (they play 3rd instead)
   const sfWinners=[], sfLosers=[];
   for(const id of ['sf-1','sf-2']){
     const c = conf[id];
@@ -2843,14 +2821,8 @@ function eliminatedTeamsForRound(roundKey){
     sfWinners.push(w);
     sfLosers.push(w===c.home ? c.away : c.home);
   }
-  if(roundKey==='3rd'){
-    sfWinners.forEach(t=>eliminated.add(t));
-    return eliminated;
-  }
-  if(roundKey==='final'){
-    sfLosers.forEach(t=>eliminated.add(t));
-    return eliminated;
-  }
+  if(roundKey==='3rd'){ sfWinners.forEach(t=>eliminated.add(t)); return eliminated; }
+  if(roundKey==='final'){ sfLosers.forEach(t=>eliminated.add(t)); return eliminated; }
   return eliminated;
 }
 // Returns every round so callers can pick what they need without re-running the chain.
