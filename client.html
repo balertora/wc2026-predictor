@@ -5209,7 +5209,7 @@ function renderResults(){
         </table>
       </div>
       <div style="font-size:0.66rem;color:#64748b;margin-top:0.5rem;line-height:1.6;">
-        Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct/advancing · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · P✓ = pen winner correct · <span style="color:#475569;font-style:italic;">greyed italic</span> = predicted different matchup
+        Flag = predicted winner · <span style="color:#4ade80;">green</span> = correct/advancing · 🎯 = exact score · <span style="color:#f87171;">red</span> = wrong winner · P✓ = pen winner correct · <span style="color:#fbbf24;font-style:italic;">yellow italic</span> = right team, wrong slot (+1pt) · <span style="color:#475569;font-style:italic;">greyed italic</span> = predicted different matchup
       </div>
     </div>` : liveOnly ? `
     <div style="text-align:center;padding:2rem;color:#64748b;background:#112a45;border:1px solid rgba(255,255,255,0.07);border-radius:0.75rem;margin-bottom:1.75rem;">
@@ -5638,16 +5638,31 @@ function renderCompare(){
   });
   const koResultCards = koCompletedSlots.map(id=>{
     const r = S.kResults[id];
+    const rk = koRoundKey(id);
+    const actualWinner = koWinnerStrict(id, r.home, r.away);
+    // All other completed slots in the same round (for wrong-slot bonus detection)
+    const sameRoundOtherSlots = koCompletedSlots.filter(s=>s!==id && koRoundKey(s)===rk);
     const gamePreds = allPred.map(p=>{
       const kp = p.kPreds?.[id]; if(!kp || kp.homeScore==null) return null;
       const predWinner = _predAdvancer(kp);
       const inMatchup = predWinner && (predWinner===r.home || predWinner===r.away);
       let ptVal = 0;
+      let wrongSlotBonus = false;
       if(inMatchup){
         const c = koCompare(kp, r);
-        if(c.kind==='full'){ ptVal = ((c.exact?5:c.advOk?3:0) + (c.penOk?1:0)) * (koWeights()[koRoundKey(id)]||1); }
+        if(c.kind==='full'){ ptVal = ((c.exact?5:c.advOk?3:0) + (c.penOk?1:0)) * (koWeights()[rk]||1); }
+      } else if(actualWinner) {
+        // Check if this player predicted the actual winner in a different slot this round
+        for(const otherId of sameRoundOtherSlots){
+          const okp = p.kPreds?.[otherId];
+          if(okp && _predAdvancer(okp)===actualWinner){
+            wrongSlotBonus = true;
+            ptVal = koWeights()[rk] || 1;
+            break;
+          }
+        }
       }
-      return { name:p.name, predWinner, inMatchup, kp, pts:ptVal };
+      return { name:p.name, predWinner, inMatchup, wrongSlotBonus, kp, pts:ptVal };
     }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
     const rl = id.startsWith('r32')?'R32':id.startsWith('r16')?'R16':id.startsWith('qf')?'QF':id.startsWith('sf')?'SF':id==='3rd'?'3rd Place':'Final';
     const iso = KICKOFFS[id];
@@ -5665,13 +5680,15 @@ function renderCompare(){
         </summary>
         ${gamePreds.length===0?'<div style="padding:0.625rem 1rem;font-size:0.8rem;color:#64748b;">No predictions</div>':
           gamePreds.map(p=>{
-            const wrongMatchup = !p.inMatchup && p.predWinner;
+            const wrongMatchup = !p.inMatchup && !p.wrongSlotBonus && p.predWinner;
             const wFlag = p.predWinner ? flag(p.predWinner) : '';
             const scoreStr = `${p.kp.homeScore}–${p.kp.awayScore}`;
-            const col = p.pts>0?'#4ade80':'#334155';
-            return `<div style="display:flex;align-items:center;gap:0.625rem;padding:0.5rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.8rem;${wrongMatchup?'opacity:0.55;font-style:italic;':''}">
+            const col = p.pts>0 ? (p.wrongSlotBonus ? '#fbbf24' : '#4ade80') : '#334155';
+            const style = wrongMatchup ? 'opacity:0.45;font-style:italic;' : p.wrongSlotBonus ? 'font-style:italic;' : '';
+            const label = p.wrongSlotBonus ? `<span style="font-size:0.65rem;color:#fbbf24;margin-left:0.25rem;">wrong slot</span>` : '';
+            return `<div style="display:flex;align-items:center;gap:0.625rem;padding:0.5rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.8rem;${style}">
               <span style="color:#cbd5e1;font-weight:500;width:8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</span>
-              <span style="color:#94a3b8;">${wFlag} ${scoreStr}</span>
+              <span style="color:#94a3b8;">${wFlag} ${scoreStr}${label}</span>
               <div style="margin-left:auto;font-weight:700;color:${col};">+${p.pts}</div>
             </div>`;
           }).join('')}
