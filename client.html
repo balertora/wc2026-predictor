@@ -5744,19 +5744,19 @@ function renderCompare(){
       const predWinner = _predAdvancer(kp);
       const inMatchup = !predWinner || predWinner===r.home || predWinner===r.away;
       let ptVal = 0;
-      let wrongSlotBonus = false;
+      let wrongSlotKp = null;
       if(c.kind==='full'){ ptVal = ((c.exact?5:c.advOk?3:0) + (c.penOk?1:0)) * (w[rk]||1); }
       else if(wrongSlotEligible && actualWinner && predWinner!==actualWinner){
         for(const otherId of sameRoundOtherSlots){
           const okp = p.kPreds?.[otherId];
           if(okp && _predAdvancer(okp)===actualWinner){
-            wrongSlotBonus = true;
+            wrongSlotKp = okp;
             ptVal = w[rk] || 1;
             break;
           }
         }
       }
-      return { name:p.name, predWinner, inMatchup, wrongSlotBonus, kp, pts:ptVal };
+      return { name:p.name, predWinner, inMatchup, wrongSlotKp, kp, pts:ptVal };
     }).filter(Boolean).sort((a,b)=>b.pts-a.pts);
     const rl = rk==='r32'?'R32':rk==='r16'?'R16':rk==='qf'?'QF':rk==='sf'?'SF':rk==='3rd'?'3rd Place':'Final';
     const iso = KICKOFFS[id];
@@ -5774,13 +5774,19 @@ function renderCompare(){
         </summary>
         ${gamePreds.length===0?'<div style="padding:0.625rem 1rem;font-size:0.8rem;color:#64748b;">No predictions</div>':
           gamePreds.map(p=>{
-            const dead = !p.inMatchup && !p.wrongSlotBonus && p.predWinner;
-            const col = p.pts>0 ? (p.wrongSlotBonus?'#fbbf24':'#4ade80') : '#334155';
-            const rowStyle = dead?'opacity:0.45;font-style:italic;':p.wrongSlotBonus?'font-style:italic;':'';
-            const label = p.wrongSlotBonus?`<span style="font-size:0.65rem;color:#fbbf24;margin-left:0.25rem;">wrong slot</span>`:'';
+            const dead = !p.inMatchup && !p.wrongSlotKp && p.predWinner;
+            const col = p.pts>0 ? (p.wrongSlotKp?'#fbbf24':'#4ade80') : '#334155';
+            const rowStyle = dead?'opacity:0.45;font-style:italic;':'';
+            // For wrong-slot bonus: show the actual winner's flag + the score from the
+            // OTHER slot that earned the bonus — not the wrong pick for THIS game —
+            // so it's clear WHY points were awarded (avoids same-flag, different-pts confusion)
+            const displayFlag = p.wrongSlotKp ? flag(actualWinner) : (p.predWinner?flag(p.predWinner):'');
+            const displayScore = p.wrongSlotKp
+              ? `${p.wrongSlotKp.homeScore}–${p.wrongSlotKp.awayScore} <span style="font-size:0.65rem;color:#fbbf24;">(correct team, wrong slot)</span>`
+              : `${p.kp.homeScore}–${p.kp.awayScore}`;
             return `<div style="display:flex;align-items:center;gap:0.625rem;padding:0.5rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.8rem;${rowStyle}">
               <span style="color:#cbd5e1;font-weight:500;width:8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</span>
-              <span style="color:#94a3b8;">${p.predWinner?flag(p.predWinner):''} ${p.kp.homeScore}–${p.kp.awayScore}${label}</span>
+              <span style="color:${p.wrongSlotKp?'#fbbf24':'#94a3b8'};">${displayFlag} ${displayScore}</span>
               <div style="margin-left:auto;font-weight:700;color:${col};">+${p.pts}</div>
             </div>`;
           }).join('')}
