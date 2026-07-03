@@ -2798,18 +2798,29 @@ function eliminatedTeamsForRound(roundKey){
     if(!winner) return;
     eliminated.add(winner===c.home ? c.away : c.home);
   };
-  if(roundKey==='r32') return eliminated; // nothing to prune yet at the first KO round
+  if(roundKey==='r32') return eliminated; // nothing to prune at R32
 
+  // Accumulate R32 losers
   for(const m of R32_FIXED) addLoser(m.id);
   if(roundKey==='r16') return eliminated;
 
+  // Accumulate R16 losers
   for(let i=1;i<=8;i++) addLoser(`r16-${i}`);
   if(roundKey==='qf') return eliminated;
 
+  // Accumulate QF losers
   for(let i=1;i<=4;i++) addLoser(`qf-${i}`);
   if(roundKey==='sf') return eliminated;
 
-  // Beyond SF: 3rd place and Final each exclude a different half of the SF outcome
+  // Accumulate SF losers (these teams are eliminated from Final and 3rd alike
+  // based on which side they're on — handled below as overrides, but we still
+  // accumulate the generic SF losers for the set so R32/R16/QF teams are included)
+  // Actually SF losers play 3rd place and SF winners play the Final, so we
+  // don't blindly addLoser for SFs here — the round-specific exclusions below
+  // handle who gets excluded where, on top of the already-accumulated set.
+
+  // 3rd place: also excludes SF winners (they're in the Final instead)
+  // Final: also excludes SF losers (they play 3rd instead)
   const sfWinners=[], sfLosers=[];
   for(const id of ['sf-1','sf-2']){
     const c = conf[id];
@@ -2820,8 +2831,14 @@ function eliminatedTeamsForRound(roundKey){
     sfWinners.push(w);
     sfLosers.push(w===c.home ? c.away : c.home);
   }
-  if(roundKey==='3rd'){ sfWinners.forEach(t=>eliminated.add(t)); return eliminated; }
-  if(roundKey==='final'){ sfLosers.forEach(t=>eliminated.add(t)); return eliminated; }
+  if(roundKey==='3rd'){
+    sfWinners.forEach(t=>eliminated.add(t));
+    return eliminated;
+  }
+  if(roundKey==='final'){
+    sfLosers.forEach(t=>eliminated.add(t));
+    return eliminated;
+  }
   return eliminated;
 }
 // Returns every round so callers can pick what they need without re-running the chain.
