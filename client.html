@@ -5098,8 +5098,10 @@ function renderResults(){
     const actual = S.kResults[id] || {};
     const rl=koRoundLabel(id);
     if(rl!==lastRound){
-      // Phase separator
-      koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:var(--bg);color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl}</td></tr>`;
+      // Phase separator with round multiplier
+      const rkLabel = koRoundKey(id);
+      const mult = koWeights()[rkLabel] || 1;
+      koBody += `<tr><td colspan="${1+koParticipants.length}" style="padding:0.4rem 0.5rem;background:var(--bg);color:#fbbf24;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;position:sticky;left:0;">${rl} <span style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;">(Multiplier: ×${mult})</span></td></tr>`;
       // Alive Teams — shown for every round now that partial bracket
       // confirmation and cross-round elimination are tracked precisely
       const roundSlots = slotsByRound[rl]||[];
