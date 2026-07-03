@@ -2787,6 +2787,22 @@ function buildFinal(sf){
 // every later round — except SF losers, who play the 3rd-place game (not
 // eliminated there) but cannot reach the Final (eliminated there). SF
 // winners conversely cannot play 3rd place (they're in the Final instead).
+// Returns the set of teams eliminated in the group stage — teams in a
+// completed group that didn't advance to the KO round.
+function groupEliminatedTeams(){
+  const q = getQualifiers();
+  const qualified = new Set(Object.values(q).filter(t=>repickerTeamKnown&&repickerTeamKnown(t)));
+  const elim = new Set();
+  for(const [g, teams] of Object.entries(GROUPS)){
+    const games = GROUP_GAMES.filter(x=>x.g===g);
+    if(!games.every(x=>S.gResults[x.id])) continue; // group not finished yet
+    for(const t of teams){
+      if(!qualified.has(t)) elim.add(t);
+    }
+  }
+  return elim;
+}
+
 function eliminatedTeamsForRound(roundKey){
   const conf = buildConfirmedKoTeams();
   const eliminated = new Set();
@@ -2800,6 +2816,9 @@ function eliminatedTeamsForRound(roundKey){
   };
   if(roundKey==='r32') return eliminated; // nothing to prune at R32
 
+  // All rounds beyond R32 include group-stage eliminated teams
+  for(const t of groupEliminatedTeams()) eliminated.add(t);
+
   // Accumulate R32 losers
   for(const m of R32_FIXED) addLoser(m.id);
   if(roundKey==='r16') return eliminated;
@@ -2811,13 +2830,6 @@ function eliminatedTeamsForRound(roundKey){
   // Accumulate QF losers
   for(let i=1;i<=4;i++) addLoser(`qf-${i}`);
   if(roundKey==='sf') return eliminated;
-
-  // Accumulate SF losers (these teams are eliminated from Final and 3rd alike
-  // based on which side they're on — handled below as overrides, but we still
-  // accumulate the generic SF losers for the set so R32/R16/QF teams are included)
-  // Actually SF losers play 3rd place and SF winners play the Final, so we
-  // don't blindly addLoser for SFs here — the round-specific exclusions below
-  // handle who gets excluded where, on top of the already-accumulated set.
 
   // 3rd place: also excludes SF winners (they're in the Final instead)
   // Final: also excludes SF losers (they play 3rd instead)
