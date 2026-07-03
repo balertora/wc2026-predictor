@@ -2791,7 +2791,7 @@ function buildFinal(sf){
 // completed group that didn't advance to the KO round.
 function groupEliminatedTeams(){
   const q = getQualifiers();
-  const qualified = new Set(Object.values(q).filter(t=>repickerTeamKnown&&repickerTeamKnown(t)));
+  const qualified = new Set(Object.values(q).filter(t=>t && typeof t==='string' && repickerTeamKnown(t)));
   const elim = new Set();
   for(const [g, teams] of Object.entries(GROUPS)){
     const games = GROUP_GAMES.filter(x=>x.g===g);
