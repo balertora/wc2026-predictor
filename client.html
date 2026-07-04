@@ -5423,13 +5423,16 @@ function todaysGamesPanel(parts){
 
 // Today's games panel for Polla Corta — same visual style as todaysGamesPanel
 function todaysGamesPanel_repicker(slotIds, r32Teams){
+  // For R16+ slots, r32Teams won't have entries — use confirmedAllKo
+  const confirmedAllKo = buildConfirmedKoTeams();
   const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
   const rows = slotIds.map(id=>{
     const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
     const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
     const done = S.kResults[actualId];
     const live = S.gLive[actualId];
-    const slotT = r32Teams[id]||{};
+    const koSlotId = id==='final-1'?'final':id==='third-1'?'3rd':id;
+    const slotT = r32Teams[id] || confirmedAllKo[koSlotId] || {};
     const homeT = done?.home || (repickerTeamKnown(slotT.home)?slotT.home:null) || '?';
     const awayT = done?.away || (repickerTeamKnown(slotT.away)?slotT.away:null) || '?';
     let mid='';
