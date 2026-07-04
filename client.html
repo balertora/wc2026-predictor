@@ -5445,7 +5445,7 @@ function todaysGamesPanel_repicker(slotIds, r32Teams){
     const myRp = S.rePicks?.[id];
     let pickTxt='–', pickCol='#475569';
     if(myRp&&myRp.homeScore!=null){
-      const predWinner = reAdvancerOf({home:homeT,away:awayT}, myRp);
+      const predWinner = rpAdvancer(myRp);
       pickTxt = (predWinner?flag(predWinner):'')+' '+myRp.homeScore+'–'+myRp.awayScore;
       pickCol='#94a3b8';
     }
