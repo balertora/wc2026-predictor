@@ -5598,11 +5598,16 @@ function renderCompare(){
   const koW = koWeights();
   const KO_PHASE_KEYS = ['r32','r16','qf','sf','3rd','final'];
   const KO_PHASE_LABELS = {r32:'R32',r16:'R16',qf:'QF',sf:'SF','3rd':'3rd',final:'F'};
+  const phaseMinKickoff2 = rk => {
+    const slots = Object.keys(KICKOFFS).filter(id=>koRoundKey(id)===rk);
+    const times = slots.map(id=>KICKOFFS[id]).filter(Boolean).map(t=>new Date(t).getTime());
+    return times.length ? Math.min(...times) : Infinity;
+  };
   const KO_PHASE_FIRST = {
-    r32:   KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity,
-    r16:   KICKOFFS['r16-1'] ? new Date(KICKOFFS['r16-1']).getTime() : Infinity,
-    qf:    KICKOFFS['qf-1']  ? new Date(KICKOFFS['qf-1']).getTime()  : Infinity,
-    sf:    KICKOFFS['sf-1']  ? new Date(KICKOFFS['sf-1']).getTime()  : Infinity,
+    r32:   phaseMinKickoff2('r32'),
+    r16:   phaseMinKickoff2('r16'),
+    qf:    phaseMinKickoff2('qf'),
+    sf:    phaseMinKickoff2('sf'),
     '3rd': KICKOFFS['3rd']   ? new Date(KICKOFFS['3rd']).getTime()   : Infinity,
     final: KICKOFFS['final'] ? new Date(KICKOFFS['final']).getTime() : Infinity,
   };
@@ -8793,17 +8798,22 @@ function renderPollaLeaderboard(){
   const w = reWeights();
 
   // Phase kickoff times — column appears once this time has passed
+  const phaseMinKickoff = rk => {
+    const slots = Object.keys(KICKOFFS).filter(id=>koRoundKey(id)===rk);
+    const times = slots.map(id=>KICKOFFS[id]).filter(Boolean).map(t=>new Date(t).getTime());
+    return times.length ? Math.min(...times) : null;
+  };
   const PHASE_FIRST = {
-    r32:   KICKOFFS['r32-1'],
-    r16:   KICKOFFS['r16-1'],
-    qf:    KICKOFFS['qf-1'],
-    sf:    KICKOFFS['sf-1'],
-    '3rd': KICKOFFS['3rd'],
-    final: KICKOFFS['final'],
+    r32:   phaseMinKickoff('r32'),
+    r16:   phaseMinKickoff('r16'),
+    qf:    phaseMinKickoff('qf'),
+    sf:    phaseMinKickoff('sf'),
+    '3rd': KICKOFFS['3rd'] ? new Date(KICKOFFS['3rd']).getTime() : null,
+    final: KICKOFFS['final'] ? new Date(KICKOFFS['final']).getTime() : null,
   };
   const r32Starts = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
   const r32Kicked = now >= r32Starts;
-  const phaseStarted = k => PHASE_FIRST[k] && new Date(PHASE_FIRST[k]).getTime() <= now;
+  const phaseStarted = k => PHASE_FIRST[k] && PHASE_FIRST[k] <= now;
   const PHASE_LABELS = {r32:'R32', r16:'R16', qf:'QF', sf:'SF', '3rd':'3rd', final:'F'};
   const activePhases = ['r32','r16','qf','sf','3rd','final'].filter(phaseStarted);
 
