@@ -5450,8 +5450,8 @@ function todaysGamesPanel_repicker(slotIds, r32Teams){
       pickCol='#94a3b8';
     }
     const allRP = S.allRePicks||{};
-    const hPicks = Object.values(allRP).filter(p=>{ const rp=p[id]; if(!rp||rp.homeScore==null) return false; return reAdvancerOf({home:homeT,away:awayT},rp)===homeT; }).length;
-    const aPicks = Object.values(allRP).filter(p=>{ const rp=p[id]; if(!rp||rp.homeScore==null) return false; return reAdvancerOf({home:homeT,away:awayT},rp)===awayT; }).length;
+    const hPicks = Object.values(allRP).filter(p=>{ const rp=p[id]; if(!rp||rp.homeScore==null) return false; return rpAdvancer(rp)===homeT; }).length;
+    const aPicks = Object.values(allRP).filter(p=>{ const rp=p[id]; if(!rp||rp.homeScore==null) return false; return rpAdvancer(rp)===awayT; }).length;
     const adv = done?.homeScore!=null ? koAdvancer(done.home,done.away,done.homeScore,done.awayScore,done.penWinner) : null;
     const dist = `${seg(hPicks,'#60a5fa',adv===homeT)}·${seg(aPicks,'#fb923c',adv===awayT)}`;
     const pick=`<span style="flex-shrink:0;text-align:left;font-family:monospace;font-size:0.88rem;font-weight:700;color:${pickCol};white-space:nowrap;">${pickTxt}</span>`;
