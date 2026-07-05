@@ -2761,24 +2761,9 @@ function koMaxScoreFor(kPreds){
     return ta - tb;
   });
 
-  // Pre-compute which teams are confirmed in unplayed slots per round
-  // (for wrong-slot bonus potential on grey picks)
-  const unplayedTeamsByRound = {};
-  for(const id of Object.keys(KO_VENUES)){
-    const actual = S.kResults[id];
-    if(actual && actual.homeScore!=null) continue;
-    const rk = koRoundKey(id);
-    const homeT = actual?.home || confirmed[id]?.home || null;
-    const awayT = actual?.away || confirmed[id]?.away || null;
-    if(!unplayedTeamsByRound[rk]) unplayedTeamsByRound[rk] = new Set();
-    if(homeT) unplayedTeamsByRound[rk].add(homeT);
-    if(awayT) unplayedTeamsByRound[rk].add(awayT);
-  }
-
+  // Collect grey predicted winners per round (for wrong-slot bonus check)
+  const greyPredsByRound = {}; // rk -> Set of teams predicted in grey slots
   const knownBad = new Set();
-  // Track which (predWinner, round) combos already got the wrong-slot bonus counted,
-  // to avoid counting it twice when multiple grey slots have the same predWinner
-  const wrongSlotCounted = new Set();
   let maxKo = current.koTotal;
 
   for(const id of allSlotsChrono){
@@ -2801,21 +2786,36 @@ function koMaxScoreFor(kPreds){
 
     if(!actual || actual.homeScore==null){
       if(!invalid){
-        // Valid pick: exact score (5) + pen bonus only if user predicted a pen winner
         const penBonus = kp?.penWinner ? 1 : 0;
         maxKo += (5 + penBonus) * (w[rk] || 1);
       } else if(predWinner && rk!=='final' && rk!=='3rd'){
-        // Grey pick: could still earn wrong-slot bonus if predWinner wins an unplayed
-        // game elsewhere in this round (they're genuinely playing, just wrong slot)
-        const key = predWinner + '|' + rk;
-        if(!wrongSlotCounted.has(key) && !elimSet.has(predWinner)
-           && unplayedTeamsByRound[rk]?.has(predWinner)){
-          maxKo += w[rk] || 1;
-          wrongSlotCounted.add(key);
-        }
+        // Collect grey picks per round for wrong-slot bonus second pass
+        if(!greyPredsByRound[rk]) greyPredsByRound[rk] = new Set();
+        greyPredsByRound[rk].add(predWinner);
       }
     }
   }
+
+  // Wrong-slot bonus max: for each unplayed game, at most +1×weight
+  // if the player has either team predicted in a grey slot elsewhere in the round.
+  // Iterate over games (not picks) so Spain vs Portugal can only contribute
+  // one bonus, not two (only one team can win the game).
+  for(const id of Object.keys(KO_VENUES)){
+    const actual = S.kResults[id];
+    if(actual && actual.homeScore!=null) continue; // already played
+    const rk = koRoundKey(id);
+    if(rk==='final' || rk==='3rd') continue;
+    const homeT = actual?.home || confirmed[id]?.home || null;
+    const awayT = actual?.away || confirmed[id]?.away || null;
+    const elimSet = eliminatedTeamsForRound(rk);
+    const greys = greyPredsByRound[rk] || new Set();
+    const homePotential = homeT && greys.has(homeT) && !elimSet.has(homeT);
+    const awayPotential = awayT && greys.has(awayT) && !elimSet.has(awayT);
+    if(homePotential || awayPotential){
+      maxKo += w[rk] || 1;
+    }
+  }
+
   return Math.round(maxKo);
 }
 
@@ -2955,12 +2955,13 @@ function eliminatedTeamsForRound(roundKey){
   const conf = buildConfirmedKoTeams();
   const eliminated = new Set();
   const addLoser = (slotId) => {
-    const c = conf[slotId];
     const r = S.kResults[slotId];
-    if(!c || !r || r.homeScore==null) return;
-    const winner = koWinnerStrict(slotId, c.home, c.away);
+    if(!r || r.homeScore==null || !r.home || !r.away) return;
+    const winner = r.homeScore>r.awayScore ? r.home
+                 : r.awayScore>r.homeScore ? r.away
+                 : (r.penWinner===r.home||r.penWinner===r.away) ? r.penWinner : null;
     if(!winner) return;
-    eliminated.add(winner===c.home ? c.away : c.home);
+    eliminated.add(winner===r.home ? r.away : r.home);
   };
   if(roundKey==='r32') return eliminated;
 
