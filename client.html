@@ -2746,6 +2746,129 @@ function koScoreForRepicker(rePicks){
 }
 
 // Build Round of 16 matchups from R32 winners
+// Maximum possible KO points for a Polla Larga user — for each unplayed slot,
+// if the predicted team is still valid (not eliminated/proven impossible),
+// count the ceiling: (5 exact + pen only if predicted) × weight.
+// Grey picks can still earn the wrong-slot bonus (+1×weight) if the predicted
+// team is confirmed in an unplayed slot elsewhere in the same round.
+function koMaxScoreFor(kPreds){
+  const w = koWeights();
+  const current = koScoreFor(kPreds);
+  const confirmed = buildConfirmedKoTeams();
+  const allSlotsChrono = Object.keys(KO_VENUES).sort((a,b)=>{
+    const ta = KICKOFFS[a] ? new Date(KICKOFFS[a]).getTime() : Infinity;
+    const tb = KICKOFFS[b] ? new Date(KICKOFFS[b]).getTime() : Infinity;
+    return ta - tb;
+  });
+
+  // Pre-compute which teams are confirmed in unplayed slots per round
+  // (for wrong-slot bonus potential on grey picks)
+  const unplayedTeamsByRound = {};
+  for(const id of Object.keys(KO_VENUES)){
+    const actual = S.kResults[id];
+    if(actual && actual.homeScore!=null) continue;
+    const rk = koRoundKey(id);
+    const homeT = actual?.home || confirmed[id]?.home || null;
+    const awayT = actual?.away || confirmed[id]?.away || null;
+    if(!unplayedTeamsByRound[rk]) unplayedTeamsByRound[rk] = new Set();
+    if(homeT) unplayedTeamsByRound[rk].add(homeT);
+    if(awayT) unplayedTeamsByRound[rk].add(awayT);
+  }
+
+  const knownBad = new Set();
+  // Track which (predWinner, round) combos already got the wrong-slot bonus counted,
+  // to avoid counting it twice when multiple grey slots have the same predWinner
+  const wrongSlotCounted = new Set();
+  let maxKo = current.koTotal;
+
+  for(const id of allSlotsChrono){
+    const actual = S.kResults[id];
+    const rk = koRoundKey(id);
+    const homeT = actual?.home || confirmed[id]?.home || null;
+    const awayT = actual?.away || confirmed[id]?.away || null;
+    const bothConfirmed = !!(homeT && awayT);
+    const elimSet = eliminatedTeamsForRound(rk);
+    const kp = kPreds?.[id];
+    const predWinner = kp ? _predAdvancer(kp) : null;
+    let invalid = false;
+    if(predWinner){
+      if(bothConfirmed && predWinner!==homeT && predWinner!==awayT) invalid = true;
+      if(elimSet.has(predWinner)) invalid = true;
+      const skipChain = rk==='final' || rk==='3rd';
+      if(!skipChain && knownBad.has(predWinner)) invalid = true;
+    } else { invalid = true; }
+    if(invalid && predWinner){ const sc=rk==='final'||rk==='3rd'; if(!sc) knownBad.add(predWinner); }
+
+    if(!actual || actual.homeScore==null){
+      if(!invalid){
+        // Valid pick: exact score (5) + pen bonus only if user predicted a pen winner
+        const penBonus = kp?.penWinner ? 1 : 0;
+        maxKo += (5 + penBonus) * (w[rk] || 1);
+      } else if(predWinner && rk!=='final' && rk!=='3rd'){
+        // Grey pick: could still earn wrong-slot bonus if predWinner wins an unplayed
+        // game elsewhere in this round (they're genuinely playing, just wrong slot)
+        const key = predWinner + '|' + rk;
+        if(!wrongSlotCounted.has(key) && !elimSet.has(predWinner)
+           && unplayedTeamsByRound[rk]?.has(predWinner)){
+          maxKo += w[rk] || 1;
+          wrongSlotCounted.add(key);
+        }
+      }
+    }
+  }
+  return Math.round(maxKo);
+}
+
+// Maximum possible points for a Polla Corta user — same logic using their
+// own bracket chain (not real matchup teams) for validity checking.
+function reMaxScoreFor(rePicks){
+  const w = reWeights();
+  const current = koScoreForRepicker(rePicks);
+  const r32Teams = repickerR32Teams();
+  const userBracket = repickerUserBracket(rePicks, r32Teams);
+  const confirmed = buildConfirmedKoTeams();
+  const pcRk = id => id.startsWith('r32')?'r32':id.startsWith('r16')?'r16':id.startsWith('qf')?'qf':id.startsWith('sf')?'sf':id==='third-1'?'3rd':'final';
+  const koId = id => id==='final-1'?'final':id==='third-1'?'3rd':id;
+  const allSlotsChrono = [...RE_SLOT_IDS].sort((a,b)=>{
+    const ka = koId(a), kb = koId(b);
+    const ta = KICKOFFS[ka] ? new Date(KICKOFFS[ka]).getTime() : Infinity;
+    const tb = KICKOFFS[kb] ? new Date(KICKOFFS[kb]).getTime() : Infinity;
+    return ta - tb;
+  });
+  // Polla Corta has no wrong-slot bonus, so no need for unplayedTeamsByRound
+  const knownBad = new Set();
+  let maxKo = current.koTotal;
+  for(const id of allSlotsChrono){
+    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actual = S.kResults[actualId];
+    const rk = pcRk(id);
+    const cSlot = confirmed[koId(id)] || {};
+    const realHome = actual?.home || cSlot.home || null;
+    const realAway = actual?.away || cSlot.away || null;
+    const bothRealKnown = !!(realHome && realAway);
+    const elimSet = eliminatedTeamsForRound(rk);
+    const ownSlot = userBracket[id] || {};
+    const bothOwnKnown = repickerTeamKnown(ownSlot.home) && repickerTeamKnown(ownSlot.away);
+    const ownWinner = bothOwnKnown ? reAdvancerOf(ownSlot, rePicks?.[id]) : null;
+    let invalid = false;
+    if(ownWinner){
+      if(bothRealKnown && ownWinner!==realHome && ownWinner!==realAway) invalid = true;
+      if(elimSet && elimSet.has(ownWinner)) invalid = true;
+      const skipChain = rk==='final' || rk==='3rd';
+      if(!skipChain && knownBad.has(ownWinner)) invalid = true;
+    } else { invalid = true; }
+    if(invalid && ownWinner){ const sc=rk==='final'||rk==='3rd'; if(!sc) knownBad.add(ownWinner); }
+    // Polla Corta has no wrong-slot bonus — grey picks contribute 0
+    if((!actual || actual.homeScore==null) && !invalid){
+      const rp = rePicks?.[id];
+      const penBonus = rp?.penWinner ? 1 : 0;
+      maxKo += (5 + penBonus) * (w[rk] || 1);
+    }
+  }
+  return Math.round(maxKo);
+}
+
+
 function buildR16(q){
   // Resolve the underlying R32 games so we know who's playing whom.
   const r32Games = R32_FIXED.map(m=>({
@@ -5557,8 +5680,10 @@ function renderCompare(){
       : null;
     // Total = raw group points + KO points + standing position bonus
     const total=+(groupTotal + ko.koTotal + groupPosPts).toFixed(2);
+    const maxKo = koMaxScoreFor(p.kPreds);
+    const maxPossible = Math.round(groupTotal + maxKo + groupPosPts);
     const weighted=completed.length>0?+(W.a*correct+W.b*exact-W.c*bad).toFixed(2):null;
-    return {name:p.name,total,groupTotal,koTotal:ko.koTotal,matchups:ko.matchups,
+    return {name:p.name,total,maxPossible,groupTotal,koTotal:ko.koTotal,matchups:ko.matchups,
             exact,correct,scored,bad,weighted,surprise:+surprise.toFixed(1),
             groupPosPts: anyGroupDone    ? groupPosPts : null,
             projPosPts:  anyGroupStarted ? projPosPts  : null,
@@ -5623,6 +5748,7 @@ function renderCompare(){
         <th style="padding:0.75rem 1rem;text-align:left;width:2rem;">#</th>
         <th style="padding:0.75rem 1rem;text-align:left;">Name</th>
         ${thSort('total',      'Total',        'Group game points + KO points + standing position bonus')}
+        <th style="padding:0.75rem 0.5rem;text-align:right;white-space:nowrap;color:#64748b;font-size:0.75rem;" title="Maximum possible total if all remaining valid picks are correct">Max</th>
         ${thSort('exact',      'Exact',        'Exact scores predicted — first tiebreaker')}
         ${thSort('correct',    'Result✓',      'Correct results — second tiebreaker')}
         ${anyGroupDone2 ? thSort('groupTotal', 'Group Stage', 'Points from group stage predictions (excl. standings)') : ''}
@@ -5648,6 +5774,7 @@ function renderCompare(){
             ${maxPts>0?`<div style="margin-top:3px;height:3px;background:rgba(255,255,255,0.08);border-radius:9999px;width:7rem;overflow:hidden;"><div style="height:100%;background:#16a34a;width:${Math.max(0,Math.min(100,e.total/maxPts*100)).toFixed(1)}%;"></div></div>`:''}
           </td>
           <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${Math.round(e.total)}</td>
+          <td style="padding:0.75rem 0.5rem;text-align:right;color:#475569;font-size:0.85rem;" title="Max possible if all remaining valid picks correct">${e.maxPossible!=null?e.maxPossible:'–'}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#4ade80;">${e.exact}</td>
           <td style="padding:0.75rem 1rem;text-align:right;color:#facc15;">${e.correct}</td>
           ${anyGroupDone2 ? `<td style="padding:0.75rem 0.5rem;text-align:right;color:#94a3b8;">${Math.round(e.groupTotal)}</td>` : ''}
@@ -8834,8 +8961,9 @@ function renderPollaLeaderboard(){
     const fp = picks?.['final-1'];
     const champ = fp ? koAdvancer(fp.home,fp.away,fp.homeScore,fp.awayScore,fp.penWinner)||fp.home||null : null;
     return { name, complete, score, champ,
-      total:    score?.koTotal  ?? null,
-      exact:    score?.exacts   ?? null,
+      total:       score?.koTotal  ?? null,
+      maxPossible: reMaxScoreFor(picks),
+      exact:       score?.exacts   ?? null,
       // Result✓ counts ANY correct winner prediction, exact or not —
       // advancers alone excludes exact scores, undercounting this column
       correct:  score ? (score.advancers + score.exacts) : null,
@@ -8933,6 +9061,7 @@ function renderPollaLeaderboard(){
     const phaseCells = activePhases.map(k=>`<td style="padding:0.75rem 0.5rem;text-align:right;color:var(--text-muted);font-size:0.8rem;">${e.phases[k]!==undefined?Math.round(e.phases[k]):'–'}</td>`).join('');
     const scoringCells = r32Kicked
       ? `<td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:#fcd34d;font-size:1rem;">${e.total!==null?Math.round(e.total):'–'}</td>`
+        +`<td style="padding:0.75rem 0.5rem;text-align:right;color:#475569;font-size:0.85rem;" title="Max possible if all remaining valid picks correct">${e.maxPossible!=null?e.maxPossible:'–'}</td>`
         +`<td style="padding:0.75rem 0.6rem;text-align:right;color:#4ade80;">${e.exact!==null?e.exact:'–'}</td>`
         +`<td style="padding:0.75rem 0.6rem;text-align:right;color:#facc15;">${e.correct!==null?e.correct:'–'}</td>`
         +phaseCells
@@ -9016,6 +9145,7 @@ function renderPollaLeaderboard(){
             <th style="padding:0.75rem 1rem;text-align:left;">Name</th>
             ${r32Kicked ? `
             <th style="padding:0.75rem 1rem;text-align:right;">Total</th>
+            <th style="padding:0.75rem 0.5rem;text-align:right;" title="Maximum possible if all remaining valid picks correct">Max</th>
             <th style="padding:0.75rem 0.6rem;text-align:right;">Exact</th>
             <th style="padding:0.75rem 0.6rem;text-align:right;">Result✓</th>
             ${phaseColsHeader}` : ''}
