@@ -4672,28 +4672,25 @@ function renderKoCard(game, round){
   const isThird=game.isThird;
   const roundLabel = isThird?'3rd place':round.toUpperCase();
 
-  // Sync actual team names into kPreds.
-  // When the matchup changes, stale score/pen data causes false "unresolved tie"
-  // indicators: e.g. a 1–1 prediction entered for France vs Spain shows as an
-  // unresolved tie once Morocco replaces France, because penWinner='France' no
-  // longer matches either team and the scores are still equal.
-  // Fix: always clear penalty data when teams change (pens are team-specific),
-  // and clear scores too if neither previous team is still in the slot.
+  // Sync actual team names into kPreds — only when in the Predict tab and
+  // only when we're editing (render functions must never call persist directly;
+  // the score input handlers call persist after user interaction).
   if(kp.home!==game.home||kp.away!==game.away){
-    const prevTeams = new Set([kp.home, kp.away].filter(Boolean));
-    const anyCarryover = game.home && prevTeams.has(game.home) ||
-                         game.away && prevTeams.has(game.away);
-    if(anyCarryover){
-      // One team stayed — keep scores, just wipe penalty data (must re-pick pen winner)
-      S.kPreds[game.id]={...kp,home:game.home,away:game.away,
-        penWinner:'',penHome:undefined,penAway:undefined};
-    } else {
-      // Completely new matchup — wipe everything so no ghost tie appears
-      S.kPreds[game.id]={home:game.home,away:game.away,
-        homeScore:undefined,awayScore:undefined,
-        penWinner:'',penHome:undefined,penAway:undefined};
+    const isPredict = S.pollaLargaSub === 'predict';
+    if(isPredict){
+      const prevTeams = new Set([kp.home, kp.away].filter(Boolean));
+      const anyCarryover = (game.home && prevTeams.has(game.home)) ||
+                           (game.away && prevTeams.has(game.away));
+      if(anyCarryover){
+        S.kPreds[game.id]={...kp,home:game.home,away:game.away,
+          penWinner:'',penHome:undefined,penAway:undefined};
+      } else {
+        S.kPreds[game.id]={home:game.home,away:game.away,
+          homeScore:undefined,awayScore:undefined,
+          penWinner:'',penHome:undefined,penAway:undefined};
+      }
+      // Do NOT call persist() here — scheduleRender/input handlers do that
     }
-    persist();
   }
 
   const penWarn = (()=>{
