@@ -2796,23 +2796,37 @@ function koMaxScoreFor(kPreds){
     }
   }
 
-  // Wrong-slot bonus max: for each unplayed game, at most +1×weight
-  // if the player has either team predicted in a grey slot elsewhere in the round.
-  // Iterate over games (not picks) so Spain vs Portugal can only contribute
-  // one bonus, not two (only one team can win the game).
+  // Wrong-slot bonus max: for each unplayed game, check if any uncounted
+  // non-eliminated grey team could win it. Caps at one bonus per game AND
+  // one bonus per grey team per round — a team can only win one game.
+  // Handles unconfirmed (? v ?) slots: any non-eliminated team could fill them.
+  const usedGreyTeams = {}; // rk -> Set of grey teams already counted
+  const processedGames = new Set();
   for(const id of Object.keys(KO_VENUES)){
+    if(processedGames.has(id)) continue;
     const actual = S.kResults[id];
-    if(actual && actual.homeScore!=null) continue; // already played
+    if(actual && actual.homeScore!=null) continue;
     const rk = koRoundKey(id);
     if(rk==='final' || rk==='3rd') continue;
     const homeT = actual?.home || confirmed[id]?.home || null;
     const awayT = actual?.away || confirmed[id]?.away || null;
+    const bothKnown = !!(homeT && awayT);
     const elimSet = eliminatedTeamsForRound(rk);
     const greys = greyPredsByRound[rk] || new Set();
-    const homePotential = homeT && greys.has(homeT) && !elimSet.has(homeT);
-    const awayPotential = awayT && greys.has(awayT) && !elimSet.has(awayT);
-    if(homePotential || awayPotential){
-      maxKo += w[rk] || 1;
+    if(!usedGreyTeams[rk]) usedGreyTeams[rk] = new Set();
+    // Find first uncounted grey team that could win this game
+    for(const team of greys){
+      if(usedGreyTeams[rk].has(team)) continue;
+      if(elimSet.has(team)) continue;
+      // Compatible: if both teams confirmed, must be one of them;
+      // if partially or fully unconfirmed, any non-eliminated team could play
+      const compatible = bothKnown ? (team===homeT||team===awayT) : true;
+      if(compatible){
+        maxKo += w[rk] || 1;
+        usedGreyTeams[rk].add(team);
+        processedGames.add(id);
+        break;
+      }
     }
   }
 
