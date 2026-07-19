@@ -2728,7 +2728,7 @@ function koScoreForRepicker(rePicks){
   let koTotal=0, matchups=0, exacts=0, advancers=0, scored=0;
   const phases={r32:0,r16:0,qf:0,sf:0,'3rd':0,final:0};
   for(const id of ids){
-    const actual = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
+    const actual = S.kResults[id==='final-1'?'final':id==='third-1'?'3rd':id];
     if(!actual || !actual.home || !actual.away || actual.homeScore==null) continue;
     const c = koCompare(rePicks ? rePicks[id] : undefined, actual);
     let resultPts=0, penPts=0;
@@ -2853,7 +2853,7 @@ function reMaxScoreFor(rePicks){
   const knownBad = new Set();
   let maxKo = current.koTotal;
   for(const id of allSlotsChrono){
-    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
     const actual = S.kResults[actualId];
     const rk = pcRk(id);
     const cSlot = confirmed[koId(id)] || {};
@@ -5562,7 +5562,7 @@ function todaysGamesPanel_repicker(slotIds, r32Teams){
   const confirmedAllKo = buildConfirmedKoTeams();
   const seg=(n,color,on)=>`<span style="color:${color};font-weight:${on?800:600};${on?'text-decoration:underline;':''}">${n}</span>`;
   const rows = slotIds.map(id=>{
-    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
     const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
     const done = S.kResults[actualId];
     const live = S.gLive[actualId];
@@ -6055,7 +6055,7 @@ function renderCompare(){
             <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.15rem;">
               ${['R32','R16','QF','SF','Final','3rd'].map((r,i)=>{
                 const wk = koWeights();
-                const key = ['r32','r16','qf','sf','final','third'][i];
+                const key = ['r32','r16','qf','sf','final','3rd'][i];
                 return `<span style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);border-radius:0.3rem;padding:0.15rem 0.45rem;font-size:0.75rem;color:#a78bfa;white-space:nowrap;">${r} ×${wk[key]||1}</span>`;
               }).join('')}
             </div>
@@ -8152,7 +8152,7 @@ function renderRepicker(){
   const r32KickoffTime = KICKOFFS['r32-1'] ? new Date(KICKOFFS['r32-1']).getTime() : Infinity;
   const r32HasKickedOff = Date.now() >= r32KickoffTime;
   const locked = !repickerOpen || (r32HasKickedOff && !_isAdmin);
-  const reActualId = id => id==='final-1' ? 'final' : id==='third-1' ? 'third' : id;
+  const reActualId = id => id==='final-1' ? 'final' : id==='third-1' ? '3rd' : id;
 
   const rounds=[
     {key:'r32',  label:'Round of 32', ids: Array.from({length:16},(_,i)=>`r32-${i+1}`)},
@@ -8450,7 +8450,7 @@ function renderPollapicks(){
       if(r && r.home && r.away) realBracket[id] = { home:r.home, away:r.away, homeScore:r.homeScore, awayScore:r.awayScore, penWinner:r.penWinner||'', _homeSet:true, _awaySet:true };
     }
     if(S.kResults['final']?.home){ const r=S.kResults['final']; realBracket['final-1']={home:r.home,away:r.away,homeScore:r.homeScore,awayScore:r.awayScore,penWinner:r.penWinner||'',_homeSet:true,_awaySet:true}; }
-    if(S.kResults['third']?.home){ const r=S.kResults['third']; realBracket['third-1']={home:r.home,away:r.away,homeScore:r.homeScore,awayScore:r.awayScore,penWinner:r.penWinner||'',_homeSet:true,_awaySet:true}; }
+    if(S.kResults['3rd']?.home){ const r=S.kResults['3rd']; realBracket['third-1']={home:r.home,away:r.away,homeScore:r.homeScore,awayScore:r.awayScore,penWinner:r.penWinner||'',_homeSet:true,_awaySet:true}; }
 
     // Temporarily override viewing picks so renderColoredBracket shows real scores
     const _savedRePicks = S.rePicks;
@@ -8471,7 +8471,7 @@ function renderPollapicks(){
   // Returns 'correct', 'wrong', or null (no result yet / 3rd place exception)
   function advancingColor(id){
     if(id==='third-1') return null; // no red for 3rd place
-    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
     const actual = S.kResults[actualId];
     if(!actual || actual.homeScore==null) return null;
     const rp = picks[id];
@@ -8554,7 +8554,7 @@ function renderPollapicks(){
       const hv = rp?.homeScore!=null ? rp.homeScore : '';
       const av = rp?.awayScore!=null ? rp.awayScore : '';
       const isDraw = rp?._homeSet && rp?._awaySet && hv!=='' && av!=='' && Number(hv)===Number(av);
-      const ar = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
+      const ar = S.kResults[id==='final-1'?'final':id==='third-1'?'3rd':id];
       const penWinnerStr = isDraw && rp?.penWinner ? `<div class="bk-pen">Pens: ${esc(shortTeamName(rp.penWinner))}</div>` : '';
       const actualStr = showActual && (ar && ar.home && ar.homeScore!=null)
         ? `<div class="bk-actual">✓ ${esc(shortTeamName(ar.home))} ${ar.homeScore}–${ar.awayScore} ${esc(shortTeamName(ar.away))}</div>`
@@ -8655,7 +8655,7 @@ function renderPollaResults(){
   // Live score lookup for a slot — used for both the game cell display and
   // coloring each player's prediction while the match is in progress
   const getLiveScore = id => {
-    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
     const live = S.gLive?.[actualId];
     return live && live.hs!=null ? live : null;
   };
@@ -8763,7 +8763,7 @@ function renderPollaResults(){
     const chrono = [...matchIds]; // already sorted chronologically above
     const knownBad = new Map(); // playerName -> Set of teams already proven wrong
     for(const id of chrono){
-      const actualId2 = id==='final-1'?'final':id==='third-1'?'third':id;
+      const actualId2 = id==='final-1'?'final':id==='third-1'?'3rd':id;
       const actual2 = S.kResults[actualId2];
       const confSlot = confirmedAllKo[koSlotIdOf(id)] || {};
       const realHome2 = actual2?.home || confSlot.home || null;
@@ -8798,7 +8798,7 @@ function renderPollaResults(){
   // Build rows with phase separators
   let lastPhase='';
   const rows = matchIds.map(id=>{
-    const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+    const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
     const actual = S.kResults[actualId];
     const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
     const phase = phaseOf(id);
@@ -8890,7 +8890,7 @@ function renderPollaResults(){
           <tbody>${(()=>{
             let lastPh2='';
             return liveMatchIds.map(id=>{
-              const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+              const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
               const actual = S.kResults[actualId];
               const live = getLiveScore(id);
               const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
@@ -8959,7 +8959,7 @@ function renderPollaLeaderboard(){
   // Total repicker games played
   const reTotal = RE_SLOT_IDS.length; // 32
   const rePlayed = RE_SLOT_IDS.filter(id=>{
-    const a = S.kResults[id==='final-1'?'final':id==='third-1'?'third':id];
+    const a = S.kResults[id==='final-1'?'final':id==='third-1'?'3rd':id];
     return a && a.homeScore!=null;
   }).length;
 
@@ -9171,7 +9171,7 @@ function renderPollaLeaderboard(){
       // KO game breakdown for Polla Corta
       const pcAllPred = Object.entries(S.allRePicks||{}).map(([name,picks])=>({name,picks}));
       const pcPlayed = RE_SLOT_IDS.filter(id=>{
-        const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+        const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
         const r = S.kResults[actualId];
         return r && r.homeScore!=null;
       });
@@ -9182,7 +9182,7 @@ function renderPollaLeaderboard(){
         const ib = KICKOFFS[b==='final-1'?'final':b==='third-1'?'3rd':b]||KICKOFFS[b];
         return (new Date(ib||0))-(new Date(ia||0));
       }).map(id=>{
-        const actualId = id==='final-1'?'final':id==='third-1'?'third':id;
+        const actualId = id==='final-1'?'final':id==='third-1'?'3rd':id;
         const r = S.kResults[actualId];
         const iso = KICKOFFS[id==='final-1'?'final':id==='third-1'?'3rd':id]||KICKOFFS[id];
         const dateStr = iso ? _koDate(iso).toLocaleDateString([],{month:'short',day:'numeric'}) : '';
